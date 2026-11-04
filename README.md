@@ -27,10 +27,14 @@ five minutes, once.
 1. **Install Node.js 24 or newer** from <https://nodejs.org> (the "LTS" download; accept the
    defaults). Close any terminal windows you already had open so they pick it up.
 2. **Download this project:** on this page click the green **Code** button → **Download ZIP**,
-   then unzip it somewhere easy to find (e.g. your Documents folder).
+   then unzip it somewhere easy to find (e.g. your Documents folder). Unzipping can create a
+   folder inside a folder — the right one is the folder that contains `package.json` and
+   `README.md`.
 3. **Open a terminal in that folder:**
-   - Windows: open the unzipped folder in File Explorer, click the address bar, type
-     `powershell` and press Enter.
+   - Windows: open that folder in File Explorer, click the address bar, type `cmd` and press
+     Enter. (Use `cmd`, not PowerShell — PowerShell blocks `npm` on a fresh Windows setup
+     with a "running scripts is disabled" error.) The window should show the folder's path,
+     e.g. `C:\Users\you\Documents\global-intelligence-terminal-main>`.
    - macOS: right-click the folder in Finder → **New Terminal at Folder** (or open Terminal and
      type `cd ` then drag the folder into the window and press Enter).
 4. **Install and start it** — type these two lines, pressing Enter after each:
@@ -42,6 +46,12 @@ five minutes, once.
 
 5. **Open <http://localhost:5180>** in your browser. Keep the terminal window open while you
    use it; close it (or press Ctrl+C) to stop.
+
+**If something goes wrong:** "running scripts is disabled" → you are in PowerShell; use `cmd`
+as in step 3 (or type `npm.cmd` instead of `npm`). "Could not read package.json" / "ENOENT" →
+the terminal is not in the project folder; redo step 3 from the folder that contains
+`package.json`. "'npm' is not recognized" → Node.js is not installed yet, or the terminal was
+opened before installing it — close it and open a new one.
 
 Next time, only steps 3, the second line of 4 (`npm run dev`) and 5 are needed. To update,
 download the ZIP again and copy your old `data` folder into the new one to keep your notes.
