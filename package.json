@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit",
     "check:obsidian": "tsx scripts/check-obsidian.mts",
     "check:tickers": "tsx scripts/check-tickers.mts",
-    "check:live": "tsx scripts/check-live.mts"
+    "check:live": "tsx scripts/check-live.mts",
+    "check:news": "tsx scripts/check-news.mts",
+    "check:data": "tsx scripts/check-data.mts"
   },
   "dependencies": {
     "@tiptap/extension-link": "~2.11.5",

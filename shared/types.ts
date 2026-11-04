@@ -12,7 +12,10 @@ export const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
 };
 
 /** How trustworthy / fresh a value is. Shown next to every number. */
-export type DataQuality = 'live' | 'delayed' | 'official' | 'estimate' | 'historical' | 'curated' | 'manual' | 'community' | 'forecast';
+export type DataQuality = 'live' | 'delayed' | 'official' | 'estimate' | 'historical' | 'curated' | 'manual' | 'community' | 'forecast' | 'reported';
+
+/** Every quality label, for validation. 'reported' = stated by trusted news outlets, not yet in a structured record. */
+export const DATA_QUALITIES: DataQuality[] = ['live', 'delayed', 'official', 'estimate', 'historical', 'curated', 'manual', 'community', 'forecast', 'reported'];
 
 export interface Source {
   id: string;
@@ -28,6 +31,7 @@ export interface Fact {
   unit?: string;
   period?: string;   // reporting period the value describes, e.g. "2025"
   asOf?: string;     // when the value was observed / last verified
+  retrievedAt?: string; // when a live value was fetched from its source (ISO timestamp)
   sourceId: string;
   quality: DataQuality;
   note?: string;

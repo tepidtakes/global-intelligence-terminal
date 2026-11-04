@@ -136,8 +136,10 @@ for (const e of entities.values()) {
   }
   if ((e.type === 'state' || e.type === 'city') && e.parentId) addRel({ from: e.id, to: e.parentId, type: 'located_in', sourceId: e.type === 'state' ? 'us-census' : 'natural-earth' });
 }
+/** Curated relationships whose endpoints do not exist (reported by the consistency audit). */
+export const danglingRels: Omit<Relationship, 'id'>[] = [];
 for (const r of CURATED_RELS) {
-  if (!entities.has(r.from) || !entities.has(r.to)) { console.warn(`[graph] dangling relationship ${r.from} -${r.type}-> ${r.to}`); continue; }
+  if (!entities.has(r.from) || !entities.has(r.to)) { danglingRels.push(r); continue; }
   addRel(r);
 }
 
@@ -339,4 +341,4 @@ export function listByType(type: string) {
   return [...entities.values()].filter((e) => e.type === type);
 }
 
-console.log(`[graph] ${entities.size} entities, ${relSeq} relationships, ${sources.size} sources`);
+console.log(`[graph] ${entities.size} entities, ${relSeq} relationships, ${sources.size} sources${danglingRels.length ? `, ${danglingRels.length} dangling curated relationships skipped (see /api/quality/report)` : ''}`);

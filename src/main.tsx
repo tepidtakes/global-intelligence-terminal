@@ -17,6 +17,8 @@ import { LoginPage } from './pages/LoginPage';
 import { ComparePage } from './pages/ComparePage';
 import { MarketsPage } from './pages/MarketsPage';
 import { ConflictsPage } from './pages/ConflictsPage';
+import { NewsPage } from './pages/NewsPage';
+import { DataPage } from './pages/DataPage';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -34,6 +36,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/compare" element={<ComparePage />} />
             <Route path="/markets" element={<MarketsPage />} />
             <Route path="/conflicts" element={<ConflictsPage />} />
+            <Route path="/news" element={<NewsPage />} />
+            <Route path="/data" element={<DataPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="*" element={<div className="page"><h1>Page not found</h1></div>} />

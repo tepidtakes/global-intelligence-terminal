@@ -70,7 +70,9 @@ Optional settings (environment variables): `CONTACT_EMAIL` (sent to SEC/Wikipedi
 which ask API users for one), `ALLOW_SIGNUP=0`, `HOST`, `PORT`, `TERMINAL_VAULT`. The
 server listens on this computer only unless you change `HOST` — see [SECURITY.md](SECURITY.md).
 
-Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:live`.
+Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:live` ·
+`npm run check:news` (news parsing, tagging and signals, offline) · `npm run check:data`
+(consistency audit of the built-in dataset, offline; fails on errors).
 
 ## What's in it
 
@@ -116,6 +118,27 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
   shows a leader took office after the June 2026 curated check, the old term is closed and
   the profile flagged — e.g. Andy Burnham replacing Keir Starmer as UK Prime Minister
   (July 2026). Other disagreements appear as "verify" notes rather than being resolved silently.
+- **Trusted newsroom** (refreshed every 30 min): headlines from wire services (Reuters, AP,
+  Bloomberg, FT, WSJ via headline search), public broadcasters (BBC, NPR, DW, France 24, CBC,
+  ABC), major papers (NYT, Guardian, CNBC, Al Jazeera) and official sources (Fed, ECB, Bank of
+  England, IMF, UN, SEC, WTO). The same story from several outlets is shown once with every
+  outlet that carried it ("✓ 3 trusted outlets"); every headline is labelled with its
+  outlet's tier (official, wire, public broadcaster, major, specialist, state media, unrated)
+  and linked to the countries, companies, people, organisations and commodities it names.
+  Profiles show these alongside a live headline search, trusted outlets first. Map layer
+  **In the news (48 h)** shades countries by how many separate stories named them.
+- **News signals**: appointments, departures and election wins stated in trusted
+  headlines are checked against the records. When two or more independent trusted outlets
+  (or an official source) report something the record doesn't show — e.g. a new CEO — the
+  profile gets a dashed **reported** fact naming the outlets, and the person the record
+  still lists gets a warning. Records are flagged, never overwritten; single-source reports
+  are listed but flag nothing.
+- **Data page** (`/data`): every live provider's status (ok / serving a cached copy /
+  failing), when each background loader last downloaded its data, every news feed's
+  health, facts by quality label, and a consistency audit (unknown sources, broken links,
+  conflicting values, duplicate people, past events still "scheduled", competing
+  officeholders, news that contradicts a record). Every profile has a **Data quality** card
+  with the same, for that entity. Live facts show when they were retrieved.
 - **Markets page** (commodities, currencies, rates & yield curves) and **Conflicts page**.
 - **Curated dataset** (`server/data/curated.ts`): 10 deeply curated countries, 61 with
   government type, 12 IGOs, 18 parties, 57 people, ~115 companies across the US, Europe,
@@ -153,6 +176,9 @@ server/          Express API (one process; mounts Vite in dev)
   markets.ts     FX, commodity futures, policy rates, yield curves, IMF, Fed, consensus
   worldEvents.ts Wikipedia conflict list + electoral calendar parsers
   augment.ts     live graph additions: Congress, Wikidata leaders, conflicts, elections
+  newsroom.ts    trusted news feeds: ingest, de-duplicate, tag entities, signals
+  newsParse.ts   feed parsing, entity tagger, headline signal extraction (pure, tested)
+  consistency.ts provenance & consistency audit (Data page, npm run check:data)
   private.ts     per-user notes, positions, catalysts, watchlists, views, prefs
   notes.ts       note storage, [[wikilinks]], backlinks
   obsidian.ts    two-way Obsidian vault sync (Markdown ⇄ notes, Windows-safe)
@@ -160,6 +186,9 @@ server/          Express API (one process; mounts Vite in dev)
 scripts/check-obsidian.mts  conversion + file-name checks (npm run check:obsidian)
 scripts/check-tickers.mts   every quote symbol resolves to the right security (npm run check:tickers)
 scripts/check-live.mts      conflict & election parsers against live Wikipedia (npm run check:live)
+scripts/check-news.mts      news parsing, tagging, clustering and signals on fixtures (npm run check:news)
+scripts/check-data.mts      consistency audit of the built-in dataset (npm run check:data)
+shared/newsSources.ts       outlet registry and tiers
 shared/types.ts  entity / relationship vocabulary
 shared/products.ts  HS codes for "who exports / imports what"
 src/             React UI (map, profiles, research, portfolio, calendar…)

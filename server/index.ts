@@ -14,7 +14,12 @@ import {
   fxBoard, fxFor, commodityBoard, policyRates, policyRateHistory, tenYearYields, tenYearHistory, yieldCurve, curveAvailable, imfIndicator, imfCountry, imfEdition, IMF_INDICATORS,
   fedOutlook, analystConsensus, spark, windowChanges, currencyUsers, EURO_AREA, isStale,
 } from './markets.js';
-import { startLiveData, liveStatus } from './augment.js';
+import { startLiveData, liveStatus, onLiveRefresh } from './augment.js';
+import { startNews, retagAll, newsFor, latestStories, allSignals, newsStatus, countryAttention, FEEDS } from './newsroom.js';
+import { audit, summarize, coverage, entityProvenance, CATEGORY_LABEL } from './consistency.js';
+import { providerHealth } from './cache.js';
+import { canonicalUrl, titleKey, sameStory } from './newsParse.js';
+import { publisherForDomain, publisherForName, tierForDomain, isTrusted, TIER_INFO, PUBLISHERS } from '../shared/newsSources.js';
 import { INTENSITY } from './worldEvents.js';
 import { PRODUCTS, productByHs } from '../shared/products.js';
 import { HOST, PORT } from './config.js';
@@ -87,7 +92,7 @@ api.get('/entity/:id', (req: AuthedRequest, res) => {
   res.json({
     entity: e, relationships: rels, parents: parentChain, companies, partyOf,
     children: kids.slice(0, 400).map((k) => ({ ...stub(k.id)!, attrs: k.type === 'city' ? k.attrs : undefined })), childCounts,
-    events: upcomingEventsFor(e.id), sources: sourcesUsed(e, rels), user,
+    events: upcomingEventsFor(e.id), sources: sourcesUsed(e, rels), user, provenance: entityProvenance(e.id),
   });
 });
 
@@ -258,6 +263,15 @@ api.get('/map/layer/:layer', wrap(async (req, res) => {
     }
     return res.json({ kind: 'categorical', label: 'National elections', categories: [{ key: 'soon', label: 'Election within 90 days' }, { key: 'upcoming', label: 'Election in 3–12 months' }, { key: 'recent', label: 'Election in the last 60 days' }], values, detail,
       sourceIds: ['wikipedia-elections', 'congress'], note: 'From Wikipedia’s national electoral calendars (this year and next) plus curated events. Dates can move.' });
+  }
+  if (layer === 'news') {
+    const counts = countryAttention(48);
+    const values: Record<string, { value: number; period: string }> = {};
+    for (const [id, n] of counts) { const iso = countryIso(id); if (iso) values[iso] = { value: n, period: 'last 48 h' }; }
+    const st = newsStatus();
+    if (!st.lastRun) return res.status(503).json({ error: 'Trusted news feeds are still loading — try again in a minute.' });
+    return res.json({ kind: 'numeric', label: 'In the news — stories naming each country (48 h)', unit: 'stories', scale: 'sequential', values, sourceIds: ['trusted-news'], fetchedAt: st.lastRun.at,
+      note: `Distinct stories (duplicates across outlets counted once) whose headline names the country, from ${st.feeds.filter((f) => f.ok).length} trusted feeds. Measures coverage, not importance.` });
   }
   if (layer === 'conflicts') {
     const values: Record<string, string> = {}; const detail: Record<string, string> = {}; const rank: Record<string, number> = {};
@@ -442,6 +456,39 @@ api.get('/conflicts/for/:id', (req, res) => {
 });
 api.get('/live/status', (_req, res) => res.json(liveStatus));
 
+// ───────────── Provenance & data quality ─────────────
+const PROVIDER_LABELS: Record<string, { label: string; sourceId?: string }> = {
+  wb: { label: 'World Bank WDI', sourceId: 'world-bank-wdi' }, comtrade: { label: 'UN Comtrade', sourceId: 'un-comtrade' }, treasury: { label: 'US Treasury yield curve', sourceId: 'us-treasury' },
+  yahoo: { label: 'Yahoo Finance quotes', sourceId: 'yahoo-finance' }, spark: { label: 'Yahoo Finance boards (FX, commodities)', sourceId: 'yahoo-finance' }, consensus: { label: 'Yahoo Finance analyst consensus', sourceId: 'yahoo-finance' },
+  sec: { label: 'SEC EDGAR', sourceId: 'sec-edgar' }, gnews: { label: 'Google News search', sourceId: 'google-news' }, gdelt: { label: 'GDELT news index', sourceId: 'gdelt' },
+  congress: { label: 'Congress legislators', sourceId: 'congress-legislators' }, wd: { label: 'Wikidata leaders', sourceId: 'wikidata' }, wp: { label: 'Wikipedia conflicts & elections', sourceId: 'wikipedia-conflicts' },
+  bis: { label: 'BIS policy rates', sourceId: 'bis-policy' }, fred: { label: 'FRED (OECD yields, FOMC projections)', sourceId: 'oecd-mei' }, oecd: { label: 'OECD 10-year yields', sourceId: 'oecd-mei' },
+  curve: { label: 'Government yield curves (ECB, BoE, MOF, BoC)', sourceId: 'ecb-yield-curve' }, imf: { label: 'IMF World Economic Outlook', sourceId: 'imf-weo' },
+};
+/** ok = last fetch worked; stale = last fetch failed and an older copy was served; failing = failed with no copy. */
+function providerRows() {
+  return providerHealth().map((h) => {
+    const failingNow = !!h.lastErrorAt && (!h.lastOk || h.lastErrorAt > h.lastOk);
+    const state = !failingNow ? 'ok' : h.lastStaleAt && h.lastStaleAt >= h.lastErrorAt! ? 'stale' : 'failing';
+    return { ...h, ...(PROVIDER_LABELS[h.provider] || { label: h.provider }), state };
+  }).sort((a, b) => a.label.localeCompare(b.label));
+}
+api.get('/provenance/status', (_req, res) => {
+  res.json({ providers: providerRows(), live: liveStatus, news: newsStatus(), coverage: coverage(), generatedAt: new Date().toISOString() });
+});
+api.get('/quality/report', (req, res) => {
+  const issues = audit();
+  const sev = String(req.query.severity || ''); const cat = String(req.query.category || '');
+  const list = issues.filter((i) => (!sev || i.severity === sev) && (!cat || i.category === cat));
+  res.json({ summary: summarize(issues), categories: CATEGORY_LABEL, issues: list.slice(0, Number(req.query.limit) || 500), total: list.length, generatedAt: new Date().toISOString() });
+});
+api.get('/quality/entity/:id', (req, res) => {
+  const p = entityProvenance(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Entity not found' });
+  res.json(p);
+});
+api.get('/news-sources', (_req, res) => res.json({ tiers: TIER_INFO, publishers: PUBLISHERS, feeds: FEEDS.map((f) => ({ id: f.id, name: f.name, topic: f.topic, kind: f.kind })) }));
+
 api.get('/quote/:id', wrap(async (req, res) => {
   const e = getEntity(req.params.id);
   const sym = e?.attrs?.quoteSymbol;
@@ -484,18 +531,49 @@ api.get('/fundamentals/:id', wrap(async (req, res) => {
   res.json({ ...f, derived });
 }));
 
+api.get('/news/latest', (req, res) => {
+  res.json({ stories: latestStories({ topic: String(req.query.topic || 'all'), entityId: req.query.entity ? String(req.query.entity) : undefined, type: req.query.type ? String(req.query.type) : undefined,
+    trustedOnly: req.query.trusted !== '0', minCorroboration: Number(req.query.min) || 0, q: req.query.q ? String(req.query.q).slice(0, 100) : undefined, hours: Math.min(336, Number(req.query.hours) || 72), limit: Math.min(300, Number(req.query.limit) || 120) }),
+    status: newsStatus(), sourceId: 'trusted-news' });
+});
+api.get('/news/signals', (_req, res) => res.json({ signals: allSignals(), sourceId: 'trusted-news' }));
+
 api.get('/news/:id', wrap(async (req, res) => {
   const e = getEntity(req.params.id);
   if (!e) return res.status(404).json({ error: 'Unknown entity' });
   let q = e.name.replace(/,?\s+(Inc\.|Incorporated|Corporation|Corp\.|plc|p\.l\.c\.|SE|AG|GmbH|Co\.|Group|N\.V\.)$/i, '').replace(/\s*\(.*\)$/, '');
   if (e.type === 'commodity' && e.attrs?.kind !== 'service') q = e.name.replace(/ \(.*\)/, '');
   if (e.type === 'state') q = `${e.name}`;
-  try {
-    const r = await getNews(q, String(req.query.topic || 'all'));
-    res.json({ query: q, articles: r.data, fetchedAt: r.fetchedAt, stale: r.stale, sourceId: r.sourceId });
-  } catch (err: any) {
-    res.json({ query: q, articles: [], unavailable: true, reason: /limit requests/i.test(err.message) ? 'The GDELT news index is rate-limiting requests right now. Try again in a minute.' : `News provider unavailable: ${err.message}` });
+  const topic = String(req.query.topic || 'all');
+  // 1) Headlines from the trusted feeds that name this entity (already tagged and clustered).
+  const feed = topic === 'all' ? newsFor(e.id) : [];
+  // 2) A live search, so entities the feeds rarely mention still get coverage. Every result is
+  //    labelled with its outlet's tier, and duplicates of feed stories are merged, not repeated.
+  let search: any = null; let searchError: string | undefined;
+  try { search = await getNews(q, topic); } catch (err: any) { searchError = /limit requests/i.test(err.message) ? 'The GDELT news index is rate-limiting requests right now.' : `Search provider unavailable: ${err.message}`; }
+  const items: any[] = [...feed];
+  const seenUrl = new Set(feed.map((a) => canonicalUrl(a.url)));
+  const keys = feed.map((a) => ({ key: titleKey(a.title), item: a }));
+  for (const a of search?.data || []) {
+    if (seenUrl.has(canonicalUrl(a.url))) continue;
+    const pub = publisherForDomain(a.domain) || publisherForName(a.publisher);
+    const tier = pub?.tier || tierForDomain(a.domain);
+    const k = titleKey(a.title);
+    const dup = keys.find((x) => sameStory(k, x.key));
+    if (dup) {
+      // Same story from another outlet: count it as corroboration on the existing row.
+      const it = dup.item;
+      if (!it.alsoReportedBy.some((p: any) => p.name === (pub?.name || a.publisher))) { it.alsoReportedBy.push({ name: pub?.name || a.publisher || a.domain, tier, url: a.url }); if (isTrusted(tier)) it.corroboration++; }
+      continue;
+    }
+    const item = { id: canonicalUrl(a.url), title: a.title, url: a.url, publisher: pub?.name || a.publisher || a.domain, domain: a.domain, tier, date: a.date, origin: 'search' as const, corroboration: isTrusted(tier) ? 1 : 0, alsoReportedBy: [] as any[] };
+    items.push(item); keys.push({ key: k, item });
   }
+  items.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const byTier: Record<string, number> = {};
+  for (const it of items) byTier[it.tier] = (byTier[it.tier] || 0) + 1;
+  if (!items.length && searchError) return res.json({ query: q, articles: [], unavailable: true, reason: searchError });
+  res.json({ query: q, articles: items.slice(0, 40), byTier, feedCount: feed.length, fetchedAt: search?.fetchedAt || newsStatus().lastRun?.at, stale: !!search?.stale, sourceId: search?.sourceId, sourceIds: [...(feed.length ? ['trusted-news'] : []), ...(search ? [search.sourceId] : [])], searchError });
 }));
 
 api.get('/rankings/:code', wrap(async (req, res) => {
@@ -528,4 +606,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 app.listen(PORT, HOST, () => console.log(`Global Intelligence Terminal → http://localhost:${PORT}${HOST === '127.0.0.1' || HOST === 'localhost' ? ' (this computer only)' : ` — listening on ${HOST}: see SECURITY.md`}`));
 startLiveData();
+startNews();
+// When live leaders/conflicts change, re-tag headlines and re-check news signals against them.
+onLiveRefresh(() => retagAll());
 void fs;

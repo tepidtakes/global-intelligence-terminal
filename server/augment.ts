@@ -13,10 +13,17 @@ import type { Entity, Fact, Relationship } from '../shared/types.js';
 import { USER_AGENT } from './config.js';
 
 type NewRel = Omit<Relationship, 'id' | 'origin'>;
-export const liveStatus: Record<string, { ok: boolean; at: string; detail: string }> = {};
+/** Each background loader's last run. `fetchedAt` is when its source data was downloaded; `stale`
+ *  means the source failed and the previous copy was used (so "ok" never hides an outage). */
+export const liveStatus: Record<string, { ok: boolean; at: string; detail: string; fetchedAt?: string; stale?: boolean; sourceId?: string }> = {};
+type LoadResult = { detail: string; fetchedAt: string; stale: boolean };
+const listeners: (() => void)[] = [];
+/** Run after every background refresh (e.g. re-tag news against new leaders). */
+export const onLiveRefresh = (fn: () => void) => { listeners.push(fn); };
+let retrieved = ''; // fetch time of the batch being loaded, stamped on its facts
 const VERIFIED_THROUGH = `${AS_OF}-30`;
 const today = () => new Date().toISOString().slice(0, 10);
-const fct = (label: string, value: string | number, sourceId: string, quality: Fact['quality'], o: Partial<Fact> = {}): Fact => ({ label, value, sourceId, quality, ...o });
+const fct = (label: string, value: string | number, sourceId: string, quality: Fact['quality'], o: Partial<Fact> = {}): Fact => ({ label, value, sourceId, quality, ...(retrieved ? { retrievedAt: retrieved } : {}), ...o });
 const lcRole = (r: string) => (/^(Head|Governor)/.test(r) ? r.charAt(0).toLowerCase() + r.slice(1) : r.replace(/^prime minister/, 'Prime Minister').replace(/^president/, 'President'));
 const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const fmtDay = (d?: string) => d ? new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : '';
@@ -24,8 +31,9 @@ const fmtDay = (d?: string) => d ? new Date(`${d.slice(0, 10)}T00:00:00Z`).toLoc
 // ───────────────────────── US Congress ─────────────────────────
 const TERRITORIES = new Set(['DC', 'PR', 'GU', 'VI', 'AS', 'MP']);
 
-async function loadCongress() {
+async function loadCongress(): Promise<LoadResult> {
   const r = await cached('congress:current', 24 * 3600, () => fetchJson('https://unitedstates.github.io/congress-legislators/legislators-current.json', {}, 60000));
+  retrieved = r.fetchedAt;
   const rels: NewRel[] = []; let n = 0;
   for (const p of r.data as any[]) {
     const term = p.terms?.at(-1); if (!term) continue;
@@ -58,7 +66,7 @@ async function loadCongress() {
     n++;
   }
   setLiveRels('congress', rels);
-  return `${n} members of Congress`;
+  return { detail: `${n} members of Congress`, fetchedAt: r.fetchedAt, stale: r.stale };
 }
 
 // ───────────────────────── Wikidata: leaders and US governors ─────────────────────────
@@ -107,8 +115,9 @@ function current(rows: Holder[]) {
   return out;
 }
 
-async function loadLeaders() {
+async function loadLeaders(): Promise<LoadResult> {
   const r = await wikidataLeaders();
+  retrieved = r.fetchedAt;
   const d = r.data;
   const rels: NewRel[] = []; const partyRels: NewRel[] = [];
   const notes: Record<string, string[]> = {};
@@ -181,7 +190,7 @@ async function loadLeaders() {
   for (const e of entities.values()) if ((e.type === 'country' || e.type === 'state') && (e.attrs?.leaderNotes || notes[e.id])) e.attrs = { ...(e.attrs || {}), leaderNotes: notes[e.id] || [] };
   setLiveRels('wikidata-leaders', rels);
   setLiveRels('wikidata-parties', partyRels);
-  return `${added} leaders added from Wikidata, ${matched} matched curated records, ${superseded} curated terms closed`;
+  return { detail: `${added} leaders added from Wikidata, ${matched} matched curated records, ${superseded} curated terms closed`, fetchedAt: r.fetchedAt, stale: r.stale };
 }
 
 function findParty(name: string, countryId: string) {
@@ -194,8 +203,9 @@ function findParty(name: string, countryId: string) {
 }
 
 // ───────────────────────── Conflicts ─────────────────────────
-async function loadConflicts() {
+async function loadConflicts(): Promise<LoadResult> {
   const r = await conflicts();
+  retrieved = r.fetchedAt;
   const rels: NewRel[] = []; const seen = new Set<string>();
   for (const c of r.data.rows) {
     const id = `event:conflict-${c.slug}`;
@@ -220,15 +230,18 @@ async function loadConflicts() {
   }
   for (const e of entities.values()) if (e.id.startsWith('event:conflict-') && e.attrs?.status === 'ongoing' && !seen.has(e.id)) e.attrs = { ...e.attrs, status: 'no longer listed' };
   setLiveRels('wp-conflicts', rels);
-  return `${seen.size} conflicts`;
+  return { detail: `${seen.size} conflicts`, fetchedAt: r.fetchedAt, stale: r.stale };
 }
 
 // ───────────────────────── Elections ─────────────────────────
-async function loadElections() {
+async function loadElections(): Promise<LoadResult> {
   const y = new Date().getFullYear();
   const cals = await Promise.allSettled([electionCalendar(y), electionCalendar(y + 1)]);
-  const rows = cals.flatMap((c) => (c.status === 'fulfilled' ? c.value.data.rows : []));
+  const done = cals.flatMap((c) => (c.status === 'fulfilled' ? [c.value] : []));
+  const rows = done.flatMap((c) => c.data.rows);
   if (!rows.length) throw new Error((cals[0] as PromiseRejectedResult).reason?.message || 'No election calendar');
+  const fetchedAt = done.map((c) => c.fetchedAt).sort()[0];
+  retrieved = fetchedAt;
   const curatedElections = [...entities.values()].filter((e) => e.type === 'event' && e.attrs?.category === 'election' && e.attrs?.origin !== 'wikipedia');
   const rels: NewRel[] = []; let n = 0;
   for (const row of rows) {
@@ -252,7 +265,24 @@ async function loadElections() {
     n++;
   }
   setLiveRels('wp-elections', rels);
-  return `${n} national elections (${y}–${y + 1})`;
+  // A calendar that failed outright counts as stale too: part of the list is missing.
+  return { detail: `${n} national elections (${y}–${y + 1})${done.length < cals.length ? ' — one calendar unavailable' : ''}`, fetchedAt, stale: done.some((c) => c.stale) || done.length < cals.length };
+}
+
+// ───────────────────────── Event status by date ─────────────────────────
+/** Scheduled events whose date has passed become "outcome not recorded" (curated and live alike),
+ *  so nothing in the past still reads "scheduled". Runs at start-up and with every refresh. */
+export function normalizeEventStatus() {
+  let n = 0;
+  for (const e of entities.values()) {
+    if (e.type !== 'event' || e.attrs?.status !== 'scheduled' || e.attrs?.category === 'conflict') continue;
+    const end = String(e.attrs.endDate || e.attrs.date || '');
+    if (!/^\d{4}-\d{2}-\d{2}/.test(end) || end.slice(0, 10) >= today()) continue;
+    e.attrs = { ...e.attrs, status: 'outcome-not-recorded' };
+    e.facts = (e.facts || []).map((f) => f.label === 'Status' ? { ...f, value: 'outcome not recorded', note: `Updated automatically: the scheduled date (${end.slice(0, 10)}) has passed and no outcome is recorded yet${e.depth === 'curated' ? ' in the curated dataset' : ''}.` } : f);
+    n++;
+  }
+  return n;
 }
 
 // ───────────────────────── Orchestration ─────────────────────────
@@ -260,16 +290,21 @@ let running: Promise<void> | null = null;
 export function refreshLiveData() {
   if (running) return running;
   running = (async () => {
-    const steps: [string, () => Promise<string>][] = [['congress', loadCongress], ['leaders', loadLeaders], ['conflicts', loadConflicts], ['elections', loadElections]];
-    for (const [name, fn] of steps) {
-      try { liveStatus[name] = { ok: true, at: new Date().toISOString(), detail: await fn() }; }
-      catch (e: any) { liveStatus[name] = { ok: false, at: new Date().toISOString(), detail: e.message }; console.warn(`[live] ${name} failed: ${e.message}`); }
+    const steps: [string, string, () => Promise<LoadResult>][] = [['congress', 'congress-legislators', loadCongress], ['leaders', 'wikidata', loadLeaders], ['conflicts', 'wikipedia-conflicts', loadConflicts], ['elections', 'wikipedia-elections', loadElections]];
+    for (const [name, sourceId, fn] of steps) {
+      retrieved = '';
+      try { const r = await fn(); liveStatus[name] = { ok: true, at: new Date().toISOString(), ...r, sourceId }; }
+      catch (e: any) { liveStatus[name] = { ok: false, at: new Date().toISOString(), detail: e.message, fetchedAt: liveStatus[name]?.fetchedAt, sourceId }; console.warn(`[live] ${name} failed: ${e.message}`); }
     }
-    console.log(`[live] ${Object.entries(liveStatus).map(([k, v]) => `${k}: ${v.ok ? v.detail : 'FAILED'}`).join(' · ')}`);
+    retrieved = '';
+    normalizeEventStatus();
+    console.log(`[live] ${Object.entries(liveStatus).map(([k, v]) => `${k}: ${v.ok ? v.detail + (v.stale ? ' (STALE copy)' : '') : 'FAILED'}`).join(' · ')}`);
+    for (const fn of listeners) { try { fn(); } catch (e: any) { console.warn('[live] listener failed:', e.message); } }
   })().finally(() => { running = null; });
   return running;
 }
 export function startLiveData() {
+  normalizeEventStatus();
   setTimeout(() => { void refreshLiveData(); }, 300);
   setInterval(() => { void refreshLiveData(); }, 12 * 3600_000).unref();
 }

@@ -121,7 +121,8 @@ it creates the note, and saving a note with that title re-points the link).
 | US Treasury yield curve | U.S. Treasury daily par yield curve | 6 h | official |
 | Company fundamentals (US filers) | SEC EDGAR XBRL company facts | 24 h | official |
 | Equity, futures quotes and price history | Yahoo Finance chart endpoint | 5 min | **delayed** (personal research use; swap for a licensed feed in production) |
-| News headlines | GDELT DOC 2.0 API | 2 h, throttled 1 req / 6 s | third-party, links to original |
+| News headlines (per-entity search) | Google News RSS, GDELT DOC 2.0 fallback | 1–2 h, GDELT throttled 1 req / 6 s | each headline labelled with its outlet's tier |
+| Trusted news feeds (newsroom, entity news, signals, "In the news" layer) | 27 feeds: publisher RSS (BBC, Guardian, NYT, NPR, DW, France 24, Al Jazeera, CNBC, CBC, ABC AU), official sources (Fed, ECB, BoE, IMF, UN, SEC, WTO) and wire headlines via Google News site searches (Reuters, AP, Bloomberg, FT, WSJ) | 30 min; kept 14 days in `data/news/store.json` | outlet tier; signals → **reported** |
 | Exports/imports of one product by every country (≈50 HS codes, `shared/products.ts`) | UN Comtrade public preview API (all reporters, partner = world) | 7 d | official |
 | FX (≈150 currencies vs USD) and ≈45 commodity futures | Yahoo spark endpoint (≤20 symbols/call) | 15 min | **delayed**; quotes >10 days old show price + date only |
 | Central-bank policy rates | BIS WS_CBPOL (≈40 banks; ECB applied to euro members) | 6 h | official |
@@ -145,6 +146,42 @@ Wikidata successor who took office after June 2026 → the curated term gets an 
 date, the person a `staleNote`, other curated ministers of that country a warning;
 any other disagreement, or several open-ended holders on Wikidata → a "verify" note on the
 country (`attrs.leaderNotes`). Nothing is resolved silently.
+
+**Trusted newsroom** (`server/newsroom.ts`, pure helpers in `server/newsParse.ts`, outlet
+registry in `shared/newsSources.ts`). Every 30 minutes the feeds above are fetched (4 at a
+time), parsed (RSS 2.0, Atom, RSS 1.0/RDF), normalised (canonical URL without tracking
+parameters, publisher suffix stripped) and stored once per URL. Headlines from different
+outlets that share most content words within 72 h join one *story* (cluster); a story's
+corroboration is the number of distinct trusted outlets in it. Each headline is tagged with
+the entities it names: countries (names, aliases, independent-state demonyms, capitals used
+as shorthand such as "Beijing"), US states, IGOs, companies, parties, people (full names;
+sitting heads of state/government also by surname), and commodities. Names that are also
+ordinary words (Apple, Shell, Labour, gold) need business, political or market context;
+names shared by several entities (Georgia, Congo, CPC) are resolved by the other names in
+the headline or skipped; longest match wins (New Mexico ≠ Mexico). Outlet tiers: official ·
+wire · public broadcaster · major outlet · specialist · state media · unrated — "trusted" =
+the first five.
+
+*Signals.* Trusted headlines are scanned for appointments ("Apple names John Ternus as CEO",
+"X sworn in as prime minister"), departures ("Shell CEO X to step down") and election wins.
+The target is the single company (CEO/chair) or country (head of state/government, finance
+minister, elections) named in the headline; otherwise nothing is extracted. Each signal is
+compared with current officeholders (curated and Wikidata). When it is corroborated (≥ 2
+trusted outlets) or official and differs from the record, the target gets a `reported` fact
+(`sourceId: trusted-news`), the current holder gets `attrs.newsNote`, and recent elections in
+that country get `attrs.reportedOutcome`. Relationships are never closed or rewritten from
+headlines; single-source signals are listed but flag nothing. Signals are kept 120 days.
+`npm run check:news` exercises all of this offline against `scripts/fixtures/news`.
+
+**Provenance and consistency** (`server/cache.ts`, `server/consistency.ts`). The cache records
+per-provider health (last success, last error, serves of a stale copy), and each background
+loader reports when its data was downloaded and whether it ran on a stale copy. Live facts
+carry `retrievedAt`. Events past their date stop saying "scheduled" (`normalizeEventStatus`).
+The audit checks unknown/missing sources, unknown quality labels, dangling relationships,
+reversed terms, conflicting fact values, duplicate people, past events still scheduled,
+competing officeholders and news that contradicts a record. It feeds the Data page
+(`/api/provenance/status`, `/api/quality/report`), each profile's Data quality card
+(`provenance` on `/api/entity/:id`) and `npm run check:data`, which fails on errors.
 
 **Map color rules** (`src/map/layers.ts`): each layer declares `better` (ranked, green =
 better end), `signed` (centred on zero), `target` (bands around ~2% for inflation),

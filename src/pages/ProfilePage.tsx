@@ -7,6 +7,8 @@ import { RelGroups, WatchButton, NewNoteButton } from '../components/entityBits'
 import { GovernmentSection, MacroSection, TradeSection, CompaniesSection, MembersSection, QuoteSection, FundamentalsSection, PositionSection, ProducersSection, RankingSection } from './profile/Sections';
 import { CurrencySection, RatesSection, OutlookSection, ConflictsSection, ConsensusSection, ProductTradeSection, ConflictBadge } from './profile/LiveSections';
 import { PRODUCTS } from '../../shared/products';
+import { NewsRow, ProvenanceCard, SignalItem, bannerSignals, type NewsItemView, type SignalView } from '../components/newsBits';
+import { isTrusted } from '../../shared/newsSources';
 import { TYPE_ICON, fmtUnit, fmtDate, ago } from '../format';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
 import type { Entity, RelView, Source, Fact } from '../../shared/types';
@@ -56,6 +58,10 @@ export function ProfilePage() {
           {e.aliases && e.aliases.length > 0 && <div className="small muted">Also: {e.aliases.filter((a) => a.length > 1).slice(0, 6).join(' · ')}</div>}
           {e.summary && <p className="sum">{e.summary}</p>}
           {e.attrs?.staleNote && <div className="banner" role="note" style={{ marginTop: 8 }}>⚠ {e.attrs.staleNote}</div>}
+          {e.attrs?.newsNote && <div className="banner" role="note" style={{ marginTop: 8 }}><span>⚠ <strong>Trusted news:</strong> {e.attrs.newsNote}</span></div>}
+          {bannerSignals(e.attrs?.newsSignals, e.id).length > 0 && (
+            <div className="stack" style={{ marginTop: 8, gap: 6 }}>{bannerSignals(e.attrs?.newsSignals, e.id).slice(0, 3).map((s: SignalView) => <SignalItem key={s.key} s={s} />)}</div>
+          )}
           {e.type === 'event' && e.attrs?.url && <div className="small" style={{ marginTop: 6 }}><a href={e.attrs.url} target="_blank" rel="noreferrer">Read the full, regularly updated article on Wikipedia ↗</a></div>}
           <div className="row wrap" style={{ marginTop: 10 }}>
             {MAPPABLE.has(t) && <button className="btn sm" onClick={showOnMap}>◎ Show on map</button>}
@@ -105,6 +111,7 @@ export function ProfilePage() {
       </div>
       <div className="colSide">
         <NotesCard entityId={e.id} name={e.name} />
+        <ProvenanceCard p={data.provenance} />
         {t === 'company' && <CompanyFacts e={e} />}
       </div>
       {report && <ReportModal entityId={e.id} name={e.name} onClose={() => setReport(false)} />}
@@ -118,8 +125,17 @@ function CompareButton({ id }: { id: string }) {
 }
 
 function FactValue({ f }: { f: Fact }) {
-  return <>{typeof f.value === 'number' ? `${f.value.toLocaleString()}${f.unit ? ` ${f.unit}` : ''}` : f.value}</>;
+  if (typeof f.value === 'number') return <>{f.value.toLocaleString()}{f.unit ? ` ${f.unit}` : ''}</>;
+  // ISO dates ("2025-01-20", "2025-01-20 – 2025-01-22") read the same way everywhere.
+  if (/^\d{4}-\d{2}-\d{2}( – \d{4}-\d{2}-\d{2})?$/.test(f.value)) return <>{f.value.split(' – ').map((d) => fmtDate(d)).join(' – ')}</>;
+  if (/^https?:\/\//.test(f.value)) return <a href={f.value} target="_blank" rel="noreferrer">{f.value.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</a>;
+  return <>{f.value}</>;
 }
+const factMeta = (f: Fact) => [
+  f.period && `Period: ${f.period}`,
+  f.asOf && (f.quality === 'curated' ? `Verified ${f.asOf}` : f.quality === 'reported' ? `First reported ${fmtDate(f.asOf)}` : `As of ${f.asOf}`),
+  f.retrievedAt && `Retrieved ${ago(f.retrievedAt)}`,
+].filter(Boolean).join(' · ');
 function FactsCard({ e }: { e: Entity }) {
   const facts = e.facts || [];
   return (
@@ -130,7 +146,7 @@ function FactsCard({ e }: { e: Entity }) {
             <div className="fact" key={f.label}>
               <div className="k">{f.label} <Quality q={f.quality} /></div>
               <div className="v"><FactValue f={f} /></div>
-              <div className="m">{[f.period && `Period: ${f.period}`, f.asOf && `Verified ${f.asOf}`].filter(Boolean).join(' · ')}{f.note ? ` · ${f.note}` : ''}</div>
+              <div className="m">{factMeta(f)}{f.note ? `${factMeta(f) ? ' · ' : ''}${f.note}` : ''}</div>
               <SourceRef id={f.sourceId} />
             </div>
           ))}
@@ -258,17 +274,30 @@ function EventRow({ x }: { x: any }) {
 
 function NewsCard({ id }: { id: string }) {
   const [topic, setTopic] = useState('all');
+  const [trustedOnly, setTrustedOnly] = useState(true);
   const [on, setOn] = useState(false);
   const { data, loading, error } = useApi<any>(on ? `/news/${encodeURIComponent(id)}?topic=${topic}` : null, 1800_000);
   useEffect(() => { const t = setTimeout(() => setOn(true), 400); return () => clearTimeout(t); }, [id]);
+  const all: NewsItemView[] = data?.articles || [];
+  const trusted = all.filter((a) => isTrusted(a.tier));
+  // Fall back to everything when trusted outlets have nothing, and say so.
+  const shown = trustedOnly && trusted.length ? trusted : all;
+  const hidden = all.length - shown.length;
   return (
-    <Card title="Recent news" id="news" actions={<div className="seg">{['all', 'politics', 'economy', 'markets', 'geopolitics'].map((t) => <button key={t} className={topic === t ? 'on' : ''} onClick={() => setTopic(t)}>{t}</button>)}</div>}>
-      {(loading || !on) && !data ? <Loading /> : error ? <Unavailable>{error.message}</Unavailable> : data?.unavailable ? <Unavailable>{data.reason}</Unavailable> : !data?.articles.length ? <Unavailable>No headlines in the last three weeks for “{data?.query}”{topic !== 'all' ? ` on ${topic}` : ''}.</Unavailable> : (
+    <Card title="Recent news" id="news" actions={<>
+      <label className="tiny" style={{ marginRight: 8 }} title="Wire services, public broadcasters, major papers, specialist outlets and official sources"><input type="checkbox" checked={trustedOnly} onChange={(e) => setTrustedOnly(e.target.checked)} /> Trusted outlets</label>
+      <div className="seg">{['all', 'politics', 'economy', 'markets', 'geopolitics'].map((t) => <button key={t} className={topic === t ? 'on' : ''} onClick={() => setTopic(t)}>{t}</button>)}</div>
+    </>}>
+      {(loading || !on) && !data ? <Loading /> : error ? <Unavailable>{error.message}</Unavailable> : data?.unavailable ? <Unavailable>{data.reason}</Unavailable> : !all.length ? <Unavailable>No headlines in the last three weeks for “{data?.query}”{topic !== 'all' ? ` on ${topic}` : ''}.</Unavailable> : (
         <>
-          <div className="stack">{data.articles.slice(0, 10).map((a: any, i: number) => (
-            <div key={i}><a href={a.url} target="_blank" rel="noreferrer noopener">{a.title}</a><div className="tiny muted">{a.publisher || a.domain} · {fmtDate(a.date)}</div></div>
-          ))}</div>
-          <div style={{ marginTop: 8 }}><SourceRef id={data.sourceId} prefix="Headlines via " /> <span className="tiny muted">· matched on “{data.query}” · links open the original publisher · retrieved {ago(data.fetchedAt)}</span></div>
+          {trustedOnly && !trusted.length && <div className="tiny muted" style={{ marginBottom: 4 }}>No trusted outlet has covered this recently — showing other outlets. Check these against the original source.</div>}
+          <div>{shown.slice(0, 12).map((a) => <NewsRow key={a.id} a={a} />)}</div>
+          <div style={{ marginTop: 8 }} className="tiny muted">
+            {data.feedCount > 0 && <>{data.feedCount} {data.feedCount === 1 ? 'story' : 'stories'} from the terminal’s trusted feeds, plus </>}headline search for “{data.query}”{data.sourceId && <> via <SourceRef id={data.sourceId} prefix="" /></>}
+            {hidden > 0 && <> · {hidden} from unrated outlets hidden (<button className="linkish" onClick={() => setTrustedOnly(false)}>show</button>)</>}
+            {data.searchError && <> · {data.searchError}</>} · links open the original publisher · retrieved {ago(data.fetchedAt)}
+          </div>
+          <div className="tiny" style={{ marginTop: 2 }}><Link to={`/news?entity=${encodeURIComponent(id)}`}>Newsroom ›</Link></div>
         </>
       )}
     </Card>

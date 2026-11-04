@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+<channel><title><![CDATA[BBC News]]></title><link>https://www.bbc.co.uk/news/world</link>
+<item><title><![CDATA[Apple names hardware chief John Ternus as CEO as Tim Cook steps back]]></title><description><![CDATA[The iPhone maker says Mr Cook will become executive chairman.]]></description><link>https://www.bbc.com/news/articles/c0apple123?at_medium=RSS&amp;at_campaign=rss</link><guid isPermaLink="false">https://www.bbc.com/news/articles/c0apple123#0</guid><pubDate>{{D1}}</pubDate></item>
+<item><title><![CDATA[Georgia protesters rally in Tbilisi against new media law]]></title><description><![CDATA[Thousands gathered outside parliament as opposition parties called for fresh elections.]]></description><link>https://www.bbc.com/news/articles/c0geo456</link><pubDate>{{D1}}</pubDate></item>
+<item><title><![CDATA[Shell shock: why the market sell-off caught everyone out]]></title><description><![CDATA[Analysts look back at a bruising week.]]></description><link>https://www.bbc.com/news/articles/c0shell789</link><pubDate>{{D2}}</pubDate></item>
+<item><title><![CDATA[Beijing warns Washington over new chip export controls]]></title><description><![CDATA[China&#8217;s commerce ministry said the US rules would disrupt semiconductor supply chains.]]></description><link>https://www.bbc.com/news/articles/c0chips001</link><pubDate>{{D2}}</pubDate></item>
+<item><title><![CDATA[Ruling party candidate Ana Pereira wins Atlantis presidential election]]></title><description><![CDATA[Fictional country used only by the test-suite; should not be tagged.]]></description><link>https://www.bbc.com/news/articles/c0fake000</link><pubDate>{{D2}}</pubDate></item>
+</channel></rss>

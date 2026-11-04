@@ -47,6 +47,8 @@ export const LAYERS: LayerDef[] = [
     color: { kind: 'categories', colors: { soon: ['#d97706', '#f59e0b'], upcoming: ['#f5c66b', '#8a6418'], recent: ['#8aa4c8', '#4f6a90'] } } },
   { id: 'govtype', label: 'Government type', group: 'politics', hint: 'Presidential, parliamentary, monarchy or one-party state.', keywords: 'regime democracy',
     color: { kind: 'categories', colors: { presidential: ['#2a78d6', '#3987e5'], parliamentary: ['#1baf7a', '#199e70'], monarchy: ['#6250d6', '#9085e9'], 'one-party': ['#c8312d', '#e66767'] } } },
+  { id: 'news', label: 'In the news (48 h)', group: 'politics', live: true, hint: 'How many separate stories from trusted outlets (wires, public broadcasters, major papers, official sources) named each country in a headline in the last 48 hours.', keywords: 'headlines attention media coverage breaking',
+    color: { kind: 'magnitude', hue: 'rose' } },
   { id: 'igo', label: 'Organization membership', group: 'politics', hint: 'NATO, EU, OPEC, BRICS, G7… — up to three at once, by year.', keywords: 'nato eu opec brics g20 alliance', color: { kind: 'auto' } },
   // Security
   { id: 'conflicts', label: 'Armed conflicts', group: 'security', live: true, hint: 'Where fighting is taking place, shaded by the deadliest conflict on each country’s territory.', keywords: 'war fighting military',

@@ -7,6 +7,7 @@ const NAV = [
   { to: '/', label: 'Map', icon: '◎', end: true },
   { to: '/markets', label: 'Markets', icon: '◫' },
   { to: '/conflicts', label: 'Conflicts', icon: '⚔' },
+  { to: '/news', label: 'News', icon: '▦' },
   { to: '/research', label: 'Research', icon: '✎' },
   { to: '/watchlists', label: 'Watchlists', icon: '☆' },
   { to: '/portfolio', label: 'Portfolio', icon: '▤' },
@@ -38,6 +39,7 @@ export function Shell() {
         <button className="btn ghost sm" onClick={() => setTheme(nextTheme)} title={`Theme: ${theme} (click for ${nextTheme})`} aria-label="Toggle theme">
           {theme === 'dark' ? '☾' : theme === 'light' ? '☀' : '◐'}
         </button>
+        <NavLink to="/data" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`} title="Data sources, freshness and consistency audit"><span aria-hidden>◇</span> <span className="lbl">Data</span></NavLink>
         <NavLink to="/settings" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}><span aria-hidden>⚙</span> <span className="lbl">Settings</span></NavLink>
         {user === null && <Link to="/login" className="btn primary sm" style={{ marginLeft: 6 }}>Sign in</Link>}
         {user && <span className="tiny muted" style={{ marginLeft: 8, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={user.email}>{user.email}</span>}

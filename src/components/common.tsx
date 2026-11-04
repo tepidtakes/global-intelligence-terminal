@@ -19,6 +19,7 @@ const Q_HELP: Record<DataQuality, string> = {
   estimate: 'Estimate', historical: 'Historical value', curated: 'Curated from the cited official source; verified as of the date shown', manual: 'Entered manually by you',
   community: 'Community-maintained open data (Wikidata / Wikipedia), loaded live — usually current, but verify before relying on it',
   forecast: 'Forecast or projection by the named institution — not an outcome',
+  reported: 'Reported by trusted news outlets (named in the note) but not yet in an official or structured record — verify before relying on it',
 };
 export function Quality({ q }: { q: DataQuality }) {
   return <span className={`q ${q}`} title={Q_HELP[q]}>{q}</span>;

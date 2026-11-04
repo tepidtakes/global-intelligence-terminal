@@ -18,6 +18,7 @@ export const SOURCES: Source[] = [
   { id: 'sec-edgar', name: 'EDGAR XBRL company facts', publisher: 'U.S. Securities and Exchange Commission', url: 'https://www.sec.gov/edgar', license: 'Public domain' },
   { id: 'yahoo-finance', name: 'Yahoo Finance chart data (delayed)', publisher: 'Yahoo', url: 'https://finance.yahoo.com', license: 'Personal, non-commercial use; replace with a licensed feed for production' },
   { id: 'google-news', name: 'Google News search RSS', publisher: 'Google', url: 'https://news.google.com', license: 'Personal, non-commercial feed-reader use; headlines link to original publishers' },
+  { id: 'trusted-news', name: 'Trusted news feeds (cross-checked headlines)', publisher: 'Outlets named on each item', url: 'https://github.com/tepidtakes/global-intelligence-terminal/blob/main/DATA_SOURCES.md#trusted-news', license: 'Headlines and links only; articles stay with their publishers' },
   { id: 'gdelt', name: 'GDELT DOC 2.0 news index', publisher: 'The GDELT Project', url: 'https://www.gdeltproject.org', license: 'Open; links to original publishers' },
   { id: 'un', name: 'Member States', publisher: 'United Nations', url: 'https://www.un.org/en/about-us/member-states' },
   { id: 'nato', name: 'NATO member countries', publisher: 'NATO', url: 'https://www.nato.int' },
