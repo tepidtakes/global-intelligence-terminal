@@ -1,0 +1,5 @@
+{
+  "_comment": "Local development test account used for acceptance testing on localhost only. Not a real credential.",
+  "email": "analyst@terminal.test",
+  "password": "Terminal-Test-2026"
+}
