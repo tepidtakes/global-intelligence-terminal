@@ -19,16 +19,37 @@ every entity. Phase I (working MVP).
 under each provider's own terms — see [DATA_SOURCES.md](DATA_SOURCES.md). Dependencies keep
 their own licences.
 
-## Run it
+## Getting started (no coding needed)
 
-Requires Node 24+ (uses the built-in `node:sqlite`).
+The terminal runs on your own computer and opens in your web browser. Setup takes about
+five minutes, once.
 
-```bash
-npm install
-npm run dev
-```
+1. **Install Node.js 24 or newer** from <https://nodejs.org> (the "LTS" download; accept the
+   defaults). Close any terminal windows you already had open so they pick it up.
+2. **Download this project:** on this page click the green **Code** button → **Download ZIP**,
+   then unzip it somewhere easy to find (e.g. your Documents folder).
+3. **Open a terminal in that folder:**
+   - Windows: open the unzipped folder in File Explorer, click the address bar, type
+     `powershell` and press Enter.
+   - macOS: right-click the folder in Finder → **New Terminal at Folder** (or open Terminal and
+     type `cd ` then drag the folder into the window and press Enter).
+4. **Install and start it** — type these two lines, pressing Enter after each:
 
-Open http://localhost:5180. Public data works signed out; create an account (Sign in →
+   ```bash
+   npm install
+   npm run dev
+   ```
+
+5. **Open <http://localhost:5180>** in your browser. Keep the terminal window open while you
+   use it; close it (or press Ctrl+C) to stop.
+
+Next time, only steps 3, the second line of 4 (`npm run dev`) and 5 are needed. To update,
+download the ZIP again and copy your old `data` folder into the new one to keep your notes.
+
+## Run it (developers)
+
+Requires Node 24+ (uses the built-in `node:sqlite`). `npm install` then `npm run dev`, and
+open http://localhost:5180. Public data works signed out; create an account (Sign in →
 Create account) for notes, positions, watchlists, saved views and catalysts. Accounts and
 everything you write stay in `data/` on your computer. (`seed/test-account.example.json`
 is a throwaway login used for local testing — not a real credential.)
