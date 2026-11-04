@@ -183,6 +183,40 @@ competing officeholders and news that contradicts a record. It feeds the Data pa
 (`/api/provenance/status`, `/api/quality/report`), each profile's Data quality card
 (`provenance` on `/api/entity/:id`) and `npm run check:data`, which fails on errors.
 
+**Elections** (`server/elections.ts`, parsers in `server/electionParse.ts`). Election events
+get a Wikipedia article (calendar link, curated mapping, or discovered local race). Articles
+are fetched 50 at a time through the MediaWiki query API (normalisation and redirects
+followed) and their `{{Infobox election}}` parsed: numbered `candidateN/leaderN/nomineeN`,
+`partyN`, `popular_voteN`, `percentageN`, `seats(_after)N`, round data `kdataN`, dates,
+`ongoing`, `before_/after_election`, `opinion_polls`. `electionOutcome` derives status
+(scheduled / counting / completed) — the winner only from `after_election`, placeholders
+ignored. Results become community facts with `retrievedAt`; candidates become `candidate_in`
+relationships (origin `election-candidates`). Elections within −10…+2 days are re-read every
+30 min. Local races: titles `<year> <State> gubernatorial election`, `<year> United States
+Senate (special) election in <State>`, `<year> <City> mayoral|municipal election`, for the
+previous, current and next year. Candidate policies (on request, cached 7 days): party
+`{{Infobox political party}}` ideology/position; "Political positions of X" intro via
+TextExtracts, else the candidate article's positions section via `action=parse`.
+
+**Prediction markets** (`server/predictionMarkets.ts`). Polymarket Gamma events (tags
+elections / world-elections / us-elections) and Kalshi events (category Elections/Politics),
+cached 15 min, normalised to outcomes with a probability (bid/ask mid when the spread is
+≤ 10¢, else last trade). `scoreMarket` requires the election's place (tagger; city by name;
+US-wide House/Senate contests), compatible office class, no conflicting year, and a close
+date from 15 days before to 200 days after the vote; outcomes map to contenders by surname
+or party core name. Per-candidate probabilities are volume-weighted across platforms.
+
+**Local politics** (`server/localPolitics.ts`). Wikidata P6 (head of government) of capitals
+(P36), US cities (Q1093829, population ≥ 250k) and curated cities (label + country), with
+P1313 office label, P625 coordinates, P1082 population and US state via P131. New cities are
+baseline `city:wd-…` entities under their state/country; `capital_of` links are added. Curated
+mayors reconcile like national leaders (`VERIFIED_THROUGH`).
+
+**Rates resolver** (`tenYearBoard` in `server/markets.ts`): daily curve 10-year points (US,
+CAN, JPN, GBR par) > ECB IRS monthly > OECD monthly; `stale` by age. Used by the
+`bond10y` layer, `/rates/overview` and `/rates/:iso3` (`tenLatest`). The BoE curve now
+requests par (`IUD*NPY`) and zero-coupon (`IUD*NZC`) series and reads columns by code.
+
 **Map color rules** (`src/map/layers.ts`): each layer declares `better` (ranked, green =
 better end), `signed` (centred on zero), `target` (bands around ~2% for inflation),
 `magnitude` (one themed hue) or `categories`. The green/red scale has unequal lightness on

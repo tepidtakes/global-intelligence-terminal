@@ -26,6 +26,8 @@ export const CATEGORY_LABEL: Record<string, string> = {
   'term-closed-by-live-data': 'Curated term closed by newer live data',
   'stale-curated': 'Curated facts older than 6 months',
   'leader-ambiguity': 'Live source lists competing officeholders',
+  'election-result-conflict': 'Election result differs between sources',
+  'result-missing': 'Election held, result not recorded',
 };
 
 // Offices legitimately held by more than one person at once.
@@ -63,6 +65,16 @@ export function audit(force = false): Issue[] {
     // Elections whose date has passed but which still say "scheduled".
     if (e.type === 'event' && e.attrs?.category === 'election' && e.attrs?.status === 'scheduled' && String(e.attrs?.endDate || e.attrs?.date || '9999') < today())
       push({ severity: 'warning', category: 'election-status', entityId: e.id, message: `Held on ${e.attrs.endDate || e.attrs.date} but still marked “scheduled”.` });
+
+    // Election results: the article's winner vs trusted-news reports; results missing long after the vote.
+    if (e.type === 'event' && e.attrs?.category === 'election') {
+      const w = e.attrs?.election?.winner?.name; const news = e.attrs?.reportedOutcome?.winner;
+      const sn = (n: string) => normName(n).split(' ').filter((x) => x.length > 2).at(-1);
+      if (w && news && sn(w) !== sn(news)) push({ severity: 'warning', category: 'election-result-conflict', entityId: e.id, message: `The election article names ${w} as the winner; trusted outlets (${(e.attrs.reportedOutcome.publishers || []).slice(0, 3).join(', ')}) report ${news}.` });
+      const end = String(e.attrs?.endDate || e.attrs?.date || '');
+      if (/^\d{4}-\d{2}-\d{2}/.test(end) && end < new Date(Date.now() - 21 * 86400_000).toISOString().slice(0, 10) && !w && /outcome-not-recorded|results-pending/.test(e.attrs?.status || ''))
+        push({ severity: 'info', category: 'result-missing', entityId: e.id, message: `Held ${end}; no result recorded yet${e.attrs?.election ? ' (the Wikipedia article has no winner filled in)' : ' (no Wikipedia article linked)'}.` });
+    }
 
     // Live-source ambiguity notes (Wikidata lists two current holders, etc.).
     for (const n of e.attrs?.leaderNotes || []) if (/more than one current/i.test(n)) push({ severity: 'info', category: 'leader-ambiguity', entityId: e.id, message: n });

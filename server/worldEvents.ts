@@ -28,7 +28,7 @@ export function plain(s: string) {
     .replace(/'''?/g, '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 }
-const firstLink = (s: string) => /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/.exec(s)?.[1]?.trim();
+export const firstLink = (s: string) => /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/.exec(s)?.[1]?.trim();
 
 // ───────────────────────── Conflicts ─────────────────────────
 export type Intensity = 'major-war' | 'minor-war' | 'conflict' | 'skirmish';

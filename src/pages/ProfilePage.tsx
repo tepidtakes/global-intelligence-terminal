@@ -5,6 +5,7 @@ import { useApp, useAuth } from '../state';
 import { Card, EntityChip, Loading, Modal, Quality, SourceRef, Unavailable, localToday } from '../components/common';
 import { RelGroups, WatchButton, NewNoteButton } from '../components/entityBits';
 import { GovernmentSection, MacroSection, TradeSection, CompaniesSection, MembersSection, QuoteSection, FundamentalsSection, PositionSection, ProducersSection, RankingSection } from './profile/Sections';
+import { ElectionSection } from './profile/ElectionSection';
 import { CurrencySection, RatesSection, OutlookSection, ConflictsSection, ConsensusSection, ProductTradeSection, ConflictBadge } from './profile/LiveSections';
 import { PRODUCTS } from '../../shared/products';
 import { NewsRow, ProvenanceCard, SignalItem, bannerSignals, type NewsItemView, type SignalView } from '../components/newsBits';
@@ -40,6 +41,8 @@ export function ProfilePage() {
   if (t === 'commodity' && PRODUCTS.some((p) => p.commodity === e.id)) sections.push(['traders', 'Exporters']);
   if (t === 'company') sections.push(['financials', 'Financials'], ...(e.attrs?.public ? [['consensus', 'Consensus'] as [string, string]] : []), ['position', 'My position']);
   if (t === 'igo') sections.push(['members', 'Members']);
+  const isElection = t === 'event' && e.attrs?.category === 'election';
+  if (isElection) sections.push(['election', 'Result'], ['candidates', 'Candidates'], ['markets', 'Markets']);
   sections.push(['relationships', 'Relationships'], ['events', 'Events'], ['news', 'News'], ['notes', 'Research'], ['sources', 'Sources']);
 
   const operating = rels.filter((r) => r.rel.type === 'operates_in' && r.direction === 'in');
@@ -77,7 +80,8 @@ export function ProfilePage() {
 
       <div className="colMain">
         <FactsCard e={e} />
-        {(t === 'country' || t === 'state' || t === 'city') && <GovernmentSection e={e} rels={rels} events={data.events} partyOf={data.partyOf} />}
+        {(t === 'country' || t === 'state' || t === 'city') && <GovernmentSection e={e} rels={rels} events={data.events} partyOf={data.partyOf} mayors={data.mayors} />}
+        {isElection && <ElectionSection id={e.id} />}
         {(t === 'country' || t === 'state') && <ConflictsSection id={e.id} name={e.name} />}
         {t === 'country' && e.iso3 && <MacroSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <OutlookSection iso3={e.iso3} />}

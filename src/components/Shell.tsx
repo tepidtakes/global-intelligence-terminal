@@ -8,6 +8,7 @@ const NAV = [
   { to: '/markets', label: 'Markets', icon: '◫' },
   { to: '/conflicts', label: 'Conflicts', icon: '⚔' },
   { to: '/news', label: 'News', icon: '▦' },
+  { to: '/elections', label: 'Elections', icon: '☑' },
   { to: '/research', label: 'Research', icon: '✎' },
   { to: '/watchlists', label: 'Watchlists', icon: '☆' },
   { to: '/portfolio', label: 'Portfolio', icon: '▤' },
@@ -30,7 +31,7 @@ export function Shell() {
         <GlobalSearch />
         <nav className="row" style={{ gap: 2 }}>
           {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>
+            <NavLink key={n.to} to={n.to} end={n.end} title={n.label} className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>
               <span aria-hidden>{n.icon}</span> <span className="lbl">{n.label}{n.to === '/compare' && compare.length ? ` (${compare.length})` : ''}</span>
             </NavLink>
           ))}

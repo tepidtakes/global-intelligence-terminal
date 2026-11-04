@@ -66,7 +66,7 @@ export type RelType =
   | 'belongs_to_party' | 'party_in' | 'governing_party' | 'located_in' | 'capital_of'
   | 'headquartered_in' | 'operates_in' | 'produces' | 'exports' | 'imports' | 'consumes'
   | 'trade_partner' | 'subsidiary_of' | 'competitor_of' | 'in_industry' | 'affects' | 'uses'
-  | 'in_region' | 'shareholder_of' | 'borders' | 'supplies';
+  | 'in_region' | 'shareholder_of' | 'borders' | 'supplies' | 'candidate_in';
 
 export interface Relationship {
   id: string;
@@ -110,6 +110,7 @@ export const REL_LABELS: Record<RelType, { fwd: string; inv: string }> = {
   shareholder_of: { fwd: 'Shareholder of', inv: 'Significant shareholders' },
   borders: { fwd: 'Neighbors', inv: 'Neighbors' },
   supplies: { fwd: 'Supplies', inv: 'Key suppliers' },
+  candidate_in: { fwd: 'Candidate in', inv: 'Candidates' },
 };
 
 /** A relationship as seen from one entity, with the other side resolved. */

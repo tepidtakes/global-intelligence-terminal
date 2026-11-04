@@ -1,0 +1,35 @@
+{{Short description|General election in Bolivia}}
+{{Use dmy dates|date=October 2025}}
+{{Infobox election
+| election_name     = 2025 Bolivian general election
+| country           = Bolivia
+| type              = presidential
+| ongoing           = no
+| previous_election = 2020 Bolivian general election
+| election_date     = 17 August 2025 (first round)<br />19 October 2025 (second round)
+| opinion_polls     = [[Opinion polling for the 2025 Bolivian general election|Opinion polls]]
+| turnout           = 85.6% (second round)
+| image1            = Rodrigo Paz 2025.jpg
+| candidate1        = '''[[Rodrigo Paz Pereira|Rodrigo Paz]]'''
+| party1            = [[Christian Democratic Party (Bolivia)|PDC]]
+| running_mate1     = [[Edmand Lara]]
+| heading1          = First round
+| 1data1            = 1,717,432<br />32.06%
+| heading2          = Second round
+| 2data1            = '''3,251,145'''<br />'''54.96%'''
+| popular_vote1     = '''3,251,145'''
+| percentage1       = '''54.96%'''<ref>{{cite web|title=Results|url=https://example.org}}</ref>
+| candidate2        = [[Jorge Quiroga]]
+| party2            = [[Libre (Bolivia)|Libre]]
+| running_mate2     = [[Juan Pablo Velasco]]
+| 1data2            = 1,430,176<br />26.70%
+| 2data2            = 2,664,297<br />45.04%
+| popular_vote2     = 2,664,297
+| percentage2       = 45.04%
+| title             = [[President of Bolivia|President]]
+| before_election   = [[Luis Arce]]
+| before_party      = [[Movement for Socialism (Bolivia)|MAS-IPSP]]
+| after_election    = [[Rodrigo Paz Pereira|Rodrigo Paz]]
+| after_party       = [[Christian Democratic Party (Bolivia)|PDC]]
+}}
+The '''2025 Bolivian general election''' was held on 17 August 2025...

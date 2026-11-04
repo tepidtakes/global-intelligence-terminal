@@ -149,7 +149,7 @@ function Rates() {
   const val = (c: any, label: string) => c.latest.points.find((p: any) => p.label === label)?.value;
   const COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)'];
   const policy = [...data.policy].sort((a: any, b: any) => b.value - a.value);
-  const ten = [...data.tenYear].sort((a: any, b: any) => b.value - a.value);
+  const ten = [...data.tenYear].sort((a: any, b: any) => Number(a.stale) - Number(b.stale) || b.value - a.value);
   return (
     <>
       <Card title="Government yield curves — latest">
@@ -169,7 +169,7 @@ function Rates() {
                 </tr>
               ))}</tbody>
             </table>
-            <div className="tiny muted">The UK row shows Bank of England fitted zero-coupon yields at 5, 10 and 20 years; the euro row is the ECB curve for AAA-rated euro-area government bonds. A negative 10y − 2y spread (red) means the curve is inverted.</div>
+            <div className="tiny muted">The UK row shows Bank of England nominal par yields at 5, 10 and 20 years; the euro row is the ECB curve for AAA-rated euro-area government bonds. A negative 10y − 2y spread (red) means the curve is inverted.</div>
           </>
         ) : <Unavailable>No curves could be loaded right now.</Unavailable>}
       </Card>
@@ -189,10 +189,13 @@ function Rates() {
         </Card>
         <Card title={`10-year government bond yields (${ten.length})`} actions={<button className="btn sm" onClick={() => { setMap({ fill: 'bond10y' }); nav('/'); }}>Map ↗</button>}>
           {data.tenYearError ? <Unavailable>{data.tenYearError}</Unavailable> : (
-            <table className="data"><thead><tr><th>Country</th><th className="r">Yield</th><th className="r">Month</th></tr></thead>
-              <tbody>{ten.map((r: any) => <tr key={r.entity.id}><td><Link to={`/entity/${encodeURIComponent(r.entity.id)}#yields`}>{r.entity.flag} {r.entity.name}</Link></td><td className="r num"><strong>{r.value.toFixed(2)}%</strong></td><td className="r tiny muted">{r.period}</td></tr>)}</tbody></table>
+            <table className="data"><thead><tr><th>Country</th><th className="r">Yield</th><th className="r">As of</th></tr></thead>
+              <tbody>{ten.map((r: any) => <tr key={r.entity.id} style={r.stale ? { opacity: 0.55 } : undefined}><td><Link to={`/entity/${encodeURIComponent(r.entity.id)}#yields`}>{r.entity.flag} {r.entity.name}</Link></td>
+                <td className="r num"><strong>{r.value.toFixed(2)}%</strong></td>
+                <td className="r tiny muted" title={r.basis}>{r.frequency === 'daily' ? `${fmtDate(r.date)} close` : `${r.date} avg.`}{r.stale ? ' · stale' : ''}</td></tr>)}</tbody></table>
           )}
-          <SourceRef id="oecd-mei" />
+          <div className="tiny muted">Daily closes for the US, Canada, Japan and the UK (from the curves above); monthly averages elsewhere. Rows marked stale have no newer data and are left off the map.</div>
+          <SourceRef id="oecd-mei" /> <SourceRef id="ecb-irs" prefix="· " />
         </Card>
       </div>
       {fed.data?.fed && (

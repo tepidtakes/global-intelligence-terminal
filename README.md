@@ -72,7 +72,8 @@ server listens on this computer only unless you change `HOST` — see [SECURITY.
 
 Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:live` ·
 `npm run check:news` (news parsing, tagging and signals, offline) · `npm run check:data`
-(consistency audit of the built-in dataset, offline; fails on errors).
+(consistency audit of the built-in dataset, offline; fails on errors) · `npm run check:parsers`
+(rates, election, prediction-market and mayor parsers on fixtures, offline).
 
 ## What's in it
 
@@ -104,7 +105,9 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
   partner) · US Treasury (par yield curve) · SEC EDGAR (US and 20-F filer financials) ·
   Yahoo Finance chart endpoint (delayed quotes, futures, dividends) · Google News RSS /
   GDELT (headlines linking to publishers).
-  Plus: BIS central-bank policy rates · OECD 10-year yields (via FRED) · daily government
+  Plus: BIS central-bank policy rates · 10-year government yields (one figure everywhere:
+  daily closes for the US, Canada, Japan and UK; ECB monthly for EU members; OECD monthly via
+  FRED elsewhere; out-of-date values flagged, not shown as current) · daily government
   yield curves for the US (Treasury), euro area (ECB AAA curve), UK (Bank of England),
   Japan (MOF) and Canada (Bank of Canada) · IMF World Economic Outlook projections · FOMC
   median projections and fed-funds-futures-implied rates · analyst consensus (price
@@ -133,6 +136,19 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
   profile gets a dashed **reported** fact naming the outlets, and the person the record
   still lists gets a warning. Records are flagged, never overwritten; single-source reports
   are listed but flag nothing.
+- **Elections page** (`/elections`) and election profiles: upcoming and recent national
+  elections plus US governor, Senate and big-city mayoral races and mayoral elections in major
+  world cities. Results, turnout and candidates are read from each election's Wikipedia
+  article — every 30 minutes around polling day — and shown as "counting" until a winner is
+  recorded (never guessed), with a ✓/⚠ check against what trusted news reports. Candidates
+  link to their profiles, with their party's stated ideology and position and a summary of
+  their policy positions (from their "Political positions" article or section). **Prediction
+  markets**: Polymarket and Kalshi prices matched to each election and candidate, combined
+  into one market-implied chance, with each market listed separately and thin markets marked.
+- **Local politics**: mayors (or city heads of government) of every national capital, every
+  US city over 250,000 people and every curated city, from Wikidata — new cities appear on the
+  map — shown on city, state and country profiles alongside each state's governor, Congress
+  delegation and local elections.
 - **Data page** (`/data`): every live provider's status (ok / serving a cached copy /
   failing), when each background loader last downloaded its data, every news feed's
   health, facts by quality label, and a consistency audit (unknown sources, broken links,
@@ -179,6 +195,10 @@ server/          Express API (one process; mounts Vite in dev)
   newsroom.ts    trusted news feeds: ingest, de-duplicate, tag entities, signals
   newsParse.ts   feed parsing, entity tagger, headline signal extraction (pure, tested)
   consistency.ts provenance & consistency audit (Data page, npm run check:data)
+  elections.ts   election articles: results, candidates, local races, candidate policies
+  electionParse.ts  Infobox election / party parsers (pure, tested)
+  predictionMarkets.ts  Polymarket + Kalshi, matched to elections and candidates
+  localPolitics.ts  mayors and city heads of government (Wikidata)
   private.ts     per-user notes, positions, catalysts, watchlists, views, prefs
   notes.ts       note storage, [[wikilinks]], backlinks
   obsidian.ts    two-way Obsidian vault sync (Markdown ⇄ notes, Windows-safe)
@@ -188,6 +208,7 @@ scripts/check-tickers.mts   every quote symbol resolves to the right security (n
 scripts/check-live.mts      conflict & election parsers against live Wikipedia (npm run check:live)
 scripts/check-news.mts      news parsing, tagging, clustering and signals on fixtures (npm run check:news)
 scripts/check-data.mts      consistency audit of the built-in dataset (npm run check:data)
+scripts/check-parsers.mts   rates, elections, markets and mayors on fixtures (npm run check:parsers)
 shared/newsSources.ts       outlet registry and tiers
 shared/types.ts  entity / relationship vocabulary
 shared/products.ts  HS codes for "who exports / imports what"

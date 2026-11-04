@@ -16,7 +16,8 @@
     "check:tickers": "tsx scripts/check-tickers.mts",
     "check:live": "tsx scripts/check-live.mts",
     "check:news": "tsx scripts/check-news.mts",
-    "check:data": "tsx scripts/check-data.mts"
+    "check:data": "tsx scripts/check-data.mts",
+    "check:parsers": "tsx scripts/check-parsers.mts"
   },
   "dependencies": {
     "@tiptap/extension-link": "~2.11.5",

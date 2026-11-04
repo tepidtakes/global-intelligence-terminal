@@ -26,7 +26,7 @@ Missing values are shown as "—" or "no data", never as 0.
 | Exports/imports by product and partner; "who exports what" | UN Comtrade public API | 7 days | UN Comtrade terms (free tier, rate-limited) |
 | IMF growth, inflation, unemployment, debt forecasts | IMF World Economic Outlook (DataMapper) | 24 h | Free reuse with attribution |
 | Central-bank policy rates | Bank for International Settlements | 6 h | Free reuse with attribution |
-| 10-year government bond yields (monthly) | OECD, via the St. Louis Fed (FRED) | 24 h | OECD terms |
+| 10-year government bond yields | Daily: US Treasury, Bank of Canada, Japan MOF, Bank of England (par yields). Monthly: ECB convergence yields (all EU members), OECD via FRED (others) | 6–24 h | Free with attribution / OECD terms |
 | Daily yield curves | US Treasury · European Central Bank · Bank of England · Japan Ministry of Finance · Bank of Canada | 6 h | Public / free with attribution |
 | Fed projections (FOMC medians) | Federal Reserve, via FRED | 24 h | Public domain |
 | Company financials (US filers) | SEC EDGAR | 24 h | Public domain |
@@ -35,6 +35,10 @@ Missing values are shown as "—" or "no data", never as 0.
 | Headlines for one profile | Google News RSS (fallback: GDELT) | 1–2 h | **Personal feed-reader use**; links go to the publisher |
 | Trusted news feeds (newsroom, profile news, signals, "In the news" map layer) | Publishers' own RSS feeds, official press-release feeds, and wire headlines via Google News site searches — [details below](#trusted-news) | 30 min | Headlines and links only, for personal feed-reader use; each article stays with its publisher |
 | Members of Congress | `unitedstates/congress-legislators` | 24 h | Public domain (CC0) |
+| Mayors / city heads of government (capitals, US cities over 250k, curated cities) | Wikidata | 24 h | CC0 |
+| Election results, candidates, turnout; party ideology; candidates' policy positions | Wikipedia election, party and "Political positions of …" articles | 30 min near polling day, otherwise 12 h; policies 7 days | CC BY-SA 4.0 |
+| US governor, Senate and big-city mayoral elections; mayoral elections in curated world cities | Wikipedia election articles | 12 h | CC BY-SA 4.0 |
+| Election odds | Polymarket (Gamma API) and Kalshi (public API) | 15 min | Public market data; prices are bets, not polls or forecasts |
 | Heads of state/government, US governors, their parties | Wikidata | 24 h | CC0 |
 | Ongoing wars and conflicts, deaths by year | Wikipedia "List of ongoing armed conflicts" (which cites ACLED and UCDP) | 12 h | CC BY-SA 4.0 |
 | National elections (this year and next) | Wikipedia "national electoral calendar" pages | 12 h | CC BY-SA 4.0 |
@@ -99,6 +103,52 @@ the terminal compares that with its records:
 
 Headlines never close a term, delete a relationship or replace a curated fact. They tell
 you where to look; the official source settles it.
+
+## Elections
+
+**Results.** Each election links to its Wikipedia article. The terminal reads the article's
+results box — candidates, parties, votes, percentages, seats, turnout and who holds the office
+afterwards — every 30 minutes from ten days before polling day to two days after, and every 12
+hours otherwise. Until the article names a winner the election shows **counting** (with the
+current leader, if the article lists one); the terminal never declares a winner itself. When
+trusted news outlets also report a winner, the profile shows whether the two agree (✓) or not
+(⚠, also listed in the consistency audit). Official results come from each country's
+electoral authority.
+
+**Candidates and policies.** Candidates link to their profiles (created if missing). For each
+one the profile shows their party's ideology and left–right position as stated on the party's
+Wikipedia page, and a summary of their policy positions from the "Political positions of …"
+article — or, if there is none, the "Political positions" / "Platform" section of their own
+article — with a link to the full text and its sources.
+
+**Prediction markets.** Open election markets on Polymarket and Kalshi are matched to an
+election by place (country, US state or city), office (president, legislature, governor,
+mayor, Senate), year and timing, then to candidates by surname or party. A market about a
+different office, year or place is never attached. The profile lists every matched market
+and combines them into one market-implied chance per candidate (weighted by trading volume).
+Markets with less than $25,000 traded are marked **thin**. These prices are what traders pay
+for "this candidate wins" — useful as a live read of expectations, not a poll, and not a
+forecast by the terminal.
+
+**Local politics.** Mayors (or a city's head of government, e.g. the Governor of Tokyo) come
+from Wikidata for every national capital, every US city over 250,000 people and every curated
+city; cities the terminal didn't know are added to the map. State profiles list their cities'
+mayors, governor, Congress delegation and state and city elections; country profiles list
+their capital's and other cities' leaders. Curated mayors are compared with Wikidata the same
+way as national leaders.
+
+## Rates: one number per country
+
+The 10-year yield on the map, on the Markets page and on a country's profile is now always
+the same figure, from one resolver: a **daily close** where an official daily series exists
+(US Treasury par yield, Bank of Canada benchmark, Japan MOF, Bank of England par yield);
+otherwise the **monthly average** from the ECB (EU members, including Bulgaria, Croatia,
+Cyprus, Malta and Romania) or the OECD. Each value shows its date and whether it is daily or
+monthly. Monthly values more than 4 months old, daily values more than 14 days old and policy
+rates last reported more than 120 days ago are marked **stale** and left off the map. World
+Bank "latest available" map layers leave out countries whose latest figure is more than six
+years old. Central-government debt (World Bank) and general-government debt (IMF) are labelled
+as such — they measure different things and are no longer both called "Govt debt".
 
 ## How the live updating works
 

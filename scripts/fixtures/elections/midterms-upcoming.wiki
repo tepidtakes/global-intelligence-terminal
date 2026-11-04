@@ -1,0 +1,23 @@
+{{Infobox election
+| election_name = 2026 Pennsylvania gubernatorial election
+| country = Pennsylvania
+| type = presidential
+| ongoing = yes
+| previous_election = 2022 Pennsylvania gubernatorial election
+| election_date = {{Start date|2026|11|3}}
+| opinion_polls = #Polling
+| image1 = Josh Shapiro.jpg
+| nominee1 = [[Josh Shapiro]]
+| party1 = Democratic Party (United States)
+| running_mate1 = [[Austin Davis]]
+| image2 = Stacy Garrity.jpg
+| nominee2 = [[Stacy Garrity]]
+| party2 = Republican Party (United States)
+| running_mate2 = TBD
+| map_image = 
+| title = [[Governor of Pennsylvania|Governor]]
+| before_election = [[Josh Shapiro]]
+| before_party = [[Democratic Party (United States)|Democratic]]
+| after_election = TBD
+| after_party = 
+}}

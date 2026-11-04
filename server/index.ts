@@ -11,13 +11,17 @@ import {
   WB_INDICATORS, COMTRADE_AREAS, wbIndicatorAll, wbCountrySeries, wbCountryMeta, comtradeProfile, comtradeProduct, getQuote, getDividends, secFundamentals, getNews,
 } from './providers.js';
 import {
-  fxBoard, fxFor, commodityBoard, policyRates, policyRateHistory, tenYearYields, tenYearHistory, yieldCurve, curveAvailable, imfIndicator, imfCountry, imfEdition, IMF_INDICATORS,
+  fxBoard, fxFor, commodityBoard, policyRates, policyRateHistory, tenYearBoard, tenYearHistory, yieldCurve, curveAvailable, imfIndicator, imfCountry, imfEdition, IMF_INDICATORS,
   fedOutlook, analystConsensus, spark, windowChanges, currencyUsers, EURO_AREA, isStale,
 } from './markets.js';
 import { startLiveData, liveStatus, onLiveRefresh } from './augment.js';
 import { startNews, retagAll, newsFor, latestStories, allSignals, newsStatus, countryAttention, FEEDS } from './newsroom.js';
 import { audit, summarize, coverage, entityProvenance, CATEGORY_LABEL } from './consistency.js';
 import { providerHealth } from './cache.js';
+import { electionCandidates, startElectionDetails, electionDetailsStatus } from './elections.js';
+import { allMarkets, marketsForElection, PLATFORM, clearMarketTags } from './predictionMarkets.js';
+import { mayorsWithin } from './localPolitics.js';
+import { normName } from './graph.js';
 import { canonicalUrl, titleKey, sameStory } from './newsParse.js';
 import { publisherForDomain, publisherForName, tierForDomain, isTrusted, TIER_INFO, PUBLISHERS } from '../shared/newsSources.js';
 import { INTENSITY } from './worldEvents.js';
@@ -53,7 +57,7 @@ function sourcesUsed(e: Entity, rels: ReturnType<typeof relationshipsFor>) {
 
 function upcomingEventsFor(id: string) {
   return relsOfType(id, 'affects', 'in').map((r) => getEntity(r.from)!).filter((e) => e?.type === 'event' && e.attrs?.category !== 'conflict')
-    .map((e) => ({ ...stub(e.id)!, date: e.attrs?.date, endDate: e.attrs?.endDate, category: e.attrs?.category, status: e.attrs?.status }))
+    .map((e) => ({ ...stub(e.id)!, date: e.attrs?.date, endDate: e.attrs?.endDate, category: e.attrs?.category, status: e.attrs?.status, scope: e.attrs?.scope, winner: e.attrs?.election?.winner?.name }))
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
@@ -93,6 +97,7 @@ api.get('/entity/:id', (req: AuthedRequest, res) => {
     entity: e, relationships: rels, parents: parentChain, companies, partyOf,
     children: kids.slice(0, 400).map((k) => ({ ...stub(k.id)!, attrs: k.type === 'city' ? k.attrs : undefined })), childCounts,
     events: upcomingEventsFor(e.id), sources: sourcesUsed(e, rels), user, provenance: entityProvenance(e.id),
+    mayors: e.type === 'country' || e.type === 'state' ? mayorsWithin(e.id).slice(0, 40).map((m) => ({ city: stub(m.city.id), person: stub(m.person.id), role: m.role, since: m.since, origin: m.origin, party: partyOf[m.person.id] || (relsOfType(m.person.id, 'belongs_to_party', 'out')[0] ? stub(relsOfType(m.person.id, 'belongs_to_party', 'out')[0].to) : null), population: m.city.attrs?.population, capital: !!m.city.attrs?.capital })) : undefined,
   });
 });
 
@@ -202,9 +207,18 @@ api.get('/map/layer/:layer', wrap(async (req, res) => {
   if (layer.startsWith('wb:')) {
     const code = layer.slice(3);
     const r = await wbIndicatorAll(code, year);
-    const values: Record<string, { value: number; period: string }> = {};
-    for (const [iso, v] of Object.entries(r.data.values)) if (byIso3.has(iso)) values[iso] = v;
-    return res.json({ kind: 'numeric', label: r.data.label, unit: r.data.unit, scale: DIVERGING.has(code) ? 'diverging' : 'sequential', values, sourceIds: ['world-bank-wdi'], lastUpdated: r.data.lastUpdated, fetchedAt: r.fetchedAt, stale: r.stale });
+    const values: Record<string, { value: number; period: string }> = {}; const detail: Record<string, string> = {};
+    // "Latest available" mixes reporting years; a value more than 6 years old is not shown as current.
+    const oldest = String(new Date().getFullYear() - 6);
+    let dropped = 0;
+    for (const [iso, v] of Object.entries(r.data.values)) {
+      if (!byIso3.has(iso)) continue;
+      if (!year && v.period < oldest) { detail[iso] = `Latest reported value is from ${v.period} — too old to compare`; dropped++; continue; }
+      values[iso] = v;
+    }
+    const years = Object.values(values).map((v) => v.period).sort();
+    return res.json({ kind: 'numeric', label: r.data.label, unit: r.data.unit, scale: DIVERGING.has(code) ? 'diverging' : 'sequential', values, detail, sourceIds: ['world-bank-wdi'], lastUpdated: r.data.lastUpdated, fetchedAt: r.fetchedAt, stale: r.stale,
+      note: year ? undefined : `Most recent year each country reported (${years[0] || '—'}–${years.at(-1) || '—'}).${dropped ? ` ${dropped} countries whose latest figure is older than ${oldest} are left blank.` : ''}${code === 'GC.DOD.TOTL.GD.ZS' || code === 'GC.NLD.TOTL.GD.ZS' ? ' Central government only — for general government (all levels) use the IMF layers.' : ''}` });
   }
   if (layer === 'income') {
     const r = await wbCountryMeta();
@@ -248,7 +262,8 @@ api.get('/map/layer/:layer', wrap(async (req, res) => {
       const d = String(e.attrs?.endDate || e.attrs?.date);
       const key = d >= t && String(e.attrs?.date) <= horizon ? 'upcoming' : d >= recent && d < t ? 'recent' : null;
       if (!key) continue;
-      for (const r of relsOfType(e.id, 'affects', 'out')) { const iso = getEntity(r.to)?.type === 'country' ? countryIso(r.to) : undefined; if (iso) { values[iso] = key; detail[iso] = `${e.name} (${e.attrs?.date})`; } }
+      const w = e.attrs?.election?.winner?.name;
+      for (const r of relsOfType(e.id, 'affects', 'out')) { const iso = getEntity(r.to)?.type === 'country' ? countryIso(r.to) : undefined; if (iso) { values[iso] = key; detail[iso] = `${e.name} (${e.attrs?.date})${key === 'recent' ? (w ? ` — won by ${w}` : ' — result not yet recorded') : ''}`; } }
     }
     // Nearest upcoming election wins the label; "soon" = within 90 days.
     const soon = new Date(Date.now() + 90 * 86400_000).toISOString().slice(0, 10);
@@ -312,12 +327,21 @@ api.get('/map/layer/:layer', wrap(async (req, res) => {
   if (layer === 'policy-rate') {
     const r = await policyRates();
     const values: Record<string, { value: number; period: string }> = {}; const detail: Record<string, string> = {};
-    for (const [iso, v] of Object.entries(r.data)) { values[iso] = { value: v.value, period: v.date }; detail[iso] = v.bank; }
-    return res.json({ kind: 'numeric', label: 'Central-bank policy rate', unit: '%', values, detail, sourceIds: ['bis-policy'], fetchedAt: r.fetchedAt, stale: r.stale, note: 'Euro-area members share the ECB deposit facility rate. About 40 central banks report to the BIS; others show no data.' });
+    for (const [iso, v] of Object.entries(r.data)) {
+      if (v.stale) { detail[iso] = `${v.bank}: last reported ${v.date} — too old to show as current`; continue; }
+      values[iso] = { value: v.value, period: v.date }; detail[iso] = v.bank;
+    }
+    return res.json({ kind: 'numeric', label: 'Central-bank policy rate', unit: '%', values, detail, sourceIds: ['bis-policy'], fetchedAt: r.fetchedAt, stale: r.stale, note: 'Euro-area members share the ECB deposit facility rate. About 40 central banks report to the BIS; others show no data. Rates last reported more than 120 days ago are left off.' });
   }
   if (layer === 'bond10y') {
-    const r = await tenYearYields();
-    return res.json({ kind: 'numeric', label: '10-year government bond yield', unit: '%', values: r.data, sourceIds: ['oecd-mei'], fetchedAt: r.fetchedAt, stale: r.stale, note: 'Monthly averages published by the OECD (mostly OECD members). Higher = costlier government borrowing.' });
+    const r = await tenYearBoard();
+    const values: Record<string, { value: number; period: string }> = {}; const detail: Record<string, string> = {};
+    for (const [iso, v] of Object.entries(r.data)) {
+      if (v.stale) { detail[iso] = `Last value ${v.value.toFixed(2)}% (${v.date}) — too old to show as current`; continue; }
+      values[iso] = { value: v.value, period: v.frequency === 'daily' ? `${v.date} close` : `${v.date} avg.` }; detail[iso] = v.basis;
+    }
+    return res.json({ kind: 'numeric', label: '10-year government bond yield', unit: '%', values, detail, sourceIds: [...new Set(Object.values(r.data).map((v) => v.sourceId))], fetchedAt: r.fetchedAt, stale: r.stale,
+      note: 'Daily closes for the US, Canada, Japan and the UK; monthly averages elsewhere (ECB for EU members, OECD for others). The same figures appear on the Markets page and country profiles. Higher = costlier government borrowing.' });
   }
   if (layer.startsWith('imf:')) {
     const [, code, yr] = layer.split(':');
@@ -399,7 +423,7 @@ api.get('/markets/fx/:code', wrap(async (req, res) => {
 api.get('/markets/commodities', wrap(async (_req, res) => res.json(await commodityBoard())));
 
 api.get('/rates/overview', wrap(async (_req, res) => {
-  const [pol, ten, ...curves] = await Promise.allSettled([policyRates(), tenYearYields(), ...['USA', 'EUR', 'GBR', 'JPN', 'CAN'].map((c) => yieldCurve(c))]);
+  const [pol, ten, ...curves] = await Promise.allSettled([policyRates(), tenYearBoard(), ...['USA', 'EUR', 'GBR', 'JPN', 'CAN'].map((c) => yieldCurve(c))]);
   const names: Record<string, string> = { USA: 'United States', EUR: 'Euro area (AAA)', GBR: 'United Kingdom', JPN: 'Japan', CAN: 'Canada' };
   res.json({
     policy: pol.status === 'fulfilled' ? Object.entries(pol.value.data).map(([iso, v]) => ({ entity: stub(`country:${iso}`), ...v })).filter((x) => x.entity) : [], policyError: pol.status === 'rejected' ? String(pol.reason?.message) : undefined,
@@ -411,11 +435,13 @@ api.get('/rates/overview', wrap(async (_req, res) => {
 api.get('/rates/:iso3', wrap(async (req, res) => {
   const iso3 = req.params.iso3.toUpperCase();
   if (!byIso3.has(iso3)) return res.status(404).json({ error: 'Unknown country' });
-  const [pol, hist, curve, ten] = await Promise.allSettled([policyRates(), policyRateHistory(iso3), curveAvailable(iso3) ? yieldCurve(iso3) : Promise.resolve(null), tenYearHistory(iso3)]);
+  const [pol, hist, curve, ten, board] = await Promise.allSettled([policyRates(), policyRateHistory(iso3), curveAvailable(iso3) ? yieldCurve(iso3) : Promise.resolve(null), tenYearHistory(iso3), tenYearBoard()]);
   const v = (p: PromiseSettledResult<any>) => (p.status === 'fulfilled' ? p.value : null);
+  // Headline 10-year = the same resolver the map and Markets page use; the chart shows monthly history.
+  const tenLatest = v(board)?.data?.[iso3] || null;
   res.json({
-    policy: v(pol)?.data?.[iso3] || null, policyHistory: v(hist)?.data || null, curve: v(curve), tenYear: v(ten),
-    errors: [pol, hist, curve, ten].filter((p) => p.status === 'rejected').map((p: any) => String(p.reason?.message)),
+    policy: v(pol)?.data?.[iso3] || null, policyHistory: v(hist)?.data || null, curve: v(curve), tenYear: v(ten), tenLatest,
+    errors: [pol, hist, curve, ten, board].filter((p) => p.status === 'rejected').map((p: any) => String(p.reason?.message)),
     euroArea: EURO_AREA.includes(iso3),
   });
 }));
@@ -455,6 +481,70 @@ api.get('/conflicts/for/:id', (req, res) => {
   res.json(relsOfType(req.params.id, 'affects', 'in').map((r) => getEntity(r.from)!).filter((e) => e?.attrs?.category === 'conflict' && e.attrs?.status === 'ongoing').map(conflictView));
 });
 api.get('/live/status', (_req, res) => res.json(liveStatus));
+
+// ───────────── Elections: results, candidates, policies, prediction markets ─────────────
+const isElectionEv = (e: Entity) => e.type === 'event' && e.attrs?.category === 'election';
+const electionPlace = (e: Entity) => relsOfType(e.id, 'affects', 'out').map((r) => getEntity(r.to)).filter((x): x is Entity => !!x && ['city', 'state', 'country'].includes(x.type))
+  .sort((a, b) => ['city', 'state', 'country'].indexOf(a.type) - ['city', 'state', 'country'].indexOf(b.type))[0];
+const surnameOf = (n?: string) => normName(String(n || '').replace(/\s*\(.*\)$/, '')).split(' ').filter((w) => w.length > 2).at(-1);
+/** Does the news-reported winner agree with the result in the election article? */
+function newsCheck(e: Entity) {
+  const article = e.attrs?.election?.winner?.name; const news = e.attrs?.reportedOutcome;
+  if (!news) return null;
+  if (!article) return { news: news.winner, publishers: news.publishers, agrees: null };
+  return { news: news.winner, publishers: news.publishers, agrees: surnameOf(article) === surnameOf(news.winner) };
+}
+let marketMemo: { at: number; key: string; rows: Map<string, ReturnType<typeof marketsForElection>> } | null = null;
+async function electionMarkets() {
+  const r = await allMarkets();
+  const key = Object.values(r.status).map((s) => s.fetchedAt || s.error).join('|');
+  if (!marketMemo || marketMemo.key !== key || Date.now() - marketMemo.at > 300_000) { if (marketMemo?.key !== key) clearMarketTags(); marketMemo = { at: Date.now(), key, rows: new Map() }; }
+  const memo = marketMemo;
+  return { status: r.status, forElection: (e: Entity) => { let v = memo.rows.get(e.id); if (!v) { v = marketsForElection(e, r.markets); memo.rows.set(e.id, v); } return v; } };
+}
+function electionRow(e: Entity, mk?: Awaited<ReturnType<typeof electionMarkets>>) {
+  const place = electionPlace(e); const el = e.attrs?.election;
+  let c: Entity | undefined = place; while (c && c.type !== 'country') c = c.parentId ? getEntity(c.parentId) : undefined;
+  const m = mk?.forElection(e);
+  const fav = m?.candidates[0];
+  const lead = el?.contenders?.find((x: any) => x.pct != null || x.seats != null);
+  return {
+    ...stub(e.id)!, date: e.attrs?.date, endDate: e.attrs?.endDate, status: e.attrs?.status, scope: e.attrs?.scope || 'national', office: e.attrs?.office || el?.title,
+    place: place ? stub(place.id) : null, country: c ? stub(c.id) : null, winner: el?.winner || null, leading: el?.status === 'counting' && lead ? { name: lead.name || lead.party, pct: lead.pct, seats: lead.seats } : null,
+    contenders: (el?.contenders || []).length, hasArticle: !!el, legislative: !!el?.legislative,
+    favourite: fav ? { name: fav.name, probability: fav.combined, platforms: fav.platforms } : null, markets: m?.markets.length || 0, newsCheck: newsCheck(e),
+  };
+}
+api.get('/elections', wrap(async (req, res) => {
+  const when = String(req.query.when || 'upcoming'); const scope = String(req.query.scope || 'all'); const q = normName(String(req.query.q || ''));
+  const t = today(); const ahead = new Date(Date.now() + 400 * 86400_000).toISOString().slice(0, 10); const back = new Date(Date.now() - 150 * 86400_000).toISOString().slice(0, 10);
+  let list = listByType('event').filter(isElectionEv).filter((e) => {
+    const end = String(e.attrs?.endDate || e.attrs?.date || ''); const start = String(e.attrs?.date || '');
+    if (when === 'upcoming' ? !(end >= t && start <= ahead) : when === 'recent' ? !(end < t && end >= back) : !(end >= back && start <= ahead)) return false;
+    const sc = e.attrs?.scope || 'national';
+    return scope === 'all' || (scope === 'local' ? sc !== 'national' : sc === scope);
+  });
+  let mk: Awaited<ReturnType<typeof electionMarkets>> | undefined; let marketError: string | undefined;
+  try { mk = await electionMarkets(); } catch (e: any) { marketError = e.message; }
+  let rows = list.map((e) => electionRow(e, mk));
+  if (q) rows = rows.filter((r) => normName(`${r.name} ${r.place?.name || ''} ${r.country?.name || ''}`).includes(q));
+  rows.sort((a, b) => (when === 'recent' ? String(b.endDate || b.date).localeCompare(String(a.endDate || a.date)) : String(a.date).localeCompare(String(b.date))));
+  res.json({ rows, marketStatus: mk?.status || null, marketError, details: electionDetailsStatus(), sourceIds: ['wikipedia-elections', 'wikipedia-election-results', 'polymarket', 'kalshi'] });
+}));
+api.get('/elections/:id', wrap(async (req, res) => {
+  const e = getEntity(req.params.id);
+  if (!e || !isElectionEv(e)) return res.status(404).json({ error: 'Not an election' });
+  const [cand, mk] = await Promise.allSettled([electionCandidates(e.id), electionMarkets()]);
+  const markets = mk.status === 'fulfilled' ? mk.value.forElection(e) : { markets: [], candidates: [] };
+  const c: any = cand.status === 'fulfilled' ? cand.value : { unavailable: true, reason: String((cand as PromiseRejectedResult).reason?.message) };
+  // Attach each candidate's market-implied probability.
+  for (const row of c?.candidates || []) {
+    const hit = markets.candidates.find((m) => (row.personId && m.personId === row.personId) || (surnameOf(row.name) && surnameOf(m.name) === surnameOf(row.name)) || (!row.name && row.party && normName(m.name) === normName(row.party)));
+    if (hit) row.market = { probability: hit.combined, prices: hit.prices };
+  }
+  res.json({ ...electionRow(e, mk.status === 'fulfilled' ? mk.value : undefined), details: c, markets: markets.markets, marketCandidates: markets.candidates, marketStatus: mk.status === 'fulfilled' ? mk.value.status : null,
+    platforms: PLATFORM, newsCheck: newsCheck(e) });
+}));
 
 // ───────────── Provenance & data quality ─────────────
 const PROVIDER_LABELS: Record<string, { label: string; sourceId?: string }> = {
@@ -607,6 +697,7 @@ if (process.env.NODE_ENV === 'production') {
 app.listen(PORT, HOST, () => console.log(`Global Intelligence Terminal → http://localhost:${PORT}${HOST === '127.0.0.1' || HOST === 'localhost' ? ' (this computer only)' : ` — listening on ${HOST}: see SECURITY.md`}`));
 startLiveData();
 startNews();
+startElectionDetails();
 // When live leaders/conflicts change, re-tag headlines and re-check news signals against them.
 onLiveRefresh(() => retagAll());
 void fs;

@@ -309,6 +309,9 @@ export function refreshNews() {
   return running;
 }
 
+/** The current entity tagger (built on first use). Also used to match prediction markets to elections. */
+export function getTagger() { return tagger ||= buildTagger(); }
+
 /** Rebuild the tagger after the graph changes (live leaders, conflicts…) and re-tag stored headlines. */
 export function retagAll() {
   tagger = buildTagger();

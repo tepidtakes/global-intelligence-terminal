@@ -11,6 +11,8 @@ import { AS_OF } from './data/curated.js';
 import { conflicts, electionCalendar, INTENSITY } from './worldEvents.js';
 import type { Entity, Fact, Relationship } from '../shared/types.js';
 import { USER_AGENT } from './config.js';
+import { loadMayors } from './localPolitics.js';
+import { loadLocalElections, refreshElectionDetails } from './elections.js';
 
 type NewRel = Omit<Relationship, 'id' | 'origin'>;
 /** Each background loader's last run. `fetchedAt` is when its source data was downloaded; `stale`
@@ -193,7 +195,7 @@ async function loadLeaders(): Promise<LoadResult> {
   return { detail: `${added} leaders added from Wikidata, ${matched} matched curated records, ${superseded} curated terms closed`, fetchedAt: r.fetchedAt, stale: r.stale };
 }
 
-function findParty(name: string, countryId: string) {
+export function findParty(name: string, countryId: string) {
   const want = normName(name.replace(/\s*\(.*\)$/, ''));
   for (const r of relsOfType(countryId, 'party_in', 'in')) {
     const p = getEntity(r.from); if (!p) continue;
@@ -257,7 +259,7 @@ async function loadElections(): Promise<LoadResult> {
     const url = row.article ? `https://en.wikipedia.org/wiki/${encodeURIComponent(row.article.replace(/ /g, '_'))}` : `https://en.wikipedia.org/wiki/${row.year}_national_electoral_calendar`;
     upsertEntity({
       id, type: 'event', name, depth: 'baseline',
-      summary: `${row.office} — ${country.name}, ${fmtDay(row.date)}${row.endDate ? ` to ${fmtDay(row.endDate)}` : ''}. From Wikipedia’s ${row.year} national electoral calendar; dates can move, and results are not recorded here — see the linked article.`,
+      summary: `${row.office} — ${country.name}, ${fmtDay(row.date)}${row.endDate ? ` to ${fmtDay(row.endDate)}` : ''}. From Wikipedia’s ${row.year} national electoral calendar; dates can move. Candidates and results are read from the election’s own Wikipedia article and cross-checked with trusted news.`,
       facts: [fct('Date', row.endDate ? `${row.date} – ${row.endDate}` : row.date, 'wikipedia-elections', 'community'), fct('Category', 'election', 'wikipedia-elections', 'community'), fct('Office / body', row.office, 'wikipedia-elections', 'community'), fct('Status', status.replace(/-/g, ' '), 'wikipedia-elections', 'community'), fct('Location', country.name, 'wikipedia-elections', 'community')],
       attrs: { date: row.date, endDate: row.endDate, category: 'election', status, office: row.office, url, origin: 'wikipedia' }, sources: ['wikipedia-elections'],
     } as Entity);
@@ -290,7 +292,9 @@ let running: Promise<void> | null = null;
 export function refreshLiveData() {
   if (running) return running;
   running = (async () => {
-    const steps: [string, string, () => Promise<LoadResult>][] = [['congress', 'congress-legislators', loadCongress], ['leaders', 'wikidata', loadLeaders], ['conflicts', 'wikipedia-conflicts', loadConflicts], ['elections', 'wikipedia-elections', loadElections]];
+    const details = async (): Promise<LoadResult> => ({ detail: await refreshElectionDetails(), fetchedAt: new Date().toISOString(), stale: false });
+    const steps: [string, string, () => Promise<LoadResult>][] = [['congress', 'congress-legislators', loadCongress], ['leaders', 'wikidata', loadLeaders], ['mayors', 'wikidata-local', loadMayors],
+      ['conflicts', 'wikipedia-conflicts', loadConflicts], ['elections', 'wikipedia-elections', loadElections], ['local-elections', 'wikipedia-election-results', loadLocalElections], ['election-results', 'wikipedia-election-results', details]];
     for (const [name, sourceId, fn] of steps) {
       retrieved = '';
       try { const r = await fn(); liveStatus[name] = { ok: true, at: new Date().toISOString(), ...r, sourceId }; }

@@ -72,18 +72,23 @@ export function RatesSection({ iso3 }: { iso3: string }) {
           {data.policy ? <>
             <div className="px num">{data.policy.value.toFixed(2)}%</div>
             <div className="small muted">{data.policy.bank}{data.euroArea ? ' (euro area)' : ''} · as of {fmtDate(data.policy.date)}</div>
+            {data.policy.stale && <div className="tiny" style={{ color: 'var(--warn)' }}>Last reported more than 120 days ago — may no longer be current.</div>}
             {data.policyHistory?.points?.length > 2 && <LineChart ariaLabel="Policy rate history" height={140} series={[{ label: 'Policy rate', color: 'var(--s5)', points: data.policyHistory.points.map((p: any) => ({ x: Date.parse(p.t + '-01'), y: p.v, xLabel: p.t })) }]} yFormat={(v) => `${v.toFixed(1)}%`} baseline={0} />}
             <SourceRef id="bis-policy" />
           </> : <div className="small muted">Not reported to the BIS.</div>}
         </div>
         <div>
-          <div className="lbl small muted">10-year government bond yield (monthly)</div>
-          {data.tenYear ? <>
-            <div className="px num">{data.tenYear.points.at(-1).v.toFixed(2)}%</div>
-            <div className="small muted">{data.tenYear.points.at(-1).t.slice(0, 7)} average</div>
-            <LineChart ariaLabel="10-year yield history" height={140} series={[{ label: '10-year yield', color: 'var(--s1)', points: data.tenYear.points.map((p: any) => ({ x: Date.parse(p.t), y: p.v, xLabel: p.t.slice(0, 7) })) }]} yFormat={(v) => `${v.toFixed(1)}%`} baseline={0} />
-            <SourceRef id="oecd-mei" />
-          </> : <div className="small muted">Not published by the OECD for this country.</div>}
+          <div className="lbl small muted">10-year government bond yield</div>
+          {data.tenLatest || data.tenYear ? <>
+            {data.tenLatest ? <>
+              <div className="px num">{data.tenLatest.value.toFixed(2)}%</div>
+              <div className="small muted">{data.tenLatest.frequency === 'daily' ? `Daily close, ${fmtDate(data.tenLatest.date)}` : `${data.tenLatest.date} monthly average`} · {data.tenLatest.basis}</div>
+              {data.tenLatest.stale && <div className="tiny" style={{ color: 'var(--warn)' }}>No newer figure has been published — this value is out of date.</div>}
+            </> : <div className="small muted">No current value.</div>}
+            {data.tenYear?.points?.length > 2 && <LineChart ariaLabel="10-year yield history (monthly)" height={140} series={[{ label: '10-year yield, monthly', color: 'var(--s1)', points: data.tenYear.points.map((p: any) => ({ x: Date.parse(p.t), y: p.v, xLabel: p.t.slice(0, 7) })) }]} yFormat={(v) => `${v.toFixed(1)}%`} baseline={0} />}
+            {data.tenYear?.points?.length > 2 && <div className="tiny muted">Chart: monthly averages{data.tenLatest?.frequency === 'daily' ? '; the headline is the latest daily close' : ''}.</div>}
+            <SourceRef id={data.tenLatest?.sourceId || data.tenYear?.sourceId || 'oecd-mei'} />
+          </> : <div className="small muted">No 10-year yield is published openly for this country (OECD and ECB cover about 45 countries).</div>}
         </div>
       </div>
       {c && (
