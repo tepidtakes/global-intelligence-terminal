@@ -2,8 +2,9 @@
 node_modules/
 dist/
 
-# Your private data: database (accounts, notes, positions), uploads, provider cache
-data/
+# Your private data: database (accounts, notes, positions), uploads, provider cache.
+# Leading slash = only the top-level folder (server/data/ is source code and must be published).
+/data/
 
 # Local settings and secrets
 .env
