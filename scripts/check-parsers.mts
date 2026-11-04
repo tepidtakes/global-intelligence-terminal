@@ -107,6 +107,25 @@ ok(columbus?.parentId === 'state:US-OH' && columbus.coords, 'new city (Columbus)
 ok(LP.mayorsWithin('state:US-OH').some((m: any) => m.person.name === 'Andrew Ginther'), 'state profile lists mayors of its cities');
 ok(LP.mayorsWithin('country:USA').length >= 3, 'country profile lists mayors of its cities');
 
+console.log('\nCache: serve-then-refresh');
+const C = await imp('server/cache.ts');
+const old = new Date(Date.now() - 90_000).toISOString(); // 90 s old, TTL 60 s
+seed('wb:test:swr', 'old copy'); seed('wd:test:strict', 'old copy');
+for (const k of ['wb:test:swr', 'wd:test:strict']) {
+  const f = path.join(process.env.TERMINAL_DATA_DIR!, 'cache', crypto.createHash('sha1').update(k).digest('hex') + '.json');
+  fs.writeFileSync(f, JSON.stringify({ fetchedAt: old, payload: 'old copy' }));
+}
+let calls = 0;
+const slow = () => new Promise<string>((r) => setTimeout(() => { calls++; r('new copy'); }, 150));
+let t0 = Date.now(); const swr = await C.cached('wb:test:swr', 60, slow);
+ok(swr.data === 'old copy' && swr.fetchedAt === old && Date.now() - t0 < 100, 'page data: expired copy within grace returned at once, with its real retrieval time');
+await new Promise((r) => setTimeout(r, 250));
+ok(calls === 1 && (await C.cached('wb:test:swr', 60, slow)).data === 'new copy', 'and refreshed in the background');
+t0 = Date.now(); const strict = await C.cached('wd:test:strict', 60, slow);
+ok(strict.data === 'new copy' && Date.now() - t0 >= 140, 'background-loader data (Wikidata) always waits for a fresh copy');
+const failing = await C.cached('wb:test:swr2', 60, async () => { throw new Error('down'); }).catch((e: Error) => e.message);
+ok(failing === 'down', 'no copy and provider down: error, never a made-up value');
+
 fs.rmSync(process.env.TERMINAL_DATA_DIR!, { recursive: true, force: true });
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll parser checks passed');
 process.exitCode = failures ? 1 : 0;

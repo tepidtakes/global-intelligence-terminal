@@ -25,33 +25,53 @@ const hp = (key: string, ttlSec: number) => {
 };
 export function providerHealth() { return [...health.values()]; }
 
+// Serve-then-refresh: for data fetched when someone opens a page, an expired copy younger than
+// TTL × (1 + grace) is returned at once (with its real retrieval time) while a fresh copy is
+// fetched in the background — so a page never waits on a slow provider for data it already has.
+// Prefixes not listed (background loaders: Congress, Wikidata, Wikipedia elections, news) always
+// wait for a fresh copy, so election-night results are never a cycle behind.
+const GRACE: Record<string, number> = {
+  wb: 2, comtrade: 1, treasury: 1, yahoo: 2, spark: 2, sec: 2, gnews: 1, gdelt: 1, bis: 1, fred: 1, oecd: 1, ecb: 1,
+  curve: 1, imf: 1, consensus: 1, pm: 1, 'wp:positions': 1,
+};
+const graceFor = (key: string) => GRACE[key.split(':').slice(0, 2).join(':')] ?? GRACE[key.split(':')[0]] ?? 0;
+
 export async function cached<T>(key: string, ttlSec: number, fetcher: () => Promise<T>): Promise<Cached<T>> {
   let entry = mem.get(key) as Entry<T> | undefined;
   if (!entry) {
-    try { entry = JSON.parse(fs.readFileSync(file(key), 'utf8')); if (entry) mem.set(key, entry); } catch { /* no disk copy */ }
+    // Async read: a large cached file must not block other requests.
+    try { entry = JSON.parse(await fs.promises.readFile(file(key), 'utf8')); if (entry) mem.set(key, entry); } catch { /* no disk copy */ }
   }
-  const fresh = entry && Date.now() - Date.parse(entry.fetchedAt) < ttlSec * 1000;
-  if (entry && fresh) return { data: entry.payload, fetchedAt: entry.fetchedAt, stale: false };
+  const age = entry ? Date.now() - Date.parse(entry.fetchedAt) : Infinity;
+  if (entry && age < ttlSec * 1000) return { data: entry.payload, fetchedAt: entry.fetchedAt, stale: false };
 
-  if (!inflight.has(key)) {
-    inflight.set(key, (async () => {
-      const h = hp(key, ttlSec);
-      h.fetches++;
-      try {
-        const payload = await fetcher();
-        const e: Entry<T> = { fetchedAt: new Date().toISOString(), payload };
-        mem.set(key, e);
-        fs.writeFile(file(key), JSON.stringify(e), () => {});
-        h.lastOk = e.fetchedAt;
-        return e;
-      } catch (err: any) {
-        h.failures++; h.lastError = String(err?.message || err).slice(0, 200); h.lastErrorAt = new Date().toISOString();
-        throw err;
-      }
-    })().finally(() => inflight.delete(key)));
+  const start = () => {
+    if (!inflight.has(key)) {
+      inflight.set(key, (async () => {
+        const h = hp(key, ttlSec);
+        h.fetches++;
+        try {
+          const payload = await fetcher();
+          const e: Entry<T> = { fetchedAt: new Date().toISOString(), payload };
+          mem.set(key, e);
+          fs.writeFile(file(key), JSON.stringify(e), () => {});
+          h.lastOk = e.fetchedAt;
+          return e;
+        } catch (err: any) {
+          h.failures++; h.lastError = String(err?.message || err).slice(0, 200); h.lastErrorAt = new Date().toISOString();
+          throw err;
+        }
+      })().finally(() => inflight.delete(key)));
+    }
+    return inflight.get(key)! as Promise<Entry<T>>;
+  };
+
+  if (entry && age < ttlSec * (1 + graceFor(key)) * 1000) {
+    start().catch(() => { /* recorded in provider health; the copy below stays in use */ });
+    return { data: entry.payload, fetchedAt: entry.fetchedAt, stale: false };
   }
   try {
-    const e = await inflight.get(key)!;
+    const e = await start();
     return { data: e.payload, fetchedAt: e.fetchedAt, stale: false };
   } catch (err) {
     if (entry) {
@@ -63,6 +83,12 @@ export async function cached<T>(key: string, ttlSec: number, fetcher: () => Prom
     throw err;
   }
 }
+
+/** Keep the in-memory cache bounded: drop entries not needed for 2 days (disk copies remain). */
+setInterval(() => {
+  const cutoff = Date.now() - 2 * 86400_000;
+  for (const [k, e] of mem) if (Date.parse(e.fetchedAt) < cutoff) mem.delete(k);
+}, 3600_000).unref();
 
 export async function fetchJson(url: string, headers: Record<string, string> = {}, timeoutMs = 20000) {
   const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, ...headers }, signal: AbortSignal.timeout(timeoutMs) });

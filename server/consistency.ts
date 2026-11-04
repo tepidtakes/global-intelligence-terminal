@@ -6,7 +6,7 @@
 // Warnings — two records disagree: conflicting values for one fact, duplicate people, an
 //            election in the past still "scheduled", trusted news contradicting a record.
 // Info     — worth knowing: Wikidata ambiguity, terms closed automatically, ageing curated facts.
-import { entities, sources, allRels, danglingRels, normName, getEntity } from './graph.js';
+import { entities, sources, allRels, danglingRels, normName, getEntity, relationshipsFor } from './graph.js';
 import { DATA_QUALITIES, type DataQuality, type Entity } from '../shared/types.js';
 
 export type Severity = 'error' | 'warning' | 'info';
@@ -121,11 +121,8 @@ export function audit(force = false): Issue[] {
   return issues;
 }
 
-function allRelsOf(id: string) {
-  const out: string[] = [];
-  for (const r of allRels()) { if (r.from === id) out.push(r.to); else if (r.to === id) out.push(r.from); }
-  return out;
-}
+/** Entities linked to one entity (indexed lookup; this used to scan every relationship per call). */
+function allRelsOf(id: string) { return relationshipsFor(id).map((r) => r.other.id); }
 
 /** Counts that describe how much of the graph is sourced, and how. */
 export function coverage() {

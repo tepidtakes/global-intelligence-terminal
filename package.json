@@ -6,7 +6,9 @@
   "author": "Jackson F.",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "tsx server/index.ts",
     "build": "vite build",
@@ -31,6 +33,7 @@
     "@tiptap/pm": "~2.11.5",
     "@tiptap/react": "~2.11.5",
     "@tiptap/starter-kit": "~2.11.5",
+    "compression": "^1.8.1",
     "express": "^4.21.2",
     "maplibre-gl": "^4.7.1",
     "marked": "^15.0.12",
@@ -46,6 +49,7 @@
     "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
     "@types/express": "^4.17.21",
     "@types/geojson": "^7946.0.14",
     "@types/node": "^22.10.0",

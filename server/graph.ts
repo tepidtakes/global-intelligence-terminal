@@ -25,8 +25,16 @@ function addRel(r: Omit<Relationship, 'id'>) {
   (relsIn.get(rel.to) || relsIn.set(rel.to, []).get(rel.to)!).push(rel);
 }
 
+// Indexes kept in step with `entities`: ids by type, and (lazily) person names.
+const byType = new Map<string, Set<string>>();
+let personIndex: Map<string, string> | null = null;
 function put(e: Entity) {
   const prev = entities.get(e.id);
+  if (!prev || prev.type !== e.type) {
+    if (prev) byType.get(prev.type)?.delete(e.id);
+    (byType.get(e.type) || byType.set(e.type, new Set()).get(e.type)!).add(e.id);
+  }
+  if (e.type === 'person' || prev?.type === 'person') personIndex = null;
   if (prev) {
     // Curated data overrides baseline; facts and aliases are merged.
     entities.set(e.id, {
@@ -263,10 +271,15 @@ export function countryIdByName(name: string) {
   return countryNames.get(k) || countryNames.get(norm(name));
 }
 
+/** Person names → id, rebuilt only after a person is added or changed (was rebuilt on every
+ *  lookup, which made the live loaders quadratic: ~4 s of blocked event loop per refresh). */
 const personNames = () => {
+  if (personIndex) return personIndex;
   const m = new Map<string, string>();
-  for (const e of entities.values()) if (e.type === 'person') for (const n of [e.name, ...(e.aliases || [])]) { const k = norm(n); if (k.split(' ').length > 1 && !m.has(k)) m.set(k, e.id); }
-  return m;
+  // Curated people first, so they win over live records with the same name.
+  const ids = [...(byType.get('person') || [])].sort((a, b) => Number(entities.get(b)!.depth === 'curated') - Number(entities.get(a)!.depth === 'curated'));
+  for (const id of ids) { const e = entities.get(id)!; for (const n of [e.name, ...(e.aliases || [])]) { const k = norm(n); if (k.split(' ').length > 1 && !m.has(k)) m.set(k, e.id); } }
+  return (personIndex = m);
 };
 /** Find an existing person entity by any of several name spellings (curated people win over live ones). */
 export function findPerson(names: string[]) {
@@ -338,7 +351,7 @@ export function search(q: string, opts: { types?: string[]; limit?: number } = {
 }
 
 export function listByType(type: string) {
-  return [...entities.values()].filter((e) => e.type === type);
+  return [...(byType.get(type) || [])].map((id) => entities.get(id)!);
 }
 
 console.log(`[graph] ${entities.size} entities, ${relSeq} relationships, ${sources.size} sources${danglingRels.length ? `, ${danglingRels.length} dangling curated relationships skipped (see /api/quality/report)` : ''}`);

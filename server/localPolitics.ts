@@ -6,7 +6,7 @@
 // took office after the June 2026 check closes the curated term; any other disagreement is
 // shown as a "verify" note.
 import { cached, fetchJson } from './cache.js';
-import { entities, getEntity, upsertEntity, setLiveRels, findPerson, relsOfType, normName } from './graph.js';
+import { entities, getEntity, upsertEntity, setLiveRels, findPerson, relsOfType, normName, listByType } from './graph.js';
 import { findParty } from './augment.js';
 import { AS_OF } from './data/curated.js';
 import { USER_AGENT } from './config.js';
@@ -140,16 +140,17 @@ export async function loadMayors() {
 
 /** Current mayors of cities inside a place (state → its cities; country → its capital and cities). */
 export function mayorsWithin(placeId: string) {
-  const out: { city: Entity; person: Entity; role?: string; since?: string; origin?: string }[] = [];
-  for (const e of entities.values()) {
-    if (e.type !== 'city') continue;
+  const out: { city: Entity; person: Entity; role?: string; since?: string; origin?: string; nationalCapital: boolean }[] = [];
+  for (const e of listByType('city')) {
     let p = e.parentId ? getEntity(e.parentId) : undefined; let inside = e.parentId === placeId;
     while (!inside && p) { inside = p.parentId === placeId; p = p.parentId ? getEntity(p.parentId) : undefined; }
     if (!inside) continue;
+    // Curated "capital" also marks state capitals (Austin, Harrisburg); only a capital_of link to a country counts here.
+    const nationalCapital = relsOfType(e.id, 'capital_of', 'out').some((r) => getEntity(r.to)?.type === 'country');
     for (const r of relsOfType(e.id, 'leads', 'in')) {
       if (r.validTo) continue;
-      const person = getEntity(r.from); if (person) out.push({ city: e, person, role: r.role, since: r.validFrom, origin: r.origin });
+      const person = getEntity(r.from); if (person) out.push({ city: e, person, role: r.role, since: r.validFrom, origin: r.origin, nationalCapital });
     }
   }
-  return out.sort((a, b) => Number(b.city.attrs?.capital || 0) - Number(a.city.attrs?.capital || 0) || (b.city.attrs?.population || 0) - (a.city.attrs?.population || 0));
+  return out.sort((a, b) => Number(b.nationalCapital) - Number(a.nationalCapital) || (b.city.attrs?.population || 0) - (a.city.attrs?.population || 0));
 }

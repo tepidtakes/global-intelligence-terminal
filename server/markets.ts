@@ -14,6 +14,12 @@ import { entities, getEntity } from './graph.js';
 import { usTreasuryCurve, minorUnitFactor } from './providers.js';
 
 const BROWSER_UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' };
+/** Run fn over items with at most `limit` in flight. */
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length); let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i], i); } }));
+  return out;
+}
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const daysAgo = (n: number, from = new Date()) => isoDate(new Date(from.getTime() - n * 86400_000));
 
@@ -203,15 +209,13 @@ async function oecdTenYear() {
   return cached('oecd:10y:latest', 24 * 3600, async () => {
     const map = iso2to3();
     const out: Record<string, { value: number; period: string }> = {};
-    for (let i = 0; i < OECD_10Y.length; i += 6) {
-      const batch = OECD_10Y.slice(i, i + 6);
-      const res = await Promise.allSettled(batch.map((c) => fredSeries(`IRLTLT01${c}M156N`, daysAgo(400))));
-      res.forEach((r, j) => {
-        if (r.status !== 'fulfilled') return;
-        const last = r.value.data.at(-1);
-        if (last && map[batch[j]]) out[map[batch[j]]] = { value: last.v, period: last.t.slice(0, 7) };
-      });
-    }
+    // Up to 8 requests at a time (was 8 sequential batches of 6).
+    await mapLimit(OECD_10Y, 8, async (c) => {
+      try {
+        const last = (await fredSeries(`IRLTLT01${c}M156N`, daysAgo(400))).data.at(-1);
+        if (last && map[c]) out[map[c]] = { value: last.v, period: last.t.slice(0, 7) };
+      } catch { /* that country has no series */ }
+    });
     if (!Object.keys(out).length) throw new Error('FRED unreachable');
     return out;
   });
@@ -269,11 +273,34 @@ export async function tenYearBoard() {
   return { data, fetchedAt, stale, errors };
 }
 
+const EU_NON_EURO = ['CZE', 'HUN', 'POL', 'ROU', 'SWE', 'DNK'];
+/** The same answer tenYearBoard gives for one country, fetching only that country's sources —
+ *  a profile no longer waits for ~45 series it does not show. Same priority and staleness rules. */
+export async function tenYearFor(iso3: string): Promise<TenYear | null> {
+  const monthlyCut = monthsBack(4);
+  if (DAILY_10Y[iso3]) {
+    try {
+      const c = await yieldCurve(iso3);
+      const ten = c?.latest.points.find((p) => p.years === 10);
+      if (c && ten) return { value: ten.value, date: c.latest.date, frequency: 'daily', sourceId: c.sourceId, basis: DAILY_10Y[iso3], stale: c.latest.date < daysAgo(14) };
+    } catch { /* fall through to monthly */ }
+  }
+  if (EURO_AREA.includes(iso3) || EU_NON_EURO.includes(iso3)) {
+    try { const v = (await ecbTenYear()).data[iso3]; if (v) return { value: v.value, date: v.period, frequency: 'monthly', sourceId: 'ecb-irs', basis: 'Monthly average, EU convergence benchmark (ECB)', stale: v.period < monthlyCut }; } catch { /* fall through */ }
+  }
+  const iso2 = getEntity(`country:${iso3}`)?.iso2;
+  if (!iso2 || !OECD_10Y.includes(iso2)) return null;
+  try {
+    const last = (await fredSeries(`IRLTLT01${iso2}M156N`, daysAgo(400))).data.at(-1);
+    return last ? { value: last.v, date: last.t.slice(0, 7), frequency: 'monthly', sourceId: 'oecd-mei', basis: 'Monthly average (OECD)', stale: last.t.slice(0, 7) < monthlyCut } : null;
+  } catch { return null; }
+}
+
 /** Monthly 10-year history for a profile chart (ECB for EU members, else OECD). */
 export async function tenYearHistory(iso3: string) {
   const iso2 = getEntity(`country:${iso3}`)?.iso2;
   if (!iso2) return null;
-  const eu = getEntity(`country:${iso3}`) && (EURO_AREA.includes(iso3) || ['CZE', 'HUN', 'POL', 'ROU', 'SWE', 'DNK'].includes(iso3));
+  const eu = getEntity(`country:${iso3}`) && (EURO_AREA.includes(iso3) || EU_NON_EURO.includes(iso3));
   if (eu) {
     try {
       const r = await cached(`ecb:irs:${iso2}`, 24 * 3600, async () => parseEcbIrs(await fetchText(`${ECB_IRS.replace('{AREA}', iso2 === 'GR' ? 'GR' : iso2)}?startPeriod=${new Date().getFullYear() - 10}-01&format=csvdata`, {}, 30000)).map((p) => ({ t: `${p.t}-01`, v: p.v })));

@@ -57,11 +57,13 @@ export async function wbIndicatorAll(code: string, year?: string) {
 export async function wbCountrySeries(iso3: string, codes = PROFILE_INDICATORS) {
   return cached(`wb:country:${iso3}:${codes.join(',')}`, 86400, async () => {
     const out: Indicator[] = [];
-    // The multi-indicator endpoint is limited to 60 characters of codes per call in practice; batch.
-    for (let i = 0; i < codes.length; i += 6) {
-      const batch = codes.slice(i, i + 6);
-      const json = await fetchJson(`${WB}/country/${iso3}/indicator/${batch.join(';')}?source=2&format=json&per_page=2000&date=2000:2030`);
-      const rows: any[] = json?.[1] || [];
+    // The multi-indicator endpoint is limited to 60 characters of codes per call in practice; batch,
+    // and fetch the batches in parallel (they were sequential: four round trips per profile).
+    const batches: string[][] = [];
+    for (let i = 0; i < codes.length; i += 6) batches.push(codes.slice(i, i + 6));
+    const jsons = await Promise.all(batches.map((batch) => fetchJson(`${WB}/country/${iso3}/indicator/${batch.join(';')}?source=2&format=json&per_page=2000&date=2000:2030`)));
+    for (const [bi, batch] of batches.entries()) {
+      const rows: any[] = jsons[bi]?.[1] || [];
       for (const code of batch) {
         const series: SeriesPoint[] = rows
           .filter((r) => r.indicator?.id === code && r.value != null)

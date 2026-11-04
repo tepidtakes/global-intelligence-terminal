@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import * as topojson from 'topojson-client';
 import world from 'world-atlas/countries-50m.json';
 import usStates from 'us-atlas/states-10m.json';

@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import path from 'node:path';
 import fs from 'node:fs';
 import { sessionMiddleware, register, login, logout, type AuthedRequest } from './auth.js';
@@ -11,7 +12,7 @@ import {
   WB_INDICATORS, COMTRADE_AREAS, wbIndicatorAll, wbCountrySeries, wbCountryMeta, comtradeProfile, comtradeProduct, getQuote, getDividends, secFundamentals, getNews,
 } from './providers.js';
 import {
-  fxBoard, fxFor, commodityBoard, policyRates, policyRateHistory, tenYearBoard, tenYearHistory, yieldCurve, curveAvailable, imfIndicator, imfCountry, imfEdition, IMF_INDICATORS,
+  fxBoard, fxFor, commodityBoard, policyRates, policyRateHistory, tenYearBoard, tenYearFor, tenYearHistory, yieldCurve, curveAvailable, imfIndicator, imfCountry, imfEdition, IMF_INDICATORS,
   fedOutlook, analystConsensus, spark, windowChanges, currencyUsers, EURO_AREA, isStale,
 } from './markets.js';
 import { startLiveData, liveStatus, onLiveRefresh } from './augment.js';
@@ -34,6 +35,9 @@ const pickRange = (r: unknown) => (QUOTE_RANGES.has(String(r)) ? String(r) : '1y
 
 const app = express();
 app.disable('x-powered-by');
+// gzip API responses and static files (a country profile is ~90 KB of JSON, ~12 KB gzipped).
+// Uploaded attachments are already compressed formats or user files: leave them as they are.
+app.use(compression({ threshold: 1024, filter: (req, res) => !req.path.startsWith('/api/attachments') && compression.filter(req, res) }));
 app.use(express.json({ limit: '4mb' }));
 app.use(sessionMiddleware);
 
@@ -97,7 +101,7 @@ api.get('/entity/:id', (req: AuthedRequest, res) => {
     entity: e, relationships: rels, parents: parentChain, companies, partyOf,
     children: kids.slice(0, 400).map((k) => ({ ...stub(k.id)!, attrs: k.type === 'city' ? k.attrs : undefined })), childCounts,
     events: upcomingEventsFor(e.id), sources: sourcesUsed(e, rels), user, provenance: entityProvenance(e.id),
-    mayors: e.type === 'country' || e.type === 'state' ? mayorsWithin(e.id).slice(0, 40).map((m) => ({ city: stub(m.city.id), person: stub(m.person.id), role: m.role, since: m.since, origin: m.origin, party: partyOf[m.person.id] || (relsOfType(m.person.id, 'belongs_to_party', 'out')[0] ? stub(relsOfType(m.person.id, 'belongs_to_party', 'out')[0].to) : null), population: m.city.attrs?.population, capital: !!m.city.attrs?.capital })) : undefined,
+    mayors: e.type === 'country' || e.type === 'state' ? mayorsWithin(e.id).slice(0, 40).map((m) => ({ city: stub(m.city.id), person: stub(m.person.id), role: m.role, since: m.since, origin: m.origin, party: partyOf[m.person.id] || (relsOfType(m.person.id, 'belongs_to_party', 'out')[0] ? stub(relsOfType(m.person.id, 'belongs_to_party', 'out')[0].to) : null), population: m.city.attrs?.population, capital: m.nationalCapital })) : undefined,
   });
 });
 
@@ -435,10 +439,10 @@ api.get('/rates/overview', wrap(async (_req, res) => {
 api.get('/rates/:iso3', wrap(async (req, res) => {
   const iso3 = req.params.iso3.toUpperCase();
   if (!byIso3.has(iso3)) return res.status(404).json({ error: 'Unknown country' });
-  const [pol, hist, curve, ten, board] = await Promise.allSettled([policyRates(), policyRateHistory(iso3), curveAvailable(iso3) ? yieldCurve(iso3) : Promise.resolve(null), tenYearHistory(iso3), tenYearBoard()]);
+  const [pol, hist, curve, ten, board] = await Promise.allSettled([policyRates(), policyRateHistory(iso3), curveAvailable(iso3) ? yieldCurve(iso3) : Promise.resolve(null), tenYearHistory(iso3), tenYearFor(iso3)]);
   const v = (p: PromiseSettledResult<any>) => (p.status === 'fulfilled' ? p.value : null);
-  // Headline 10-year = the same resolver the map and Markets page use; the chart shows monthly history.
-  const tenLatest = v(board)?.data?.[iso3] || null;
+  // Headline 10-year: same rules as the map and Markets page, fetching only this country's sources.
+  const tenLatest = v(board) || null;
   res.json({
     policy: v(pol)?.data?.[iso3] || null, policyHistory: v(hist)?.data || null, curve: v(curve), tenYear: v(ten), tenLatest,
     errors: [pol, hist, curve, ten, board].filter((p) => p.status === 'rejected').map((p: any) => String(p.reason?.message)),
@@ -687,8 +691,11 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 // ───────────── Front end ─────────────
 if (process.env.NODE_ENV === 'production') {
   const dist = path.resolve('dist');
-  app.use(express.static(dist));
-  app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+  // Built files have content hashes in their names: cache them for a year. index.html must
+  // always be revalidated so a new build is picked up immediately.
+  app.use('/assets', express.static(path.join(dist, 'assets'), { immutable: true, maxAge: '365d', index: false }));
+  app.use(express.static(dist, { index: false, maxAge: 0 }));
+  app.get('*', (_req, res) => { res.setHeader('Cache-Control', 'no-cache'); res.sendFile(path.join(dist, 'index.html')); });
 } else {
   const { createServer } = await import('vite');
   const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
@@ -698,6 +705,16 @@ app.listen(PORT, HOST, () => console.log(`Global Intelligence Terminal → http:
 startLiveData();
 startNews();
 startElectionDetails();
+// Warm the caches behind the first screens people open (default map layer, map previews, rates),
+// a few seconds after start-up and at low concurrency, so the first visit does not wait on providers.
+setTimeout(() => {
+  const jobs: (() => Promise<unknown>)[] = [
+    ...PREVIEW_CODES.map((c) => () => wbIndicatorAll(c)), () => wbIndicatorAll('NY.GDP.PCAP.CD'), () => wbCountryMeta(), () => policyRates(), () => tenYearBoard(), () => fxBoard(), () => commodityBoard(),
+  ];
+  let i = 0;
+  const worker = async () => { while (i < jobs.length) { const job = jobs[i++]; await job().catch(() => {}); } };
+  void Promise.all([worker(), worker(), worker()]).then(() => console.log('[warm] caches ready'));
+}, 4000).unref();
 // When live leaders/conflicts change, re-tag headlines and re-check news signals against them.
 onLiveRefresh(() => retagAll());
 void fs;

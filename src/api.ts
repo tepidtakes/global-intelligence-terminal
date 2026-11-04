@@ -18,7 +18,17 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
 
 // Small in-memory cache so moving between profiles and the map is instant.
 const cache = new Map<string, { t: number; data: any }>();
+// Requests already on the way: components asking for the same path share one request
+// (a profile renders dozens of source links that all need /sources).
+const pending = new Map<string, Promise<any>>();
+function getOnce<T>(path: string): Promise<T> {
+  let p = pending.get(path);
+  if (!p) { p = api<T>(path).finally(() => pending.delete(path)); pending.set(path, p); }
+  return p;
+}
 const listeners = new Set<(path: string) => void>();
+/** Keep the client cache bounded during long sessions (oldest entries go first). */
+function trim() { if (cache.size > 400) for (const k of [...cache.keys()].slice(0, cache.size - 300)) cache.delete(k); }
 export function invalidate(prefix: string) {
   for (const k of [...cache.keys()]) if (k.startsWith(prefix)) cache.delete(k);
   for (const l of listeners) l(prefix);
@@ -45,7 +55,7 @@ export function useApi<T = any>(path: string | null, ttlMs = 60_000) {
     if (c && Date.now() - c.t < ttlMs) { setState({ data: c.data, loading: false }); return; }
     let alive = true;
     setState((s) => ({ data: c?.data ?? (s.data && pathRef.current === path ? s.data : undefined), loading: true }));
-    api<T>(path).then((data) => { cache.set(path, { t: Date.now(), data }); if (alive) setState({ data, loading: false }); })
+    getOnce<T>(path).then((data) => { cache.set(path, { t: Date.now(), data }); trim(); if (alive) setState({ data, loading: false }); })
       .catch((error) => { if (alive) setState({ error, loading: false, data: c?.data }); });
     return () => { alive = false; };
   }, [path, tick, ttlMs]);

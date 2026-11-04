@@ -218,6 +218,14 @@ docs/ARCHITECTURE.md     architecture, schema, data requirements, roadmap
 data/            runtime: SQLite DB, provider cache, uploads (git-ignored)
 ```
 
+## Speed and screen sizes
+
+Each page loads only the code it needs (a country profile is about 100 KB compressed; the map,
+with its geometry, about 580 KB), responses are gzip-compressed, and built files are cached by
+the browser for a year. Pages show data the terminal already has immediately and refresh it in
+the background, always with its real retrieval time. The layout works from phones (menu, map
+drawer and bottom sheet) through tablets and laptops to 4K monitors.
+
 ## Known limits (honest list)
 
 - Curated political facts are verified as of June 2026; anything since may be stale.

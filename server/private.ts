@@ -93,6 +93,12 @@ priv.get('/notes/graph', (req: AuthedRequest, res) => {
   }
   res.json({ nodes: [...nodes, ...ents.values()], links });
 });
+// Change stamps only — what an open note polls to notice edits made in Obsidian (a few bytes
+// instead of the whole note every few seconds).
+priv.get('/notes/:id/stamp', (req: AuthedRequest, res) => {
+  const n = get<any>('SELECT updated_at, ext_updated_at FROM notes WHERE id = ? AND user_id = ?', req.params.id, uidOf(req));
+  n ? res.json({ updatedAt: n.updated_at, extUpdatedAt: n.ext_updated_at }) : res.status(404).json({ error: 'Note not found' });
+});
 priv.get('/notes/:id', (req: AuthedRequest, res) => {
   const n = loadNote(uidOf(req), req.params.id);
   n ? res.json(n) : res.status(404).json({ error: 'Note not found' });

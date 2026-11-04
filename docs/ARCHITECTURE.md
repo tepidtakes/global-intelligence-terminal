@@ -217,6 +217,26 @@ CAN, JPN, GBR par) > ECB IRS monthly > OECD monthly; `stale` by age. Used by the
 `bond10y` layer, `/rates/overview` and `/rates/:iso3` (`tenLatest`). The BoE curve now
 requests par (`IUD*NPY`) and zero-coupon (`IUD*NZC`) series and reads columns by code.
 
+**Performance.** The front end is split per page (`React.lazy`) with long-lived vendor chunks
+(react, maplibre, geo, editor); a profile needs ~100 KB of compressed JS, the map ~580 KB, and
+the map and profile chunks are prefetched in idle time after load (not on data-saver/2G). The
+server gzips responses (`compression`) and serves hashed assets as immutable for a year
+(`index.html` is `no-cache`). `cached()` reads disk copies asynchronously and, for page-driven
+provider data (prefix table `GRACE` in `server/cache.ts`), returns an expired copy within a short
+grace window at once while refreshing in the background — with its real retrieval time; the
+background loaders (Congress, Wikidata, Wikipedia, news) always wait for fresh data. Start-up
+warms the default map layer, preview indicators, rates and market boards. The graph keeps a
+by-type index and a cached person-name index (the old per-call rebuild made the live loaders
+quadratic). `/rates/:iso3` uses `tenYearFor` (that country's sources only). Client `useApi`
+shares in-flight requests and keeps a bounded cache; open notes poll a tiny change-stamp
+endpoint, and only when an Obsidian vault is connected.
+
+**Screen sizes.** Layout tracks use `minmax(0, 1fr)` so wide content scrolls inside its card
+instead of stretching the page. Breakpoints: ≤ 900 px nav in a ☰ menu; ≤ 760 px phone layout
+(map full-width, layers as a drawer, selected place as a bottom sheet, single-column facts,
+scrollable tabs and tables); ≥ 1700 px and ≥ 2200 px wider pages, side panels and slightly larger
+text; coarse pointers get 36 px tap targets.
+
 **Map color rules** (`src/map/layers.ts`): each layer declares `better` (ranked, green =
 better end), `signed` (centred on zero), `target` (bands around ~2% for inflation),
 `magnitude` (one themed hue) or `categories`. The green/red scale has unequal lightness on

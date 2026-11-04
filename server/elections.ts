@@ -108,9 +108,9 @@ function personFor(c: Contender, e: Entity, countryId?: string): string | undefi
   return id;
 }
 
-export function applyElectionInfo(e: Entity, article: string, info: ElectionInfo, meta: { fetchedAt: string; revTimestamp?: string; stale?: boolean }) {
+export function applyElectionInfo(e: Entity, article: string, info: ElectionInfo, meta: { fetchedAt: string; revTimestamp?: string; stale?: boolean }, knownPlace?: Entity) {
   const out = electionOutcome(info);
-  const place = placeOf(e);
+  const place = knownPlace || placeOf(e);
   const countryId = countryOf(place?.id);
   const prevStatus = e.attrs?.status;
   const status = out.status === 'completed' ? 'completed' : out.status === 'counting' ? 'results-pending' : prevStatus === 'outcome-not-recorded' ? 'scheduled' : (prevStatus || 'scheduled');
@@ -219,9 +219,7 @@ export async function loadLocalElections() {
     } as Entity);
     rels.push({ from: id, to: place.id, type: 'affects', sourceId: SRC });
     if (w.scope === 'city' && place.parentId?.startsWith('state:')) rels.push({ from: id, to: place.parentId, type: 'affects', sourceId: SRC });
-    // Relationships must exist before the infobox is applied (it looks up the place).
-    setLiveRels('wp-local-elections', rels);
-    applyElectionInfo(e, p.title, info, { fetchedAt: r.fetchedAt, revTimestamp: p.revTimestamp, stale: r.stale });
+    applyElectionInfo(e, p.title, info, { fetchedAt: r.fetchedAt, revTimestamp: p.revTimestamp, stale: r.stale }, place);
     n++;
   }
   setLiveRels('wp-local-elections', rels);
