@@ -135,6 +135,7 @@ function ActiveLayer({ def, swatch }: { def: LayerDef; swatch: string }) {
             <div className="tiny muted">First load of a product can take ~10 s (UN Comtrade rate limits); it is cached for a week after.</div>
           </>
         )}
+        {def.id === 'war' && <WarPicker />}
         {def.id === 'commodity' && (
           <label className="field">Commodity
             <select className="input" value={cfg.fill.startsWith('commodity:') ? cfg.fill : 'commodity:crude-oil'} onChange={(e) => setMap({ fill: e.target.value })}>
@@ -158,6 +159,28 @@ function ActiveLayer({ def, swatch }: { def: LayerDef; swatch: string }) {
         )}
       </div>
     </div>
+  );
+}
+
+/** Choose which war's sides to colour: wars between states first, then every listed conflict and the wars inside it. */
+function WarPicker() {
+  const { map: cfg, setMap } = useApp();
+  const { data } = useApi<any>('/conflicts', 300_000);
+  const withSides = (c: any) => (c.sides || []).length >= 2;
+  return (
+    <label className="field">War
+      <select className="input" value={cfg.fill.startsWith('war:') ? cfg.fill : ''} onChange={(e) => setMap({ fill: e.target.value || 'war' })}>
+        <option value="">Deadliest war with the most states taking part</option>
+        {(data?.interstate || []).length > 0 && <optgroup label="Wars between states">{data.interstate.map((c: any) => <option key={c.id} value={`war:${c.id}`}>{c.name}</option>)}</optgroup>}
+        {(data?.conflicts || []).filter((c: any) => withSides(c) || c.theatres.some(withSides)).map((c: any) => (
+          <optgroup key={c.id} label={c.name}>
+            {withSides(c) && <option value={`war:${c.id}`}>{c.name} (overall)</option>}
+            {c.theatres.filter(withSides).map((t: any) => <option key={t.id} value={`war:${t.id}`}>{t.name}</option>)}
+          </optgroup>
+        ))}
+      </select>
+      {!data && <span className="tiny muted">Loading wars…</span>}
+    </label>
   );
 }
 

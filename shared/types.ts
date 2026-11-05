@@ -3,12 +3,12 @@
 
 export type EntityType =
   | 'region' | 'country' | 'state' | 'county' | 'city'
-  | 'igo' | 'person' | 'party' | 'company' | 'commodity' | 'industry' | 'event';
+  | 'igo' | 'person' | 'party' | 'company' | 'commodity' | 'industry' | 'event' | 'group';
 
 export const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
   region: 'Region', country: 'Country', state: 'State / province', county: 'County', city: 'City',
   igo: 'Organization', person: 'Person', party: 'Political party', company: 'Company',
-  commodity: 'Commodity / product', industry: 'Industry', event: 'Event',
+  commodity: 'Commodity / product', industry: 'Industry', event: 'Event', group: 'Armed group / force',
 };
 
 /** How trustworthy / fresh a value is. Shown next to every number. */
@@ -62,7 +62,7 @@ export type RelType =
   | 'belongs_to_party' | 'party_in' | 'governing_party' | 'located_in' | 'capital_of'
   | 'headquartered_in' | 'operates_in' | 'produces' | 'exports' | 'imports' | 'consumes'
   | 'trade_partner' | 'subsidiary_of' | 'competitor_of' | 'in_industry' | 'affects' | 'uses'
-  | 'in_region' | 'shareholder_of' | 'borders' | 'supplies';
+  | 'in_region' | 'shareholder_of' | 'borders' | 'supplies' | 'fights_in';
 
 export interface Relationship {
   id: string;
@@ -106,6 +106,7 @@ export const REL_LABELS: Record<RelType, { fwd: string; inv: string }> = {
   shareholder_of: { fwd: 'Shareholder of', inv: 'Significant shareholders' },
   borders: { fwd: 'Neighbors', inv: 'Neighbors' },
   supplies: { fwd: 'Supplies', inv: 'Key suppliers' },
+  fights_in: { fwd: 'Fighting in', inv: 'Belligerents' },
 };
 
 /** A relationship as seen from one entity, with the other side resolved. */

@@ -204,7 +204,7 @@ const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g
 interface IndexRow { id: string; terms: string[]; words: string[]; boost: number; }
 const index: IndexRow[] = [];
 const indexPos = new Map<string, number>();
-const TYPE_BOOST: Record<string, number> = { country: 12, igo: 12, company: 10, commodity: 10, person: 9, party: 8, city: 7, state: 6, event: 6, industry: 5, region: 4, county: -6 };
+const TYPE_BOOST: Record<string, number> = { country: 12, igo: 12, company: 10, commodity: 10, person: 9, party: 8, city: 7, state: 6, event: 6, group: 6, industry: 5, region: 4, county: -6 };
 function indexEntity(e: Entity) {
   const terms = [e.name, ...(e.aliases || [])].map(norm).filter(Boolean);
   const words = [...new Set(terms.flatMap((t) => t.split(' ')))];

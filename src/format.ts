@@ -50,5 +50,5 @@ export function ago(s?: string) {
 }
 
 export const TYPE_ICON: Record<string, string> = {
-  region: '◍', country: '⚑', state: '▦', county: '▫', city: '●', igo: '⬡', person: '☺', party: '◆', company: '▣', commodity: '◈', industry: '⚙', event: '◷', note: '✎',
+  region: '◍', country: '⚑', state: '▦', county: '▫', city: '●', igo: '⬡', person: '☺', party: '◆', company: '▣', commodity: '◈', industry: '⚙', event: '◷', note: '✎', group: '✪',
 };

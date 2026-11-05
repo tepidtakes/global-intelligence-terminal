@@ -5,7 +5,7 @@ import { useApp, useAuth } from '../state';
 import { Card, EntityChip, Loading, Modal, Quality, SourceRef, Unavailable, localToday } from '../components/common';
 import { RelGroups, WatchButton, NewNoteButton } from '../components/entityBits';
 import { GovernmentSection, MacroSection, TradeSection, CompaniesSection, MembersSection, QuoteSection, FundamentalsSection, PositionSection, ProducersSection, RankingSection } from './profile/Sections';
-import { CurrencySection, RatesSection, OutlookSection, ConflictsSection, ConsensusSection, ProductTradeSection, ConflictBadge } from './profile/LiveSections';
+import { CurrencySection, RatesSection, OutlookSection, ConflictsSection, ConsensusSection, ProductTradeSection, ConflictBadge, SidesView } from './profile/LiveSections';
 import { PRODUCTS } from '../../shared/products';
 import { TYPE_ICON, fmtUnit, fmtDate, ago } from '../format';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
@@ -72,7 +72,7 @@ export function ProfilePage() {
       <div className="colMain">
         <FactsCard e={e} />
         {(t === 'country' || t === 'state' || t === 'city') && <GovernmentSection e={e} rels={rels} events={data.events} partyOf={data.partyOf} />}
-        {(t === 'country' || t === 'state') && <ConflictsSection id={e.id} name={e.name} />}
+        {(t === 'country' || t === 'state' || t === 'group') && <ConflictsSection id={e.id} name={e.name} />}
         {t === 'country' && e.iso3 && <MacroSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <OutlookSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <RatesSection iso3={e.iso3} />}
@@ -94,7 +94,8 @@ export function ProfilePage() {
         {t === 'commodity' && e.attrs?.wbRankings && <RankingSection codes={e.attrs.wbRankings} />}
         {t === 'person' && <RolesCard rels={rels} />}
         {t === 'party' && <PartyMembersCard rels={rels} />}
-        {t === 'event' && <EventCard e={e} rels={rels} />}
+        {t === 'event' && e.attrs?.category === 'conflict' ? <WarCard e={e} rels={rels} kids={data.children} parents={data.parents} /> : t === 'event' && <EventCard e={e} rels={rels} />}
+        {t === 'group' && e.attrs?.url && <Card title="About this group"><div className="small">Added because Wikipedia lists it as a belligerent in at least one ongoing war. <a href={e.attrs.url} target="_blank" rel="noreferrer">Read about it on Wikipedia ↗</a></div></Card>}
         <Card title="Relationships" id="relationships" actions={<span className="tiny muted">{rels.length} links · click any to navigate</span>}>
           {rels.length ? <RelGroups rels={rels} maxPer={40} /> : <div className="small muted">No relationships recorded yet.</div>}
         </Card>
@@ -206,6 +207,34 @@ function PartyMembersCard({ rels }: { rels: RelView[] }) {
       <div className="relGroup"><div className="lbl">Affiliated politicians in the database ({members.length})</div>
         {members.length ? <table className="data"><tbody>{members.map((r) => <tr key={r.rel.id}><td><Link to={`/entity/${encodeURIComponent(r.other.id)}`}><strong>{r.other.name}</strong></Link></td><td className="small muted">{r.other.summary}</td></tr>)}</tbody></table> : <div className="small muted">None recorded yet.</div>}
       </div>
+    </Card>
+  );
+}
+
+function WarCard({ e, rels, kids, parents }: { e: Entity; rels: RelView[]; kids: any[]; parents: any[] }) {
+  const { setMap, select } = useApp();
+  const nav = useNavigate();
+  const where = rels.filter((r) => r.rel.type === 'affects' && r.direction === 'out');
+  const parent = parents.at(-1);
+  const theatres = kids.filter((k) => k.type === 'event');
+  // The same view the Conflicts page uses (names and flags resolved server-side).
+  const { data: view } = useApi<any>(`/conflicts/view/${encodeURIComponent(e.id)}`, 600_000);
+  return (
+    <Card title="Sides & status" id="event" actions={(e.attrs?.sides || []).length >= 2 && <button className="btn primary sm" onClick={() => { setMap({ fill: `war:${e.id}` }); select(null); nav('/'); }}>◎ Sides on map</button>}>
+      <div className="row wrap" style={{ marginBottom: 10, gap: 6 }}>
+        {e.attrs?.intensity && <ConflictBadge intensity={e.attrs.intensity} label={`${String(e.attrs.intensity).replace(/-/g, ' ')}${e.attrs?.kind === 'theatre' ? ' (wider conflict)' : ''}`} />}
+        <span className="badge">{String(e.attrs?.statusText || e.attrs?.status || '').split(' — ')[0].replace(/-/g, ' ').slice(0, 80)}</span>
+        <span className="small">Began {e.attrs?.startDate?.length === 10 ? fmtDate(e.attrs.startDate) : e.attrs?.startDate || e.attrs?.startYear || '—'}</span>
+        {parent && <span className="small">· part of <Link to={`/entity/${encodeURIComponent(parent.id)}`}>{parent.name}</Link></span>}
+      </div>
+      {String(e.attrs?.statusText || '').includes(' — related: ') && <div className="small muted" style={{ marginTop: -4, marginBottom: 10 }}>Related: {e.attrs!.statusText.split(' — related: ')[1]}</div>}
+      {view ? <SidesView sides={view.sides} longRunning={view.longRunning} /> : (e.attrs?.sides || []).length >= 2 ? <Loading lines={3} /> : <div className="small muted">Sides are not listed for this conflict (or are still loading).</div>}
+      {theatres.length > 0 && (
+        <div className="relGroup" style={{ marginTop: 12 }}><div className="lbl">Wars & conflicts inside this one ({theatres.length})</div>
+          <div className="chips">{theatres.map((t) => <EntityChip key={t.id} e={t} />)}</div></div>
+      )}
+      {where.length > 0 && <div className="relGroup" style={{ marginTop: 10 }}><div className="lbl">Where fighting takes place</div><div className="chips">{where.map((r) => <EntityChip key={r.rel.id} e={r.other} />)}</div></div>}
+      {(e.attrs?.sidesUrl || e.attrs?.url) && <div className="tiny muted" style={{ marginTop: 8 }}>Sides from the infobox of <a href={e.attrs?.sidesUrl || e.attrs?.url} target="_blank" rel="noreferrer">the Wikipedia article ↗</a> (community-maintained; checked every 12 hours).</div>}
     </Card>
   );
 }

@@ -175,24 +175,102 @@ function FedOutlook({ fed }: { fed: any }) {
 const SEV: Record<string, string> = { 'major-war': 'sevMajor', 'minor-war': 'sevMinor', conflict: 'sevConflict', skirmish: 'sevSkirmish' };
 export function ConflictBadge({ intensity, label }: { intensity: string; label: string }) { return <span className={`badge sev ${SEV[intensity] || ''}`}>{label}</span>; }
 
+export interface SideP { id: string; name: string; type: string; flag?: string; role: 'main' | 'support' | 'other'; roleLabel?: string; depth: number; former: boolean; note?: string }
+export interface Side { letter: string; index: number; participants: SideP[] }
+const SIDE_CLASS = ['sideA', 'sideB', 'sideC', 'sideD'];
+
+/** Compact one-line sides: flags + names of each side's current main fighters. */
+export function SidesLine({ sides, max = 3 }: { sides: Side[]; max?: number }) {
+  if (!sides || sides.length < 2) return null;
+  return (
+    <span className="sidesLine">
+      {sides.slice(0, 3).map((s, i) => {
+        const main = s.participants.filter((p) => p.role === 'main' && !p.former && p.depth === 1);
+        const list = main.length ? main : s.participants.slice(0, 1);
+        return (
+          <span key={s.letter} className="sl">
+            {i > 0 && <span className="vs">vs</span>}
+            <span className={`sideChip ${SIDE_CLASS[s.index - 1] || ''}`}>
+              {list.slice(0, max).map((p, j) => <span key={p.id}>{j > 0 ? ', ' : ''}{p.flag ? `${p.flag} ` : ''}{p.name}</span>)}
+              {list.length > max && <span className="muted"> +{list.length - max}</span>}
+            </span>
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/** Full sides: one column per side, allies nested under their coalition, supporters and former members labelled. */
+export function SidesView({ sides, longRunning }: { sides: Side[]; longRunning?: boolean }) {
+  const [all, setAll] = useState(false);
+  if (!sides || sides.length < 2) return <div className="small muted">Wikipedia does not list the sides of this conflict in a form the terminal can read.</div>;
+  const LIMIT = 12;
+  const long = sides.some((s) => s.participants.length > LIMIT);
+  return (
+    <div>
+      {longRunning && <div className="tiny muted" style={{ marginBottom: 6 }}>Long-running conflict: the sides below cover its whole history, so some states and groups listed may no longer exist or fight.</div>}
+      <div className="sidesGrid" style={{ gridTemplateColumns: sides.slice(0, 4).map(() => 'minmax(0, 1fr)').join(' auto ') }}>
+        {sides.slice(0, 4).flatMap((s, i) => [
+          i > 0 ? <div key={`vs${i}`} className="vsCol">vs</div> : null,
+          <div key={s.letter} className={`sideCol ${SIDE_CLASS[s.index - 1] || ''}`}>
+            <div className="sideHead">Side {s.letter}</div>
+            {(all ? s.participants : s.participants.slice(0, LIMIT)).map((p, j) => {
+              const prev = j > 0 ? s.participants[j - 1] : undefined;
+              const heading = p.role !== 'main' && (!prev || prev.role !== p.role || prev.roleLabel !== p.roleLabel);
+              return (
+                <div key={`${p.id}-${j}`}>
+                  {heading && <div className="sideSub">{p.role === 'support' ? 'Supported by' : p.roleLabel}</div>}
+                  <div className={`sideP${p.former ? ' former' : ''}`} style={{ paddingLeft: (p.depth - 1) * 14 }}>
+                    {p.depth > 1 && <span className="muted">└ </span>}
+                    <Link to={`/entity/${encodeURIComponent(p.id)}`}>{p.flag ? `${p.flag} ` : p.type === 'group' ? '✪ ' : ''}{p.name}</Link>
+                    {p.former && <span className="lbadge" style={{ marginLeft: 4 }}>former</span>}
+                    {p.note && !p.former && <span className="tiny muted"> ({p.note})</span>}
+                  </div>
+                </div>
+              );
+            })}
+            {!all && s.participants.length > LIMIT && <div className="tiny muted">+{s.participants.length - LIMIT} more</div>}
+          </div>,
+        ])}
+      </div>
+      {long && <button className="btn ghost sm" onClick={() => setAll(!all)} style={{ marginTop: 4 }}>{all ? 'Show fewer' : 'Show every participant'}</button>}
+    </div>
+  );
+}
+
 export function ConflictsSection({ id, name }: { id: string; name: string }) {
   const { data } = useApi<any[]>(`/conflicts/for/${encodeURIComponent(id)}`, 600_000);
   const { setMap, select } = useApp();
   const nav = useNavigate();
   if (!data?.length) return null;
+  const fighting = data.filter((c) => c.involvement && !c.involvement.former);
   return (
-    <Card title={`Armed conflicts on ${name}’s territory (${data.length})`} id="conflicts" actions={<button className="btn sm" onClick={() => { setMap({ fill: 'conflicts' }); select(id, { fly: true }); nav('/'); }}>Show on map</button>}>
+    <Card title={`Wars & armed conflicts — ${name}`} id="conflicts" actions={<div className="row"><button className="btn sm" onClick={() => { setMap({ fill: 'conflicts:parties' }); select(id, { fly: true }); nav('/'); }}>Who is fighting ↗</button><button className="btn sm" onClick={() => { setMap({ fill: 'conflicts' }); select(id, { fly: true }); nav('/'); }}>Where ↗</button></div>}>
+      {fighting.length > 0 && <div className="small" style={{ marginBottom: 8 }}><strong>{name}</strong> is a listed party to {fighting.length} ongoing war{fighting.length > 1 ? 's' : ''} or conflict{fighting.length > 1 ? 's' : ''}.</div>}
       <table className="data">
-        <thead><tr><th>Conflict</th><th>Intensity</th><th>Since</th><th className="r">Deaths (latest years)</th></tr></thead>
-        <tbody>{data.map((c) => (
-          <tr key={c.id}>
-            <td><Link to={`/entity/${encodeURIComponent(c.id)}`}><strong>{c.name}</strong></Link><div className="tiny muted">{c.locations.map((l: any) => l.name).slice(0, 6).join(', ')}{c.locations.length > 6 ? '…' : ''}</div></td>
-            <td><ConflictBadge intensity={c.intensity} label={c.intensityLabel} /></td><td className="tab">{c.startYear || '—'}</td>
-            <td className="r num">{c.yearly.map((y: any) => `${y.year}: ${y.deaths.toLocaleString()}`).join(' · ') || '—'}</td>
-          </tr>
-        ))}</tbody>
+        <thead><tr><th>War / conflict</th><th>{name}’s involvement</th><th>Intensity</th><th className="r">Deaths (latest years)</th></tr></thead>
+        <tbody>{data.map((c) => {
+          const inv = c.involvement;
+          return (
+            <tr key={c.id}>
+              <td><Link to={`/entity/${encodeURIComponent(c.id)}`}><strong>{c.name}</strong></Link>
+                {c.sides?.length >= 2 && <div className="tiny" style={{ marginTop: 2 }}><SidesLine sides={c.sides} max={2} /></div>}</td>
+              <td className="small">
+                {inv ? <>
+                  {inv.former ? <span className="lbadge">former</span> : inv.role === 'main' ? <span className="badge" style={{ fontWeight: 600 }}>Fighting · side {inv.side}</span> : <span className="badge">{inv.roleLabel || 'Supporting'} · side {inv.side}</span>}
+                  {inv.allies?.length > 0 && <div className="tiny muted">with {inv.allies.join(', ')}</div>}
+                  {inv.opponents?.length > 0 && <div className="tiny muted">against {inv.opponents.join('; ')}</div>}
+                </> : null}
+                {c.onTerritory && <div className="tiny">{inv ? 'Also fought on its territory' : 'Fought on its territory'}</div>}
+              </td>
+              <td>{c.intensity && <ConflictBadge intensity={c.intensity} label={c.kind === 'theatre' ? `${c.intensityLabel} (wider conflict)` : c.intensityLabel} />}</td>
+              <td className="r num small">{c.yearly.map((y: any) => `${y.year}: ${y.deaths.toLocaleString()}`).join(' · ') || <span className="muted">see wider conflict</span>}</td>
+            </tr>
+          );
+        })}</tbody>
       </table>
-      <div className="tiny muted" style={{ marginTop: 6 }}>Locations are where fighting takes place, not which states are parties. The current year is year-to-date. Figures are estimates compiled on Wikipedia from ACLED, UCDP and other cited sources.</div>
+      <div className="tiny muted" style={{ marginTop: 6 }}>Sides as listed in each war’s Wikipedia infobox; deaths as tabulated in Wikipedia’s List of ongoing armed conflicts (citing ACLED, UCDP and others). The current year is year-to-date.</div>
       <SourceRef id="wikipedia-conflicts" />
     </Card>
   );

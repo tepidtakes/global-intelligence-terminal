@@ -60,7 +60,9 @@ Relationship types (each has a forward and an inverse label, so every link is na
 both ways): `member_of`, `head_of_state`, `head_of_government`, `holds_office`, `leads`,
 `belongs_to_party`, `party_in`, `governing_party`, `located_in`, `capital_of`,
 `headquartered_in`, `operates_in`, `produces`, `exports`, `imports`, `trade_partner`,
-`subsidiary_of`, `competitor_of`, `in_industry`, `affects`, `uses`.
+`subsidiary_of`, `competitor_of`, `in_industry`, `affects`, `uses`, `fights_in` (country or
+armed group → war; `role` = "Side A/B/C", `note` = supporting / former / dates).
+Entity type `group` = non-state armed group or force (created from war infoboxes).
 `validFrom/validTo` give historical validity (e.g. NATO accession years drive the
 "membership as of year" slider). Nothing assumes one country per company or one territory
 per faction.
@@ -135,6 +137,23 @@ it creates the note, and saving a note with that title re-points the link).
 | Ongoing armed conflicts (intensity, locations, deaths by year) | Wikipedia “List of ongoing armed conflicts” (cites ACLED/UCDP) | 12 h | community / estimate |
 | National elections, this year and next | Wikipedia “<year> national electoral calendar” | 12 h | community |
 | Leaders, parties, memberships, company/commodity relationships, events | Curated in `server/data/curated.ts`, each item cites an official source | as-of date shown | curated |
+
+**Wars and sides** (`server/worldEvents.ts`, `loadWarSides` in `server/augment.ts`): each row
+of the ongoing-conflicts list keeps every article linked in its tree (`theatreLinks`). Up to
+30 per row (shallowest first) are fetched 20-per-request via `action=query&prop=revisions`
+through a single rate-limited queue (750 ms gap, back-off on 429/5xx/network errors), and the
+"Infobox military conflict" is found inline, as `{{#invoke:Infobox military conflict}}`, or
+in a separate `{{<war> infobox}}` template. `combatant1..3` (+ `1a/1b…`) are parsed into
+participants: tree-list depth (allies nested under coalitions), role (main / supporting /
+labelled group such as "Attacked by Israel"), former (from "until…" or ended year ranges),
+notes; flags, `{{#invoke:flag}}`, ISO/IOC country-code templates and links are resolved to
+countries, everything else to `group:` entities. The row's own article gives the umbrella's
+sides; other linked articles whose infobox is ongoing become `kind: 'theatre'` events with
+`parentId` = the row and its intensity. Sides are stored on the event (`attrs.sides`) and as
+`fights_in` relationships. Derived views: interstate wars (≥ 2 sides with a state found only on
+that side), long-running flag (> 15 years, whole-history article), map layers
+`conflicts:parties` and `war:<id>`. The parsed batch is cached 24 h; `npm run check:live`
+re-parses the major wars and fails on unparsed markup.
 
 **Live graph additions** (`server/augment.ts`, at boot and every 12 h): Congress members,
 Wikidata leaders and governors, conflicts and elections are inserted as entities and

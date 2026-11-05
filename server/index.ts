@@ -14,7 +14,7 @@ import {
   fxBoard, fxFor, commodityBoard, policyRates, policyRateHistory, tenYearYields, tenYearHistory, yieldCurve, curveAvailable, imfIndicator, imfCountry, imfEdition, IMF_INDICATORS,
   fedOutlook, analystConsensus, spark, windowChanges, currencyUsers, EURO_AREA, isStale,
 } from './markets.js';
-import { startLiveData, liveStatus } from './augment.js';
+import { startLiveData, liveStatus, sidesSummary, type SideView } from './augment.js';
 import { INTENSITY } from './worldEvents.js';
 import { PRODUCTS, productByHs } from '../shared/products.js';
 import { HOST, PORT } from './config.js';
@@ -274,6 +274,50 @@ api.get('/map/layer/:layer', wrap(async (req, res) => {
     return res.json({ kind: 'ordinal', label: 'Armed conflicts — most intense conflict on each country’s territory', categories: (Object.keys(INTENSITY) as (keyof typeof INTENSITY)[]).map((k) => ({ key: k, label: `${INTENSITY[k].label} (${INTENSITY[k].deaths.replace(' in the current or previous year', '').replace(' in the current and previous year', '')})` })),
       values, detail, sourceIds: ['wikipedia-conflicts'], note: 'Deaths per year, as tabulated in Wikipedia’s List of ongoing armed conflicts (citing ACLED, UCDP and others). Shading marks where fighting takes place, not which states are parties.', fetchedAt: liveStatus.conflicts?.at });
   }
+  if (layer === 'conflicts:parties') {
+    // States fighting in ongoing wars (wherever the fighting is), by the deadliest war they fight in.
+    const values: Record<string, string> = {}; const detail: Record<string, string[]> = {}; const rank: Record<string, number> = {};
+    // Long-running conflicts are left out: their infobox sides span decades of history.
+    for (const e of listByType('event').filter((x) => isOngoingConflict(x) && !x.attrs?.longRunning && (x.attrs?.sides || []).length >= 2)) {
+      for (const s of sidesView(e)) for (const p of s.participants) {
+        if (p.type !== 'country' || p.former) continue;
+        const iso = countryIso(p.id); if (!iso) continue;
+        const r = p.role === 'main' ? rankOf(e) : 0;
+        (detail[iso] ||= []).push(`${e.name} (side ${s.letter}${p.role === 'main' ? '' : `, ${(p.roleLabel || 'supporting').toLowerCase()}`})`);
+        if (p.role === 'main' && (rank[iso] == null || r > rank[iso])) { rank[iso] = r; values[iso] = e.attrs!.intensity; }
+        else if (p.role !== 'main' && rank[iso] == null) values[iso] = 'supporter';
+      }
+    }
+    if (!Object.keys(values).length) return res.status(503).json({ error: liveStatus['war-sides']?.ok === false ? `War sides unavailable: ${liveStatus['war-sides'].detail}` : 'War sides are still loading (they are read from each war’s Wikipedia article) — try again in a minute.' });
+    return res.json({ kind: 'ordinal', label: 'Countries fighting in wars — deadliest war each fights in, wherever it is fought',
+      categories: [...(Object.keys(INTENSITY) as (keyof typeof INTENSITY)[]).map((k) => ({ key: k, label: `Fighting in a ${INTENSITY[k].label.toLowerCase()}` })), { key: 'supporter', label: 'Supporting a side, or otherwise involved (not fighting)' }],
+      values, detail: Object.fromEntries(Object.entries(detail).map(([k, v]) => [k, [...new Set(v)].slice(0, 4).join(' · ')])), sourceIds: ['wikipedia-conflicts'],
+      note: 'Belligerents as listed in each war’s Wikipedia infobox. Non-state armed groups are not on the map — open a war to see them.', fetchedAt: liveStatus['war-sides']?.at });
+  }
+  if (layer === 'war' || layer.startsWith('war:')) {
+    let e = layer.startsWith('war:') ? getEntity(layer.slice(4)) : undefined;
+    if (!e) {
+      // Default: the deadliest war with the most states taking part (e.g. the 2026 Iran war).
+      const countries = (x: Entity) => sidesView(x).flatMap((s) => s.participants).filter((p) => p.type === 'country' && p.role === 'main' && !p.former).length;
+      e = listByType('event').filter((x) => isOngoingConflict(x) && (x.attrs?.sides || []).length >= 2).sort((a, b) => rankOf(b) - rankOf(a) || countries(b) - countries(a))[0];
+    }
+    if (!e || (e.attrs?.sides || []).length < 2) return res.status(503).json({ error: 'War sides are still loading — try again in a minute.' });
+    const sides = sidesView(e);
+    const values: Record<string, string> = {}; const detail: Record<string, string> = {};
+    for (const s of sides) for (const p of s.participants) {
+      if (p.type !== 'country' || p.former) continue;
+      const iso = countryIso(p.id); if (!iso) continue;
+      const key = p.role === 'main' ? `s${s.index}` : `s${s.index}-support`;
+      if (values[iso] && !values[iso].includes('-support')) continue;
+      values[iso] = key; detail[iso] = `Side ${s.letter}${p.role === 'main' ? '' : ` — ${p.roleLabel || 'supporting'}`}${p.note ? ` (${p.note})` : ''}`;
+    }
+    for (const r of relsOfType(e.id, 'affects', 'out')) { const iso = countryIso(r.to); if (iso && !values[iso]) { values[iso] = 'location'; detail[iso] = 'Fighting takes place here'; } }
+    const lead = (s: (typeof sides)[number]) => s.participants.filter((p) => p.role === 'main' && !p.former && p.depth === 1).slice(0, 3).map((p) => p.name).join(', ') || s.participants[0]?.name;
+    const categories = sides.flatMap((s) => [{ key: `s${s.index}`, label: `Side ${s.letter}: ${lead(s)}` }, { key: `s${s.index}-support`, label: `Side ${s.letter}: supporting / other involvement` }]);
+    categories.push({ key: 'location', label: 'Fighting here, not a listed party' });
+    return res.json({ kind: 'categorical', label: `${e.name} — sides`, categories, values, detail, warId: e.id, sourceIds: ['wikipedia-conflicts'],
+      note: `States only; armed groups on each side are listed on the war’s page. Sides as given in the Wikipedia infobox of “${e.attrs?.sidesTitle || e.name}”.` });
+  }
   if (layer.startsWith('fx:')) {
     const win = layer.slice(3) as 'm1' | 'ytd' | 'y1' | 'y5';
     if (!['m1', 'ytd', 'y1', 'y5'].includes(win)) return res.status(404).json({ error: 'Unknown window' });
@@ -430,15 +474,73 @@ api.get('/trade/product/:hs', wrap(async (req, res) => {
   res.json({ hs: r.data.hs, product: productByHs(r.data.hs) || null, flow, year: r.data.year, reporters: r.data.reporters, total, rows: rows.slice(0, 25), fetchedAt: r.fetchedAt, stale: r.stale, sourceId: 'un-comtrade' });
 }));
 
-const conflictView = (e: Entity) => ({ ...stub(e.id)!, intensity: e.attrs?.intensity, intensityLabel: INTENSITY[e.attrs?.intensity as keyof typeof INTENSITY]?.label, startYear: e.attrs?.startYear, url: e.attrs?.url, yearly: e.attrs?.yearly || [], status: e.attrs?.status,
-  locations: relsOfType(e.id, 'affects', 'out').map((r) => stub(r.to)).filter(Boolean) });
+// ───────────── Wars & conflicts ─────────────
+const isOngoingConflict = (e?: Entity) => !!e && e.type === 'event' && e.attrs?.category === 'conflict' && e.attrs?.status === 'ongoing';
+const rankOf = (e: Entity) => INTENSITY[e.attrs?.intensity as keyof typeof INTENSITY]?.rank || 0;
+/** Sides with names and flags resolved; states first within each side. */
+function sidesView(e: Entity) {
+  return ((e.attrs?.sides || []) as SideView[]).map((s) => ({
+    letter: s.letter, index: s.index,
+    participants: s.participants.map((p) => { const st = stub(p.id); return { id: p.id, name: st?.name || p.name, type: st?.type || 'group', flag: st?.flag, role: p.role, roleLabel: p.roleLabel, depth: p.depth, former: p.former, note: p.note }; }),
+  }));
+}
+/** A war between states: at least two sides each have a current, main state belligerent that is not
+ *  also listed on another side (rival authorities of one country, e.g. Somalia/Somaliland, don't count). */
+const isInterstate = (sides: ReturnType<typeof sidesView>) => {
+  const sets = sides.map((s) => new Set(s.participants.filter((p) => p.type === 'country' && p.role === 'main' && !p.former).map((p) => p.id)));
+  return sets.filter((set, i) => [...set].some((id) => !sets.some((other, j) => j !== i && other.has(id)))).length >= 2;
+};
+const conflictView = (e: Entity) => {
+  const sides = sidesView(e);
+  return {
+    ...stub(e.id)!, kind: e.attrs?.kind || 'listed', parentId: e.parentId, intensity: e.attrs?.intensity, intensityLabel: INTENSITY[e.attrs?.intensity as keyof typeof INTENSITY]?.label,
+    startYear: e.attrs?.startYear, startDate: e.attrs?.startDate, statusText: e.attrs?.statusText, url: e.attrs?.url, sidesUrl: e.attrs?.sidesUrl, yearly: e.attrs?.yearly || [], status: e.attrs?.status,
+    sides, summaryLine: sides.length >= 2 ? sidesSummary(e.attrs!.sides) : null, interstate: isInterstate(sides), longRunning: !!e.attrs?.longRunning,
+    locations: relsOfType(e.id, 'affects', 'out').map((r) => stub(r.to)).filter(Boolean),
+  };
+};
+const theatresOf = (id: string) => listByType('event').filter((t) => t.parentId === id && t.attrs?.kind === 'theatre' && isOngoingConflict(t));
+
 api.get('/conflicts', (_req, res) => {
-  const list = listByType('event').filter((e) => e.attrs?.category === 'conflict' && e.attrs?.status === 'ongoing').map(conflictView)
-    .sort((a: any, b: any) => (INTENSITY[b.intensity as keyof typeof INTENSITY]?.rank || 0) - (INTENSITY[a.intensity as keyof typeof INTENSITY]?.rank || 0) || (b.yearly.at(-1)?.deaths || 0) - (a.yearly.at(-1)?.deaths || 0));
-  res.json({ conflicts: list, status: liveStatus.conflicts || null, sourceId: 'wikipedia-conflicts' });
+  const listed = listByType('event').filter((e) => isOngoingConflict(e) && e.attrs?.kind !== 'theatre')
+    .sort((a, b) => rankOf(b) - rankOf(a) || ((b.attrs?.yearly?.at(-1)?.deaths || 0) - (a.attrs?.yearly?.at(-1)?.deaths || 0)));
+  // Within each listed conflict: recent wars between states first, long-running background conflicts last.
+  const order = (a: ReturnType<typeof conflictView>, b: ReturnType<typeof conflictView>) =>
+    Number(a.longRunning) - Number(b.longRunning) || Number(b.interstate) - Number(a.interstate) || String(b.startDate || b.startYear || '').localeCompare(String(a.startDate || a.startYear || ''));
+  const conflicts = listed.map((e) => ({ ...conflictView(e), theatres: theatresOf(e.id).map(conflictView).sort(order) }));
+  // Headline wars first: deadliest, then actual wars (not "crisis"/"conflict" pages), then the most states fighting.
+  const states = (c: ReturnType<typeof conflictView>) => new Set(c.sides.flatMap((s) => s.participants.filter((p) => p.type === 'country' && p.role === 'main' && !p.former).map((p) => p.id)));
+  const isWar = (c: ReturnType<typeof conflictView>) => /\b(war|invasion|offensive)\b/i.test(c.name);
+  const seenSides = new Set<string>();
+  const interstate = conflicts.flatMap((c) => [c, ...c.theatres]).filter((c) => c.interstate && !c.longRunning)
+    .sort((a, b) => (INTENSITY[b.intensity as keyof typeof INTENSITY]?.rank || 0) - (INTENSITY[a.intensity as keyof typeof INTENSITY]?.rank || 0)
+      || Number(isWar(b)) - Number(isWar(a)) || states(b).size - states(a).size || Number(!!b.startDate) - Number(!!a.startDate)
+      || String(b.startDate || b.startYear || '').localeCompare(String(a.startDate || a.startYear || '')))
+    // The same war listed twice (a conflict row and its current phase) shows once.
+    .filter((c) => { const k = c.sides.map((s) => s.participants.filter((p) => p.type === 'country' && p.role === 'main' && !p.former).map((p) => p.id).sort().join('+')).sort().join('|'); if (seenSides.has(k)) return false; seenSides.add(k); return true; });
+  res.json({ conflicts, interstate, status: liveStatus.conflicts || null, sidesStatus: liveStatus['war-sides'] || null, sourceId: 'wikipedia-conflicts' });
 });
+
+api.get('/conflicts/view/:id', (req, res) => {
+  const e = getEntity(req.params.id);
+  if (!e || e.attrs?.category !== 'conflict') return res.status(404).json({ error: 'Not a conflict' });
+  res.json(conflictView(e));
+});
+
+/** Every ongoing war touching an entity: fought on its territory, or fought by it (and on which side). */
 api.get('/conflicts/for/:id', (req, res) => {
-  res.json(relsOfType(req.params.id, 'affects', 'in').map((r) => getEntity(r.from)!).filter((e) => e?.attrs?.category === 'conflict' && e.attrs?.status === 'ongoing').map(conflictView));
+  const out = new Map<string, any>();
+  for (const r of relsOfType(req.params.id, 'affects', 'in')) { const e = getEntity(r.from); if (isOngoingConflict(e)) out.set(e!.id, { ...conflictView(e!), onTerritory: true }); }
+  for (const r of relsOfType(req.params.id, 'fights_in', 'out')) {
+    const e = getEntity(r.to); if (!isOngoingConflict(e)) continue;
+    const v = out.get(e!.id) || conflictView(e!);
+    const side = v.sides.find((s: any) => s.participants.some((p: any) => p.id === req.params.id));
+    const me = side?.participants.find((p: any) => p.id === req.params.id);
+    out.set(e!.id, { ...v, involvement: { side: side?.letter, role: me?.role, roleLabel: me?.roleLabel, former: me?.former,
+      allies: side?.participants.filter((p: any) => p.id !== req.params.id && p.role === 'main' && !p.former && p.depth === 1).map((p: any) => p.name).slice(0, 5),
+      opponents: v.sides.filter((s: any) => s !== side).map((s: any) => s.participants.filter((p: any) => p.role === 'main' && !p.former && p.depth === 1).map((p: any) => p.name).slice(0, 4).join(', ')).filter(Boolean) } });
+  }
+  res.json([...out.values()].sort((a, b) => Number(!!b.involvement && !b.involvement.former) - Number(!!a.involvement && !a.involvement.former) || (INTENSITY[b.intensity as keyof typeof INTENSITY]?.rank || 0) - (INTENSITY[a.intensity as keyof typeof INTENSITY]?.rank || 0)));
 });
 api.get('/live/status', (_req, res) => res.json(liveStatus));
 

@@ -116,6 +116,12 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
   shows a leader took office after the June 2026 curated check, the old term is closed and
   the profile flagged — e.g. Andy Burnham replacing Keir Starmer as UK Prime Minister
   (July 2026). Other disagreements appear as "verify" notes rather than being resolved silently.
+- **Wars & factions**: every war inside Wikipedia's conflict list gets its own entry with its
+  **sides** — states, armed groups, supporters and former participants — read from that war's
+  own Wikipedia article (~135 wars, ~1,300 armed groups). A "wars between states" headline view
+  (e.g. United States, Israel & allies vs Iran & the Axis of Resistance; Russia vs Ukraine),
+  each country's involvement on its profile (which side, with whom, against whom), armed-group
+  profiles, and two map views: *who is fighting* (by deadliest war) and *sides in one war*.
 - **Markets page** (commodities, currencies, rates & yield curves) and **Conflicts page**.
 - **Curated dataset** (`server/data/curated.ts`): 10 deeply curated countries, 61 with
   government type, 12 IGOs, 18 parties, 57 people, ~115 companies across the US, Europe,
@@ -188,6 +194,11 @@ data/            runtime: SQLite DB, provider cache, uploads (git-ignored)
   and live trade instead). Uranium and coal futures trade thinly; quotes older than 10 days
   show the price and date only. Daily yield curves cover US, euro area, UK, Japan, Canada;
   ~30 more countries have monthly 10-year yields; ~40 central banks report policy rates.
+- War sides come from Wikipedia infoboxes, which editors change often and format in many ways.
+  The parser handles the common forms (and `npm run check:live` flags new junk), but a side can
+  occasionally be incomplete or include a heading as a participant. Long-running conflicts list
+  their whole history. Non-state groups are profiles, not map shapes. The first start-up takes
+  1–3 minutes to read the wars (Wikipedia rate limits); results are cached for 24 hours.
 - UN Comtrade's free API is rate-limited: a product's first load takes ~10 s, then it is
   cached for a week. Recent years are incomplete until countries report.
 - Auth is local email/password (scrypt, httpOnly cookie). For cloud deployment move to

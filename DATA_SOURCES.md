@@ -36,6 +36,7 @@ Missing values are shown as "—" or "no data", never as 0.
 | Members of Congress | `unitedstates/congress-legislators` | 24 h | Public domain (CC0) |
 | Heads of state/government, US governors, their parties | Wikidata | 24 h | CC0 |
 | Ongoing wars and conflicts, deaths by year | Wikipedia "List of ongoing armed conflicts" (which cites ACLED and UCDP) | 12 h | CC BY-SA 4.0 |
+| Sides of each war (states, armed groups, supporters, former participants) and the wars inside each listed conflict | The "Belligerents" box of each war's own Wikipedia article (~200 articles, read 20 per request) | 24 h | CC BY-SA 4.0 |
 | National elections (this year and next) | Wikipedia "national electoral calendar" pages | 12 h | CC BY-SA 4.0 |
 | Country names, codes, capitals, currencies, borders | `world-countries` package | Fixed (updates with the package) | ODbL 1.0 |
 | Map shapes | Natural Earth (`world-atlas`), US Census (`us-atlas`) | Fixed | Public domain |
@@ -60,10 +61,24 @@ The full list with links is in the app (every profile has a **Sources** section)
 
   Separately, every 12 hours (and at start-up):
      Congress list · Wikidata leaders · Wikipedia conflicts · Wikipedia elections
+     · each war's Wikipedia article (sides, status, start date)
             │
             ▼
      Added to the app's knowledge graph, replacing the previous batch
 ```
+
+**Wars and their sides.** Wikipedia's conflict list groups wars into rows (the 2026 Iran war
+sits inside the "Arab–Israeli/Iran–Israel proxy wars" row). For every war linked in a row, the
+app reads that war's own article and its "Belligerents" box: who fights on each side, who only
+supports, and who has left ("until 2024", "2006–2009"). Any linked war that its own article
+calls ongoing becomes a separate entry with its sides, inherits the row's death-toll band, and
+is listed under it. Countries become links to their profiles; non-state forces (Hezbollah, the
+RSF, the Houthis…) become **armed group** profiles. Conflicts older than 15 years whose
+article covers their whole history are marked *long-running*, because their sides can include
+states and groups that no longer fight; they are kept out of "wars between states" and the
+"who is fighting" map. Wikipedia only allows a few hundred anonymous requests an hour, so
+articles are fetched 20 at a time through one polite queue; a failed refresh is retried after
+5 minutes and the last good copy stays in use meanwhile.
 
 **Leaders: live data vs. the hand-checked list.** When Wikidata says a different person took
 office *after* the June 2026 check, the app trusts the newer record: it closes the old term,

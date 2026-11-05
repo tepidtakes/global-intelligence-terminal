@@ -8,7 +8,8 @@
 import { cached, fetchJson } from './cache.js';
 import { entities, getEntity, upsertEntity, setLiveRels, findPerson, relsOfType, normName } from './graph.js';
 import { AS_OF } from './data/curated.js';
-import { conflicts, electionCalendar, INTENSITY } from './worldEvents.js';
+import { conflicts, electionCalendar, warInfos, INTENSITY, type ConflictRow, type Participant, type WarInfo } from './worldEvents.js';
+import { countryIdByName } from './graph.js';
 import type { Entity, Fact, Relationship } from '../shared/types.js';
 import { USER_AGENT } from './config.js';
 
@@ -218,9 +219,113 @@ async function loadConflicts() {
     } as Entity);
     for (const l of c.locations) if (l.id) rels.push({ from: id, to: l.id, type: 'affects', role: 'Location of fighting', sourceId: 'wikipedia-conflicts' });
   }
-  for (const e of entities.values()) if (e.id.startsWith('event:conflict-') && e.attrs?.status === 'ongoing' && !seen.has(e.id)) e.attrs = { ...e.attrs, status: 'no longer listed' };
+  for (const e of entities.values()) if (e.id.startsWith('event:conflict-') && e.attrs?.kind !== 'theatre' && e.attrs?.status === 'ongoing' && !seen.has(e.id)) e.attrs = { ...e.attrs, status: 'no longer listed' };
   setLiveRels('wp-conflicts', rels);
   return `${seen.size} conflicts`;
+}
+
+// ───────────────────────── War sides & theatres ─────────────────────────
+// Each row of the conflict list links to the wars inside it (the "2026 Iran war" sits under
+// the "Arab–Israeli/Iran–Israel proxy wars" row). Every linked article's infobox is read:
+// the row's own article gives the umbrella's sides; any other linked war that its own
+// infobox calls ongoing becomes a theatre with its own sides.
+export interface SideView { index: number; letter: string; participants: (Omit<Participant, 'link' | 'flag' | 'iso3'> & { id: string })[] }
+const LETTERS = ['A', 'B', 'C', 'D', 'E'];
+
+function participantId(p: Participant, newGroups: Map<string, Entity>, war: WarInfo) {
+  const countryId = (p.iso3 && getEntity(`country:${p.iso3}`) ? `country:${p.iso3}` : undefined) || countryIdByName(p.link || p.name) || (p.flag ? countryIdByName(p.flag) : undefined);
+  if (countryId && getEntity(countryId)) return countryId;
+  const key = (p.link || p.name).replace(/\s*\(.*?\)\s*$/, '');
+  const id = `group:${slugify(key).slice(0, 70)}`;
+  if (!getEntity(id) && !newGroups.has(id)) {
+    const name = p.link && p.link.length <= 70 ? p.link : p.name;
+    newGroups.set(id, {
+      id, type: 'group', name, depth: 'baseline', aliases: p.name !== name ? [p.name] : [],
+      summary: `Armed group, force or organisation listed as a belligerent in ${war.name} on Wikipedia.`,
+      facts: [fct('Listed as a belligerent in', war.name, 'wikipedia-conflicts', 'community')],
+      attrs: { url: `https://en.wikipedia.org/wiki/${encodeURIComponent(key.replace(/ /g, '_'))}`, origin: 'wikipedia' }, sources: ['wikipedia-conflicts'],
+    } as Entity);
+  }
+  return id;
+}
+
+/** Conflicts older than 15 years whose article covers their whole history (not a "(2023–present)"
+ *  phase): their infobox sides can include long-gone states and groups. */
+const isLongRunning = (start: string | undefined, title: string) =>
+  !!start && Number(start.slice(0, 4)) < new Date().getFullYear() - 15 && !/\b(19|20)\d\d\s*[–-]\s*(present|(19|20)\d\d)\b/.test(title);
+
+/** "United States, Israel & 5 more vs Iran & Axis of Resistance" */
+export function sidesSummary(sides: SideView[]) {
+  const name = (s: SideView) => {
+    const main = s.participants.filter((p) => p.role === 'main' && !p.former && p.depth === 1).map((p) => getEntity(p.id)?.name || p.name);
+    const shown = main.slice(0, 2).join(', ');
+    return main.length > 2 ? `${shown} & ${main.length - 2} more` : shown || s.participants[0]?.name || `Side ${s.letter}`;
+  };
+  return sides.slice(0, 3).map(name).join(' vs ');
+}
+
+async function loadWarSides() {
+  const rows = (await conflicts()).data.rows;
+  const umbrellaId = (r: ConflictRow) => `event:conflict-${r.slug}`;
+  // Which articles to read; a war linked from several rows belongs to the deadliest one.
+  const want = new Map<string, ConflictRow>();
+  for (const row of [...rows].sort((a, b) => INTENSITY[b.intensity].rank - INTENSITY[a.intensity].rank)) {
+    // Shallow entries first: "** 2026 Iran war" outranks "***** a raid within it".
+    const links = row.theatreLinks.filter((l) => l.depth <= 4).sort((a, b) => a.depth - b.depth).slice(0, 30);
+    for (const l of links) if (!want.has(l.article)) want.set(l.article, row);
+  }
+  const { infos, failed, errors } = await warInfos([...want.keys()]);
+  if (failed) console.warn(`[live] war sides: ${failed} articles failed, e.g. ${errors[0]}`);
+  const rels: NewRel[] = []; const newGroups = new Map<string, Entity>(); const done = new Set<string>(); const linked = new Set<string>();
+  let theatres = 0, umbrellas = 0;
+  const umbrellaIds = new Set(rows.map(umbrellaId));
+  for (const [article, w] of infos) {
+    const row = want.get(article)!;
+    if (w.sides.length < 2 || !w.ongoing) continue;
+    const isUmbrella = article === row.article;
+    const id = isUmbrella ? umbrellaId(row) : `event:conflict-${slugify(w.title).slice(0, 80)}`;
+    if (done.has(id) || (!isUmbrella && umbrellaIds.has(id))) continue;
+    done.add(id);
+    const sides: SideView[] = w.sides.map((s) => ({
+      index: s.index, letter: LETTERS[s.index - 1] || String(s.index),
+      participants: s.participants.map(({ link, flag, iso3, ...p }) => ({ ...p, id: participantId({ ...p, link, flag, iso3 }, newGroups, w) })),
+    }));
+    for (const g of newGroups.values()) upsertEntity(g);
+    newGroups.clear();
+    for (const s of sides) for (const p of s.participants) {
+      if (linked.has(`${p.id}>${id}`)) continue;
+      linked.add(`${p.id}>${id}`);
+      rels.push({ from: p.id, to: id, type: 'fights_in', role: `Side ${s.letter}`, rank: s.index,
+        note: [p.role === 'support' ? 'Supporting' : p.role === 'other' ? p.roleLabel : undefined, p.former ? 'Former participant' : undefined, p.note].filter(Boolean).join(' · ') || undefined, sourceId: 'wikipedia-conflicts' });
+    }
+    const summary = sidesSummary(sides);
+    if (isUmbrella) {
+      const e = getEntity(id); if (!e) continue;
+      e.attrs = { ...(e.attrs || {}), sides, sidesTitle: w.title, sidesUrl: w.url, longRunning: isLongRunning(row.start || w.start, w.title) };
+      umbrellas++;
+      continue;
+    }
+    const parent = getEntity(umbrellaId(row));
+    for (const place of w.places) { const c = countryIdByName(place); if (c && getEntity(c)) rels.push({ from: id, to: c, type: 'affects', role: 'Location of fighting', sourceId: 'wikipedia-conflicts' }); }
+    upsertEntity({
+      id, type: 'event', name: w.name || w.title, depth: 'baseline', parentId: parent ? parent.id : undefined,
+      aliases: w.title !== w.name ? [w.title] : [],
+      summary: `${summary}. Part of ${parent?.name || row.name}, which Wikipedia lists as a ${INTENSITY[row.intensity].label.toLowerCase()} (${INTENSITY[row.intensity].deaths})${w.start ? `. Began ${w.start.length === 10 ? fmtDay(w.start) : w.start}` : ''}.`,
+      facts: [
+        fct('Sides', summary, 'wikipedia-conflicts', 'community'),
+        fct('Status', w.status || 'Ongoing', 'wikipedia-conflicts', 'community'),
+        ...(w.start ? [fct('Began', w.start, 'wikipedia-conflicts', 'community')] : []),
+        fct('Part of', parent?.name || row.name, 'wikipedia-conflicts', 'community'),
+      ],
+      attrs: { category: 'conflict', status: 'ongoing', kind: 'theatre', intensity: row.intensity, date: w.start?.slice(0, 4), startYear: w.start?.slice(0, 4), startDate: w.start, statusText: w.status,
+        url: w.url, sides, parentConflict: parent?.id, longRunning: isLongRunning(w.start, w.title), origin: 'wikipedia' },
+      sources: ['wikipedia-conflicts'],
+    } as Entity);
+    theatres++;
+  }
+  for (const e of entities.values()) if (e.attrs?.kind === 'theatre' && e.attrs?.status === 'ongoing' && !done.has(e.id)) e.attrs = { ...e.attrs, status: 'no longer listed' };
+  setLiveRels('wp-war-sides', rels);
+  return `${theatres} wars inside ${umbrellas} listed conflicts given sides; ${[...entities.values()].filter((e) => e.type === 'group').length} armed groups; ${infos.size} infoboxes read${failed ? `, ${failed} failed` : ''}`;
 }
 
 // ───────────────────────── Elections ─────────────────────────
@@ -260,12 +365,14 @@ let running: Promise<void> | null = null;
 export function refreshLiveData() {
   if (running) return running;
   running = (async () => {
-    const steps: [string, () => Promise<string>][] = [['congress', loadCongress], ['leaders', loadLeaders], ['conflicts', loadConflicts], ['elections', loadElections]];
+    const steps: [string, () => Promise<string>][] = [['congress', loadCongress], ['leaders', loadLeaders], ['conflicts', loadConflicts], ['elections', loadElections], ['war-sides', loadWarSides]];
     for (const [name, fn] of steps) {
       try { liveStatus[name] = { ok: true, at: new Date().toISOString(), detail: await fn() }; }
       catch (e: any) { liveStatus[name] = { ok: false, at: new Date().toISOString(), detail: e.message }; console.warn(`[live] ${name} failed: ${e.message}`); }
     }
     console.log(`[live] ${Object.entries(liveStatus).map(([k, v]) => `${k}: ${v.ok ? v.detail : 'FAILED'}`).join(' · ')}`);
+    // A source that failed (network blip, rate limit) is tried again in 5 minutes, not 12 hours.
+    if (Object.values(liveStatus).some((s) => !s.ok)) setTimeout(() => { void refreshLiveData(); }, 5 * 60_000).unref();
   })().finally(() => { running = null; });
   return running;
 }

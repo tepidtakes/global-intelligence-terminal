@@ -49,8 +49,13 @@ export const LAYERS: LayerDef[] = [
     color: { kind: 'categories', colors: { presidential: ['#2a78d6', '#3987e5'], parliamentary: ['#1baf7a', '#199e70'], monarchy: ['#6250d6', '#9085e9'], 'one-party': ['#c8312d', '#e66767'] } } },
   { id: 'igo', label: 'Organization membership', group: 'politics', hint: 'NATO, EU, OPEC, BRICS, G7… — up to three at once, by year.', keywords: 'nato eu opec brics g20 alliance', color: { kind: 'auto' } },
   // Security
-  { id: 'conflicts', label: 'Armed conflicts', group: 'security', live: true, hint: 'Where fighting is taking place, shaded by the deadliest conflict on each country’s territory.', keywords: 'war fighting military',
-    color: { kind: 'categories', colors: { 'major-war': ['#7a1410', '#ff6a55'], 'minor-war': ['#c8312d', '#b23a28'], conflict: ['#ec835a', '#7a3a24'], skirmish: ['#f6c39f', '#4a2f26'] } } },
+  { id: 'conflicts', label: 'Wars & armed conflicts', group: 'security', live: true, hint: '“Where”: countries where fighting takes place. “Who”: countries fighting in a war, wherever it is fought. Shaded by the deadliest war.', keywords: 'war fighting military belligerents',
+    variants: [{ id: 'conflicts', label: 'Where fighting is' }, { id: 'conflicts:parties', label: 'Who is fighting' }],
+    color: { kind: 'categories', colors: { 'major-war': ['#7a1410', '#ff6a55'], 'minor-war': ['#c8312d', '#b23a28'], conflict: ['#ec835a', '#7a3a24'], skirmish: ['#f6c39f', '#4a2f26'], supporter: ['#e9c46a', '#8a6a1c'] } } },
+  { id: 'war', label: 'Sides in one war', group: 'security', live: true, hint: 'Pick a war to see which countries fight on each side (e.g. United States & Israel vs Iran). Lighter shades = supporting.', keywords: 'belligerents factions alliance iran israel ukraine russia sudan',
+    color: { kind: 'categories', colors: {
+      s1: ['#2a78d6', '#5598e7'], 's1-support': ['#a9cbf3', '#1f4a7c'], s2: ['#e0621f', '#f08a4b'], 's2-support': ['#f6c3a1', '#7a3a18'],
+      s3: ['#6250d6', '#9085e9'], 's3-support': ['#c9c1f3', '#3b3280'], s4: ['#1b8a6b', '#3fbf8e'], 's4-support': ['#a8dcc8', '#1d5a46'], location: ['#d8d2bf', '#4a4840'] } } },
   // Economy & people
   { id: 'wb:NY.GDP.PCAP.CD', label: 'GDP per capita', group: 'economy', yearable: true, hint: 'Income per person. Green = richer, red = poorer.', keywords: 'income wealth living standard',
     variants: [{ id: 'wb:NY.GDP.PCAP.CD', label: 'US$' }, { id: 'wb:NY.GDP.PCAP.PP.CD', label: 'PPP' }], color: { kind: 'better', dir: 'high' } },
@@ -106,6 +111,7 @@ export function layerDefFor(fill: string) {
   if (fill.startsWith('trade:')) return LAYERS.find((l) => l.id === 'trade')!;
   if (fill.startsWith('fx:')) return LAYERS.find((l) => l.id === 'fx')!;
   if (fill.startsWith('imf:')) return LAYERS.find((l) => l.id === fill.split(':').slice(0, 2).join(':'));
+  if (fill === 'war' || fill.startsWith('war:')) return LAYERS.find((l) => l.id === 'war')!;
   return LAYERS.find((l) => l.id === fill || l.variants?.some((v) => v.id === fill));
 }
 /** The concrete layer id to load when a layer is picked from the list. */
@@ -186,7 +192,7 @@ export function colorize(data: LayerData | undefined, pal: Palette, classify: 'q
   if (!data) return { colors: {} };
   const colors: Record<string, string> = {};
   const rule: ColorRule = def?.color || (data.scale === 'diverging' ? { kind: 'signed', good: 'positive' } : { kind: 'magnitude', hue: 'blue' });
-  const noData = { color: pal.nodata, label: data.kind === 'numeric' ? 'No data (not zero)' : /Government/.test(data.label) ? 'Not yet classified' : /membership/.test(data.label) ? 'Not a member' : /exposure/.test(data.label) ? 'No exposure' : /conflict/i.test(data.label) ? 'No conflict listed' : /election/i.test(data.label) ? 'None scheduled / not listed' : 'No data / not listed' };
+  const noData = { color: pal.nodata, label: data.kind === 'numeric' ? 'No data (not zero)' : def?.id === 'war' ? 'Not a listed party' : fill === 'conflicts:parties' ? 'Not fighting in a listed war' : /Government/.test(data.label) ? 'Not yet classified' : /membership/.test(data.label) ? 'Not a member' : /exposure/.test(data.label) ? 'No exposure' : /conflict/i.test(data.label) ? 'No conflict listed' : /election/i.test(data.label) ? 'None scheduled / not listed' : 'No data / not listed' };
 
   if (data.kind === 'numeric') {
     const entries = Object.entries(data.values as Record<string, { value: number; period: string }>);
@@ -246,7 +252,7 @@ export function colorize(data: LayerData | undefined, pal: Palette, classify: 'q
   for (const [iso, k] of Object.entries(data.values as Record<string, string>)) if (map[k]) colors[iso] = map[k];
   const rows = cats.filter((c) => Object.values(data.values).includes(c.key) || data.kind === 'ordinal').map((c) => ({ color: map[c.key], label: c.label }));
   const more = pal.dark ? 'Brighter' : 'Darker';
-  const hint = def?.id === 'conflicts' ? `${more} red = deadlier` : def?.id === 'income' ? 'Green = higher income · red = lower' : def?.id === 'elections' ? 'Amber = election coming up' : def?.id === 'commodity' ? `${more} = bigger producer` : undefined;
+  const hint = def?.id === 'war' ? 'Each colour is one side · lighter = supporting · neutral = fighting here only' : def?.id === 'conflicts' ? `${more} red = deadlier` : def?.id === 'income' ? 'Green = higher income · red = lower' : def?.id === 'elections' ? 'Amber = election coming up' : def?.id === 'commodity' ? `${more} = bigger producer` : undefined;
   return { colors, legend: { title: data.label, hint, rows: [...rows, noData], note: data.note, sourceIds: data.sourceIds } };
 }
 
