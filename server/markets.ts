@@ -9,6 +9,7 @@
 //   Forecasts ................ IMF World Economic Outlook (DataMapper); FOMC Summary of
 //                              Economic Projections (via FRED); fed funds futures (CBOT, delayed)
 //   Analyst consensus ........ Yahoo Finance quoteSummary (broker estimates, delayed)
+import { netFetch } from './net.js';
 import { cached, fetchJson, fetchText } from './cache.js';
 import { entities, getEntity } from './graph.js';
 import { usTreasuryCurve, minorUnitFactor } from './providers.js';
@@ -508,9 +509,9 @@ export async function fedOutlook() {
 let crumb: { cookie: string; crumb: string; at: number } | null = null;
 async function yahooSession(force = false) {
   if (crumb && !force && Date.now() - crumb.at < 6 * 3600_000) return crumb;
-  const r1 = await fetch('https://fc.yahoo.com', { headers: BROWSER_UA, redirect: 'manual', signal: AbortSignal.timeout(15000) }).catch(() => null);
+  const r1 = await netFetch('https://fc.yahoo.com', { headers: BROWSER_UA, redirect: 'manual', timeoutMs: 15000 }).catch(() => null);
   const cookie = (r1?.headers.getSetCookie?.() || []).map((c) => c.split(';')[0]).join('; ');
-  const r2 = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', { headers: { ...BROWSER_UA, cookie }, signal: AbortSignal.timeout(15000) });
+  const r2 = await netFetch('https://query1.finance.yahoo.com/v1/test/getcrumb', { headers: { ...BROWSER_UA, cookie }, timeoutMs: 15000 });
   const c = (await r2.text()).trim();
   if (!r2.ok || !c || c.length > 40 || /</.test(c)) throw new Error('Could not open a Yahoo Finance session');
   crumb = { cookie, crumb: c, at: Date.now() };
@@ -523,7 +524,7 @@ export async function analystConsensus(symbol: string) {
     let json: any;
     for (let attempt = 0; attempt < 2; attempt++) {
       const s = await yahooSession(attempt > 0);
-      const res = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData,earningsTrend,recommendationTrend,price&crumb=${encodeURIComponent(s.crumb)}`, { headers: { ...BROWSER_UA, cookie: s.cookie }, signal: AbortSignal.timeout(20000) });
+      const res = await netFetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData,earningsTrend,recommendationTrend,price&crumb=${encodeURIComponent(s.crumb)}`, { headers: { ...BROWSER_UA, cookie: s.cookie }, timeoutMs: 20000 });
       json = await res.json().catch(() => null);
       if (res.status !== 401) break;
     }

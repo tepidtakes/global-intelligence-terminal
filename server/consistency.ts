@@ -29,6 +29,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   'stale-curated': 'Curated facts older than 6 months',
   'leader-ambiguity': 'Live source lists competing officeholders',
   'election-result-conflict': 'Election result differs between sources',
+  'source-figures-conflict': 'World Bank and IMF figures disagree',
   'result-missing': 'Election held, result not recorded',
   'schedule-ending': 'Hand-entered schedule runs out within 90 days',
   'source-disagreement': 'Two sources disagree about a link',
@@ -45,6 +46,10 @@ const monthsAgo = (d: string) => {
 const today = () => new Date().toISOString().slice(0, 10);
 
 let memo: { at: number; issues: Issue[] } | null = null;
+
+// Checks other modules contribute (World Bank vs IMF figures), run with every audit.
+const extraChecks: (() => Issue[])[] = [];
+export function registerAuditCheck(check: () => Issue[]) { extraChecks.push(check); }
 
 export function audit(force = false): Issue[] {
   if (!force && memo && Date.now() - memo.at < 60_000) return memo.issues;
@@ -127,6 +132,7 @@ export function audit(force = false): Issue[] {
   for (const id of [...calendarSourceIds(), ...SANCTIONS_SOURCE_IDS]) if (!sources.has(id)) push({ severity: 'error', category: 'unknown-source', message: `The calendar or sanctions data cites unknown source “${id}”.` });
   for (const w of scheduleWarnings(90)) push({ severity: 'warning', category: 'schedule-ending', entityId: w.entityId, message: w.message });
 
+  for (const check of extraChecks) { try { for (const i of check()) push(i); } catch { /* one failing check must not stop the audit */ } }
   memo = { at: Date.now(), issues };
   return issues;
 }

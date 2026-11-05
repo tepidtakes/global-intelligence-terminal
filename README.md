@@ -84,7 +84,8 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
 (rates, election, prediction-market and mayor parsers on fixtures, offline) ·
 `npm run check:econ` (alerts, calendar, sanctions, tariffs, budgets, reserves and trade
 explorer on fixtures, offline) · `npm run check:web` (the knowledge web: Wikidata loaders,
-corroboration and disputes, trade/sanctions/news links, weights, catalog, connections; offline).
+corroboration and disputes, trade/sanctions/news links, weights, catalog, connections; offline) · `npm run check:quality` (the network gate against local
+HTTP servers: limits, gaps, Retry-After, circuit breaker, readable errors; and the World Bank vs IMF cross-checks; offline).
 
 ## What's in it
 

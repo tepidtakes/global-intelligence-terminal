@@ -6,6 +6,7 @@
 //   • natural-gas storage in Europe — GIE AGSI+ (AGSI_API_KEY, free), % full;
 //   • foreign-exchange and gold reserves — World Bank (IMF IFS), in providers.ts;
 //   • how each major country holds strategic oil reserves — hand-entered from official pages.
+import { netFetch } from './net.js';
 import zlib from 'node:zlib';
 import { Readable } from 'node:stream';
 import { StringDecoder } from 'node:string_decoder';
@@ -55,7 +56,7 @@ export function csvCells(line: string) {
   out.push(cell); return out;
 }
 async function fetchBuffer(url: string, timeoutMs = 120000) {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(timeoutMs) });
+  const res = await netFetch(url, { headers: { 'User-Agent': USER_AGENT }, timeoutMs });
   if (!res.ok) throw new Error(`${res.status} from ${new URL(url).host}`);
   return Buffer.from(await res.arrayBuffer());
 }

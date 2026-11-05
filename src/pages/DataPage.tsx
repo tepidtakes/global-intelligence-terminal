@@ -74,6 +74,8 @@ export function DataPage() {
           </Card>
 
           <WebCard web={data.web} />
+          <NetworkCard hosts={data.net} />
+          <AgreementCard />
           <WatchLoaders data={data} />
 
           <Card title={`Trusted news feeds (${feedsOk}/${news.feeds.length} working)`} id="feeds">
@@ -203,6 +205,71 @@ function WebCard({ web }: { web: any }) {
             <td className="small">{c.provides}<div className="tiny" style={{ color: c.status && !c.status.ok ? 'var(--warn)' : 'var(--muted)' }}>{c.status?.detail}</div></td></tr>
         ))}</tbody></table></div>
       <div className="tiny muted" style={{ marginTop: 6 }}>Largest kinds of link: {topTypes.map(([t, n]) => `${t.replace(/_/g, ' ')} ${n.toLocaleString()}`).join(' · ')}.{web.weights ? ` Economy weights: ${web.weights.source}, ${web.weights.year}.` : ''}</div>
+    </Card>
+  );
+}
+
+// ───────────────────────── Network: one gate per host (server/net.ts) ─────────────────────────
+const NET_STATE: Record<string, [string, string]> = { ok: ['ok', 'ok'], degraded: ['stale', 'recent failures'], open: ['failing', 'skipped'], trial: ['stale', 'due a retest'] };
+function NetworkCard({ hosts }: { hosts?: any[] }) {
+  const [all, setAll] = useState(false);
+  if (!hosts?.length) return null;
+  const skipped = hosts.filter((h) => h.state === 'open');
+  const requests = hosts.reduce((s, h) => s + h.requests, 0), retries = hosts.reduce((s, h) => s + h.retries, 0);
+  const shown = all ? hosts : hosts.slice(0, 12);
+  return (
+    <Card title="Network" id="network">
+      <div className="small muted" style={{ marginBottom: 8 }}>Every request to a data source passes one gate per host: a limit on parallel requests and a pause between them for rate-limited services, retries that honour the host’s Retry-After, and a breaker that skips a host that keeps failing, then tests it again.</div>
+      <div className="kpis" style={{ margin: '0 0 10px' }}>
+        <div className="kpi"><div className="tiny muted">Hosts contacted</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{hosts.length}</div><div className="tiny muted">{requests.toLocaleString()} requests</div></div>
+        <div className="kpi"><div className="tiny muted">Retried</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{retries.toLocaleString()}</div><div className="tiny muted">rate limits, dropped connections</div></div>
+        <div className="kpi"><div className="tiny muted">Skipped now</div><div style={{ fontSize: 18, fontWeight: 600, color: skipped.length ? 'var(--warn)' : undefined }} className="num">{skipped.length}</div><div className="tiny muted">{skipped.length ? skipped.slice(0, 2).map((h) => h.host).join(', ') : 'every host is answering'}</div></div>
+      </div>
+      <div style={{ overflowX: 'auto' }}><table className="data"><thead><tr><th>Host</th><th>State</th><th className="num">Requests</th><th className="num">Average</th><th className="num">Retries</th><th>Last error</th></tr></thead>
+        <tbody>{shown.map((h) => { const [cls, label] = NET_STATE[h.state] || ['', h.state]; return (
+          <tr key={h.host}>
+            <td><strong>{h.host}</strong><div className="tiny muted">{h.policy.concurrency} at a time{h.policy.minGapMs ? `, ${h.policy.minGapMs} ms apart` : ''}{h.active || h.queued ? ` · ${h.active} running, ${h.queued} waiting` : ''}</div></td>
+            <td className="small"><span className={`health ${cls}`} />{label}{h.openUntil ? <div className="tiny muted" title={h.reason}>until {new Date(h.openUntil).toLocaleTimeString()}{h.fastFails ? ` · ${h.fastFails} skipped` : ''}</div> : null}</td>
+            <td className="num">{h.requests.toLocaleString()}{h.failed ? <div className="tiny muted">{h.failed} failed</div> : null}</td>
+            <td className="num">{h.avgMs != null ? `${h.avgMs.toLocaleString()} ms` : '—'}</td>
+            <td className="num">{h.retries || '—'}</td>
+            <td className="small">{h.lastError ? <>{h.lastError}<div className="tiny muted">{ago(h.lastErrorAt)}</div></> : <span className="muted">—</span>}</td>
+          </tr>); })}</tbody></table></div>
+      {hosts.length > 12 && <button className="btn sm" style={{ marginTop: 6 }} onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${hosts.length} hosts`}</button>}
+    </Card>
+  );
+}
+
+// ───────────────────────── Cross-source checks: World Bank vs IMF (server/agreement.ts) ─────────────────────────
+function AgreementCard() {
+  const { data, error } = useApi<any>('/quality/agreement', 300_000);
+  if (error) return <Card title="Cross-source checks" id="agreement"><Unavailable>Cross-source checks unavailable: {error.message}</Unavailable></Card>;
+  if (!data) return null;
+  if (!data.ready) return <Card title="Cross-source checks" id="agreement"><div className="small muted">World Bank and IMF figures are compared a few minutes after the terminal starts.</div></Card>;
+  const t = data.totals; const share = (n: number) => (t.compared ? `${Math.round((n / t.compared) * 100)}%` : '—');
+  const figures = (n: number) => `${n.toLocaleString()} figure${n === 1 ? '' : 's'}`;
+  return (
+    <Card title="Cross-source checks" id="agreement">
+      <div className="small muted" style={{ marginBottom: 8 }}>The World Bank and the IMF publish the same headline figures for nearly every country. Comparing them for the same year catches unit slips, stale or revised numbers and definition gaps. Within the tolerance they agree; up to three times it they differ (usually revisions or methods); beyond that they conflict.</div>
+      <div className="kpis" style={{ margin: '0 0 10px' }}>
+        <div className="kpi"><div className="tiny muted">Figures compared</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{t.compared.toLocaleString()}</div><div className="tiny muted">{t.countries} countries · {ago(data.at)}</div></div>
+        <div className="kpi"><div className="tiny muted">Agree</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{share(t.agree)}</div><div className="tiny muted">{figures(t.agree)}</div></div>
+        <div className="kpi"><div className="tiny muted">Differ</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{share(t.differ)}</div><div className="tiny muted">{figures(t.differ)}</div></div>
+        <div className="kpi"><div className="tiny muted">Conflict</div><div style={{ fontSize: 18, fontWeight: 600, color: t.conflict ? 'var(--warn)' : undefined }} className="num">{t.conflict.toLocaleString()}</div><div className="tiny muted">listed in the audit</div></div>
+      </div>
+      <div style={{ overflowX: 'auto' }}><table className="data"><thead><tr><th>Figure</th><th>Tolerance</th><th className="num">Compared</th><th className="num">Agree</th><th className="num">Differ</th><th className="num">Conflict</th></tr></thead>
+        <tbody>{data.pairs.map((p: any) => (
+          <tr key={p.key}><td><strong>{p.label}</strong>{p.note && <div className="tiny muted">{p.note}</div>}{p.error && <div className="tiny" style={{ color: 'var(--warn)' }}>{p.error}</div>}</td>
+            <td className="small">{p.tolerance}</td><td className="num">{p.compared}</td><td className="num">{p.agree}</td><td className="num">{p.differ}</td><td className="num">{p.conflict}</td></tr>
+        ))}</tbody></table></div>
+      {data.conflicts.length > 0 && <>
+        <h3 style={{ margin: '12px 0 6px' }}>Largest conflicts{data.conflictCount > 15 ? ` (15 of ${data.conflictCount})` : ''}</h3>
+        <div style={{ overflowX: 'auto' }}><table className="data"><thead><tr><th>Country</th><th>Figure</th><th className="num">World Bank</th><th className="num">IMF</th><th>Gap</th></tr></thead>
+          <tbody>{data.conflicts.slice(0, 15).map((c: any) => (
+            <tr key={`${c.iso3}:${c.key}`}><td><Link to={`/entity/${encodeURIComponent(c.id)}`}>{c.country}</Link></td><td className="small">{c.label}, {c.year}</td><td className="num">{c.wbText}</td><td className="num">{c.imfText}</td>
+              <td className="small"><span className={`health ${c.severity === 'warning' ? 'failing' : 'stale'}`} />{c.gapText}<div className="tiny muted">tolerance {c.allowedText}</div></td></tr>
+          ))}</tbody></table></div>
+      </>}
     </Card>
   );
 }

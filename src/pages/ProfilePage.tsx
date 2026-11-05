@@ -14,6 +14,7 @@ import { AlertButton, RecentChanges } from '../components/alertBits';
 import { SanctionsTariffsSection, SanctionsMatchNotice } from './profile/SanctionsSection';
 import { BudgetSection } from './profile/BudgetSection';
 import { ReservesSection, CommodityStocksSection } from './profile/ReservesSection';
+import { AgreementSection } from './profile/AgreementSection';
 import { ConnectionsCard, IndicatorExplorer } from '../components/WebBits';
 import { isTrusted } from '../../shared/newsSources';
 import { TYPE_ICON, fmtUnit, fmtDate, ago } from '../format';
@@ -102,6 +103,7 @@ export function ProfilePage() {
         {(t === 'country' || t === 'state') && <ConflictsSection id={e.id} name={e.name} />}
         {(t === 'country' || t === 'igo' || t === 'institution') && <CalendarSection placeId={e.id} name={e.name} />}
         {t === 'country' && e.iso3 && <MacroSection iso3={e.iso3} />}
+        {t === 'country' && e.iso3 && <AgreementSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <OutlookSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <RatesSection iso3={e.iso3} />}
         {t === 'country' && <CurrencySection e={e} />}

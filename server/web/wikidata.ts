@@ -10,6 +10,7 @@
 //   • listed companies: tickers (→ live quotes), executives, parent companies, industries, head office
 import { cached } from '../cache.js';
 import { USER_AGENT } from '../config.js';
+import { netFetch } from '../net.js';
 import { getEntity, upsertEntity, setLiveRels, entityByQid, byIso3, normName, listByType, relsOfType, addCountryNames, countryOf } from '../graph.js';
 import type { Entity, Fact, Relationship } from '../../shared/types.js';
 import { emitNew, type Change } from '../changes.js';
@@ -18,19 +19,14 @@ import { registerConnector } from './connectors.js';
 type NewRel = Omit<Relationship, 'id' | 'origin'>;
 const WDQS = 'https://query.wikidata.org/sparql';
 
-// One query at a time with a short pause: the public endpoint limits parallel and heavy use.
-let chain: Promise<unknown> = Promise.resolve();
-export function sparql(query: string, timeoutMs = 120000): Promise<any[]> {
-  const run = async () => {
-    const res = await fetch(WDQS, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/sparql-results+json', 'User-Agent': USER_AGENT }, body: new URLSearchParams({ query }).toString(), signal: AbortSignal.timeout(timeoutMs) });
-    if (!res.ok) throw new Error(`${res.status} from Wikidata${res.status === 429 ? ' (rate limited)' : ''}`);
-    const j: any = await res.json();
-    await new Promise((r) => setTimeout(r, 400));
-    return (j?.results?.bindings || []) as any[];
-  };
-  const p = chain.then(run, run);
-  chain = p.catch(() => undefined);
-  return p;
+// The shared network gate (server/net.ts) runs one query at a time, 400 ms apart — the public
+// endpoint limits parallel and heavy use — retries rate-limited answers and skips the endpoint
+// while it is down.
+export async function sparql(query: string, timeoutMs = 120000): Promise<any[]> {
+  const res = await netFetch(WDQS, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/sparql-results+json', 'User-Agent': USER_AGENT }, body: new URLSearchParams({ query }).toString(), timeoutMs });
+  if (!res.ok) throw new Error(`${res.status} from Wikidata${res.status === 429 ? ' (rate limited)' : ''}`);
+  const j: any = await res.json();
+  return (j?.results?.bindings || []) as any[];
 }
 async function batched<T>(ids: string[], size: number, q: (values: string) => string) {
   const rows: any[] = [];

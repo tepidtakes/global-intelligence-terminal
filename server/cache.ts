@@ -5,6 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DATA_DIR } from './db.js';
 import { USER_AGENT } from './config.js';
+import { netFetch } from './net.js';
 
 interface Entry<T> { fetchedAt: string; payload: T; }
 const mem = new Map<string, Entry<any>>();
@@ -91,14 +92,14 @@ setInterval(() => {
 }, 3600_000).unref();
 
 export async function fetchJson(url: string, headers: Record<string, string> = {}, timeoutMs = 20000) {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, ...headers }, signal: AbortSignal.timeout(timeoutMs) });
+  const res = await netFetch(url, { headers: { 'User-Agent': USER_AGENT, ...headers }, timeoutMs });
   const text = await res.text();
   if (!res.ok) throw new Error(`${res.status} from ${new URL(url).host}: ${text.slice(0, 160)}`);
   try { return JSON.parse(text); } catch { throw new Error(`Non-JSON response from ${new URL(url).host}: ${text.slice(0, 160)}`); }
 }
 
 export async function fetchText(url: string, headers: Record<string, string> = {}, timeoutMs = 20000) {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, ...headers }, signal: AbortSignal.timeout(timeoutMs) });
+  const res = await netFetch(url, { headers: { 'User-Agent': USER_AGENT, ...headers }, timeoutMs });
   if (!res.ok) throw new Error(`${res.status} from ${new URL(url).host}`);
   return res.text();
 }

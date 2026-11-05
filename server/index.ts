@@ -38,6 +38,8 @@ import { weightsStatus } from './web/weights.js';
 import { searchMetrics, metricMeta, catalogStatus } from './web/catalog.js';
 import { connectionsFor, neighborhood, webLayer, webStats } from './web/connections.js';
 import { startReserves, reservesFor, stocksForCommodity, reservesLayer, gasLayer, reservesStatus, GRAINS } from './reserves.js';
+import { hostHealth } from './net.js';
+import { agreementFor, agreementSummary, agreementStatus } from './agreement.js';
 import crypto from 'node:crypto';
 import { normName } from './graph.js';
 import { canonicalUrl, titleKey, sameStory } from './newsParse.js';
@@ -747,8 +749,16 @@ function providerRows() {
   }).sort((a, b) => a.label.localeCompare(b.label));
 }
 api.get('/provenance/status', (_req, res) => {
-  res.json({ providers: providerRows(), live: liveStatus, news: newsStatus(), calendar: calendarStatus(), sanctions: sanctionsStatus(), tariffs: tariffsStatus(), reserves: reservesStatus(), web: { connectors: connectorsStatus(), stats: webStats(), catalog: catalogStatus(), weights: weightsStatus() }, coverage: coverage(), generatedAt: new Date().toISOString() });
+  res.json({ providers: providerRows(), live: liveStatus, news: newsStatus(), calendar: calendarStatus(), sanctions: sanctionsStatus(), tariffs: tariffsStatus(), reserves: reservesStatus(), web: { connectors: connectorsStatus(), stats: webStats(), catalog: catalogStatus(), weights: weightsStatus() }, net: hostHealth(), agreement: agreementStatus(), coverage: coverage(), generatedAt: new Date().toISOString() });
 });
+// World Bank vs IMF: the summary (Data page) and one country (profile).
+api.get('/quality/agreement', (_req, res) => res.json(agreementSummary() || { ready: false }));
+api.get('/quality/agreement/:iso3', (req, res) => {
+  const iso = String(req.params.iso3).toUpperCase();
+  if (!/^[A-Z]{3}$/.test(iso)) return res.status(400).json({ error: 'Use a three-letter country code' });
+  res.json(agreementFor(iso) || { ready: false });
+});
+api.get('/net/hosts', (_req, res) => res.json(hostHealth()));
 api.get('/quality/report', (req, res) => {
   const issues = audit();
   const sev = String(req.query.severity || ''); const cat = String(req.query.category || '');
@@ -904,10 +914,11 @@ setTimeout(() => {
 }, 4000).unref();
 // When live leaders/conflicts change, re-tag headlines and re-check news signals against them.
 onLiveRefresh(() => retagAll());
-// Data discrepancies become (low-importance) changes, so a rule can watch for them.
+// Data discrepancies become (low-importance) changes, so a rule can watch for them. World Bank vs
+// IMF conflicts post their own, once per country, figure and year (agreement.ts).
 onLiveRefresh(() => {
   const h = (s: string) => crypto.createHash('sha1').update(s).digest('hex').slice(0, 12);
-  emitNew('audit', audit(true).filter((i) => i.severity !== 'info' && i.entityId).map((i): Change => ({
+  emitNew('audit', audit(true).filter((i) => i.severity !== 'info' && i.entityId && i.category !== 'source-figures-conflict').map((i): Change => ({
     key: `audit:${i.category}:${i.entityId}:${h(i.message)}`, kind: 'data', entityIds: [i.entityId!, ...(i.relatedIds || [])], title: `${i.entityName || i.entityId}: ${i.message}`.slice(0, 300),
     detail: CATEGORY_LABEL[i.category] || i.category, sourceId: 'terminal-audit', quality: 'estimate', importance: i.severity === 'error' ? 4 : 3, at: new Date().toISOString(),
   })));

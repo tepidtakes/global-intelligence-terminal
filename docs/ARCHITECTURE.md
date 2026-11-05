@@ -332,6 +332,30 @@ its unit, period and source; quotes show their timestamp; nothing is fabricated 
 provider is down the UI says so. Users can file a correction from any fact
 (`data_reports` table).
 
+### Network gate
+
+Every outbound request (`fetchJson`/`fetchText` in `server/cache.ts`, Wikidata SPARQL, the JODI and USDA downloads, the Yahoo session) goes through `netFetch` in `server/net.ts`, which keeps one gate per host:
+
+- **Limits.** At most N requests in flight and a minimum gap between starts, however many loaders run at once: Wikidata 1 at a time, 400 ms apart; UN Comtrade 1, 1.2 s apart; the SEC 4, 110 ms apart; Google News 2, 300 ms apart; otherwise 6 and no gap. A freed slot goes straight to the next waiting request, so the limit is never exceeded.
+- **Retries.** 429, 502, 503, 504 and dropped connections are retried twice, honouring `Retry-After`, else with exponential backoff and jitter. A `Retry-After` over a minute is not waited out inside the request: the caller gets the answer and the host is skipped until then. Timeouts, refused connections and unknown host names are not retried.
+- **Circuit breaker.** After five failures in a row (5xx, timeouts, network errors; never 4xx) the host is skipped for a minute and requests fail at once, with the reason. Requests already waiting for a slot check again before they are sent. Then one trial request decides: success closes the breaker; failure skips the host for twice as long (up to 15 minutes).
+- **Health.** `hostHealth()` (state, load, requests, average latency, retries, skips, last error) is in `/api/provenance/status`, `/api/net/hosts` and the Data page's *Network* card.
+
+### Cross-source agreement
+
+The World Bank and the IMF publish the same headline figures. The `cross-source-checks` connector (`server/agreement.ts`, daily) compares, for every country, the World Bank's latest figure with the IMF's for the same year:
+
+| Figure | World Bank | IMF | Tolerance |
+|---|---|---|---|
+| GDP, current US$ | NY.GDP.MKTP.CD | NGDPD | 3% |
+| Real GDP growth | NY.GDP.MKTP.KD.ZG | NGDP_RPCH | 0.5 points |
+| Inflation, consumer prices | FP.CPI.TOTL.ZG | PCPIPCH | 0.5 points |
+| Unemployment | SL.UEM.TOTL.ZS | LUR | 1 point |
+| Current account, % of GDP | BN.CAB.XOKA.GD.ZS | BCA_NGDPD | 1 point |
+| Population | SP.POP.TOTL | LP | 2% |
+
+Levels are compared by their difference as a share of the mean of the two figures; rates by percentage points, or 5% of the figure when that is more (very high inflation). Within the tolerance the figures agree, up to three times it they differ, beyond that they conflict. The current year (IMF projections), figures older than six years and aggregates such as the world are skipped. Conflicts go to the consistency audit (category `source-figures-conflict`; unemployment as information only, since the World Bank uses ILO modelled estimates and the IMF national definitions), to the change feed once per country, figure and year, to the Data page's *Cross-source checks* card and to the *Cross-checked figures* card on country profiles. API: `/api/quality/agreement`, `/api/quality/agreement/:iso3`.
+
 ## 4. Major UI components
 
 * `TopNav` — global search, Map, Research, Watchlists, Portfolio, Calendar, Settings, theme.
