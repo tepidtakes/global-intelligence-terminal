@@ -15,6 +15,7 @@ import { api, invalidate, useApi, ApiError } from '../api';
 import { useAuth, useApp } from '../state';
 import { EntityChip, EntityPicker, Loading, Modal, Card, useDebounced } from '../components/common';
 import { NoteGraph, neighborhood, type GraphData } from '../components/NoteGraph';
+import { AlertButton, ChangeRow, AddToNote } from '../components/alertBits';
 import { fmtDate, ago, TYPE_ICON } from '../format';
 import type { EntityStub, SearchHit } from '../../shared/types';
 
@@ -308,6 +309,7 @@ export function NotePage() {
           </div>
           <EntityPicker onPick={addEntity} placeholder="Link a country, IGO, company…" exclude={entities.map((e) => e.id)} />
         </Card>
+        {id && <NoteChangesCard id={id} title={title} />}
         {id && <LinksCard id={id} />}
         {id && <LocalGraphCard id={id} />}
         <Card title="Organize">
@@ -446,5 +448,17 @@ function Toolbar({ editor, onLinkEntity }: { editor: Editor; onLinkEntity: () =>
       <B label="↶" title="Undo" run={() => c().undo().run()} />
       <B label="↷" title="Redo" run={() => c().redo().run()} />
     </div>
+  );
+}
+
+/** What changed on this note's linked entities since it was last edited, plus an alert toggle. */
+function NoteChangesCard({ id, title }: { id: string; title: string }) {
+  const { data } = useApi<any>(`/notes/${id}/changes`, 60_000);
+  const list: any[] = data?.changes || [];
+  return (
+    <Card title="What changed since you last edited" id="changes" actions={<AlertButton noteId={id} name={title || 'Untitled note'} compact />}>
+      {!data ? <Loading /> : !list.length ? <div className="small muted">Nothing new on the linked entities since {data.since ? ago(data.since) : 'your last edit'}. Turn on 🔔 to be alerted when something changes.</div> :
+        <div className="stack" style={{ gap: 4 }}>{list.slice(0, 12).map((c) => <ChangeRow key={c.key} c={c} actions={<AddToNote changeKey={c.key} />} />)}</div>}
+    </Card>
   );
 }

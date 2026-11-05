@@ -1,3 +1,5 @@
+import { SUBSCRIPTION_OUTLETS } from '../../shared/newsSources';
+import { useSubscriptions, saveSubscriptions } from '../components/newsBits';
 import { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { api, invalidate, useApi } from '../api';
@@ -108,6 +110,7 @@ export function SettingsPage() {
           <div className="row"><span style={{ width: 120 }}>Map layers</span><button className="btn sm" onClick={() => { setMap(DEFAULT_MAP); toast('Map layers reset'); }}>Reset to default</button></div>
         </div>
       </Card>
+      <Card title="News subscriptions" id="subscriptions"><SubscriptionSettings /></Card>
       <Card title="Obsidian" id="obsidian">
         {user ? <ObsidianSettings /> : <span className="small muted"><Link to="/login">Sign in</Link> to sync your notes with an Obsidian vault.</span>}
       </Card>
@@ -134,6 +137,23 @@ export function SettingsPage() {
             <table className="data"><tbody>{reports.data.map((r) => <tr key={r.id}><td className="tab">{fmtDate(r.created_at)}</td><td><Link to={`/entity/${encodeURIComponent(r.entity_id)}`}>{r.entity_id}</Link></td><td>{r.field}</td><td className="small">{r.message}</td><td>{r.status}</td></tr>)}</tbody></table>}
         </Card>
       )}
+    </div>
+  );
+}
+
+function SubscriptionSettings() {
+  const { user } = useAuth();
+  const subs = useSubscriptions();
+  const toggle = async (id: string) => {
+    const next = new Set(subs); if (next.has(id)) next.delete(id); else next.add(id);
+    await saveSubscriptions(!!user, [...next]);
+  };
+  return (
+    <div className="stack">
+      <div className="small muted">Mark the outlets you pay for. Stories they carried get a direct link that opens on the publisher’s own site, where you are already signed in, and the newsroom can show only those stories. The terminal never asks for or stores publisher passwords, and never downloads article text — headlines and summaries come from each publisher’s official feed.</div>
+      <div className="chips">{SUBSCRIPTION_OUTLETS.map((p) => (
+        <button key={p.id} className={`btn sm${subs.has(p.id) ? ' primary' : ''}`} aria-pressed={subs.has(p.id)} onClick={() => toggle(p.id)}>{subs.has(p.id) ? '✓ ' : ''}{p.name}</button>
+      ))}</div>
     </div>
   );
 }

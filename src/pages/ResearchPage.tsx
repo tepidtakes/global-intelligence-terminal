@@ -44,8 +44,11 @@ export function ResearchPage() {
   const [group, setGroup] = useState<Group>('date');
   const [tag, setTag] = useState('');
   const [pinnedOnly, setPinnedOnly] = useState(false);
-  const path = user ? `/notes?${new URLSearchParams({ ...(dq ? { q: dq } : {}), ...(tag ? { tag } : {}), ...(pinnedOnly ? { pinned: '1' } : {}) })}` : null;
+  const entity = sp.get('entity') || '';
+  const path = user ? `/notes?${new URLSearchParams({ ...(dq ? { q: dq } : {}), ...(tag ? { tag } : {}), ...(pinnedOnly ? { pinned: '1' } : {}), ...(entity ? { entity } : {}) })}` : null;
   const { data, loading } = useApi<any[]>(path, 5_000);
+  // Changes on each note's linked entities since it was last edited ("3 updates").
+  const updates = useApi<Record<string, number>>(user ? '/notes-updates' : null, 120_000);
   const tags = useApi<any[]>(user ? '/tags' : null, 10_000);
 
   const groups = useMemo(() => {
@@ -120,7 +123,7 @@ export function ResearchPage() {
           <h3>{k} <span className="muted">({list.length})</span></h3>
           {list.map((n: any) => (
             <div key={n.id + k} className="card" style={{ padding: '10px 14px' }}>
-              <div className="row"><Link to={`/research/${n.id}`}><strong>{n.pinned ? '📌 ' : ''}{n.title || 'Untitled note'}</strong></Link>{n.category && <span className="badge">{n.category}</span>}<div className="spacer" /><span className="tiny muted" title={`Created ${fmtDate(n.createdAt, true)}`}>Updated {ago(n.updatedAt)}</span></div>
+              <div className="row"><Link to={`/research/${n.id}`}><strong>{n.pinned ? '📌 ' : ''}{n.title || 'Untitled note'}</strong></Link>{n.category && <span className="badge">{n.category}</span>}<div className="spacer" />{updates.data?.[n.id] ? <Link className="badge accent" to={`/research/${n.id}#changes`} title="Changes on this note's linked entities since you last edited it">{updates.data[n.id]} update{updates.data[n.id] > 1 ? 's' : ''}</Link> : null}<span className="tiny muted" title={`Created ${fmtDate(n.createdAt, true)}`} style={{ marginLeft: 6 }}>Updated {ago(n.updatedAt)}</span></div>
               <div className="small" style={{ color: 'var(--text-2)', margin: '4px 0 6px' }}>
                 {n.snippet ? n.snippet.split(/(\u0001[^\u0002]*\u0002)/).map((p: string, i: number) => p.startsWith('\u0001') ? <mark key={i}>{p.slice(1, -1)}</mark> : <span key={i}>{p}</span>) : (n.bodyText?.slice(0, 220) || <em>Empty</em>)}
               </div>

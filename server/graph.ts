@@ -355,3 +355,34 @@ export function listByType(type: string) {
 }
 
 console.log(`[graph] ${entities.size} entities, ${relSeq} relationships, ${sources.size} sources${danglingRels.length ? `, ${danglingRels.length} dangling curated relationships skipped (see /api/quality/report)` : ''}`);
+
+// ───────────── Geography of any entity ─────────────
+export const GEO_TYPES = new Set(['country', 'state', 'county', 'city', 'region']);
+/** Where on the map a non-geographic entity "lives" (company HQ, leader's country, event's place…). */
+export function geoAnchor(id: string, depth = 0): string | null {
+  const e = entities.get(id);
+  if (!e || depth > 4) return null;
+  if (GEO_TYPES.has(e.type)) return e.id;
+  const order: [RelType, 'out' | 'in'][] = [['headquartered_in', 'out'], ['head_of_government', 'out'], ['head_of_state', 'out'], ['holds_office', 'out'], ['leads', 'out'], ['party_in', 'out'], ['affects', 'out'], ['candidate_in', 'out']];
+  for (const [t, d] of order) {
+    for (const r of relsOfType(id, t, d)) {
+      const target = entities.get(d === 'out' ? r.to : r.from);
+      if (target && GEO_TYPES.has(target.type)) return target.id;
+      if (target && (target.type === 'party' || target.type === 'company' || target.type === 'event') && (t === 'leads' || t === 'candidate_in')) { const a = geoAnchor(target.id, depth + 1); if (a) return a; }
+    }
+  }
+  if (e.attrs?.hq) return e.attrs.hq;
+  if (e.parentId?.startsWith('country:')) return e.parentId;
+  return null;
+}
+/** The entity's place and every place containing it (city → state → country → region). */
+export function geoChain(id: string): string[] {
+  const out: string[] = [];
+  let cur = geoAnchor(id) ? entities.get(geoAnchor(id)!) : undefined;
+  while (cur && out.length < 6) { out.push(cur.id); cur = cur.parentId ? entities.get(cur.parentId) : undefined; }
+  return out;
+}
+/** The country an entity belongs to, if any. */
+export function countryOf(id: string): string | undefined {
+  return geoChain(id).find((x) => x.startsWith('country:'));
+}

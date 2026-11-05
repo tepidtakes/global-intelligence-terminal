@@ -22,13 +22,18 @@ import {
 } from './newsParse.js';
 import { publisherById, publisherForDomain, publisherForName, tierForDomain, TIER_INFO, isTrusted, cleanDomain, type PublisherTier } from '../shared/newsSources.js';
 import type { Entity, Fact } from '../shared/types.js';
+import { emitNew, type Change } from './changes.js';
 
 const require = createRequire(import.meta.url);
 const worldCountries: any[] = require('world-countries');
 
 // ───────────────────────── Feeds ─────────────────────────
 export type FeedTopic = 'world' | 'business' | 'official';
-export interface FeedDef { id: string; name: string; url: string; topic: FeedTopic; publisherId?: string; kind: 'publisher' | 'search'; }
+/** `fallbacks`: other official addresses for the same feed (publishers move them); tried in order.
+ *  `paywalled`: articles need a subscription — headlines and summaries come from the publisher's own
+ *  feed, and links open in your browser, where your own subscription applies. The terminal never
+ *  logs in to a publisher and never stores article text. */
+export interface FeedDef { id: string; name: string; url: string; topic: FeedTopic; publisherId?: string; kind: 'publisher' | 'search'; fallbacks?: string[]; paywalled?: boolean; }
 const gn = (q: string) => `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
 export const FEEDS: FeedDef[] = [
   // Wire services and paywalled papers publish no open feed: their headlines come via a Google News site search.
@@ -61,6 +66,48 @@ export const FEEDS: FeedDef[] = [
   { id: 'un-news', name: 'UN News', url: 'https://news.un.org/feed/subscribe/en/news/all/rss.xml', topic: 'official', publisherId: 'un-news', kind: 'publisher' },
   { id: 'sec-press', name: 'SEC — press releases', url: 'https://www.sec.gov/news/pressreleases.rss', topic: 'official', kind: 'publisher' },
   { id: 'wto-news', name: 'WTO — latest news', url: 'https://www.wto.org/library/rss/latest_news_e.xml', topic: 'official', publisherId: 'wto', kind: 'publisher' },
+  // Publishers' own feeds for subscription outlets (headline + summary; the article opens on the publisher's site).
+  { id: 'wsj-world', name: 'The Wall Street Journal — World', url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml', fallbacks: ['https://feeds.content.dowjones.io/public/rss/RSSWorldNews'], topic: 'world', publisherId: 'wsj', kind: 'publisher', paywalled: true },
+  { id: 'wsj-markets', name: 'The Wall Street Journal — Markets', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', fallbacks: ['https://feeds.content.dowjones.io/public/rss/RSSMarketsMain'], topic: 'business', publisherId: 'wsj', kind: 'publisher', paywalled: true },
+  { id: 'wsj-business', name: 'The Wall Street Journal — Business', url: 'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml', fallbacks: ['https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness'], topic: 'business', publisherId: 'wsj', kind: 'publisher', paywalled: true },
+  { id: 'wsj-tech', name: 'The Wall Street Journal — Technology', url: 'https://feeds.a.dj.com/rss/RSSWSJD.xml', fallbacks: ['https://feeds.content.dowjones.io/public/rss/RSSWSJD'], topic: 'business', publisherId: 'wsj', kind: 'publisher', paywalled: true },
+  { id: 'marketwatch', name: 'MarketWatch — Top stories', url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', fallbacks: ['https://feeds.marketwatch.com/marketwatch/topstories/'], topic: 'business', publisherId: 'marketwatch', kind: 'publisher' },
+  { id: 'ft-world', name: 'Financial Times — World', url: 'https://www.ft.com/world?format=rss', topic: 'world', publisherId: 'ft', kind: 'publisher', paywalled: true },
+  { id: 'ft-markets', name: 'Financial Times — Markets', url: 'https://www.ft.com/markets?format=rss', topic: 'business', publisherId: 'ft', kind: 'publisher', paywalled: true },
+  { id: 'ft-companies', name: 'Financial Times — Companies', url: 'https://www.ft.com/companies?format=rss', topic: 'business', publisherId: 'ft', kind: 'publisher', paywalled: true },
+  { id: 'economist-finance', name: 'The Economist — Finance & economics', url: 'https://www.economist.com/finance-and-economics/rss.xml', topic: 'business', publisherId: 'economist', kind: 'publisher', paywalled: true },
+  { id: 'economist-international', name: 'The Economist — International', url: 'https://www.economist.com/international/rss.xml', topic: 'world', publisherId: 'economist', kind: 'publisher', paywalled: true },
+  { id: 'economist-business', name: 'The Economist — Business', url: 'https://www.economist.com/business/rss.xml', topic: 'business', publisherId: 'economist', kind: 'publisher', paywalled: true },
+  { id: 'bloomberg-markets', name: 'Bloomberg — Markets', url: 'https://feeds.bloomberg.com/markets/news.rss', topic: 'business', publisherId: 'bloomberg', kind: 'publisher', paywalled: true },
+  { id: 'bloomberg-politics', name: 'Bloomberg — Politics', url: 'https://feeds.bloomberg.com/politics/news.rss', topic: 'world', publisherId: 'bloomberg', kind: 'publisher', paywalled: true },
+  { id: 'bloomberg-economics', name: 'Bloomberg — Economics', url: 'https://feeds.bloomberg.com/economics/news.rss', topic: 'business', publisherId: 'bloomberg', kind: 'publisher', paywalled: true },
+  { id: 'nikkei-asia', name: 'Nikkei Asia', url: 'https://asia.nikkei.com/rss/feed/nar', topic: 'world', publisherId: 'nikkei', kind: 'publisher', paywalled: true },
+  { id: 'wapo-world', name: 'The Washington Post — World', url: 'https://feeds.washingtonpost.com/rss/world', topic: 'world', publisherId: 'wapo', kind: 'publisher', paywalled: true },
+  { id: 'politico', name: 'Politico — Politics', url: 'https://rss.politico.com/politics-news.xml', topic: 'world', publisherId: 'politico', kind: 'publisher' },
+  { id: 'politico-eu', name: 'Politico Europe', url: 'https://www.politico.eu/feed/', topic: 'world', publisherId: 'politico', kind: 'publisher' },
+  { id: 'axios', name: 'Axios', url: 'https://api.axios.com/feed/', topic: 'world', publisherId: 'axios', kind: 'publisher' },
+  { id: 'scmp-world', name: 'South China Morning Post — World', url: 'https://www.scmp.com/rss/91/feed', topic: 'world', publisherId: 'scmp', kind: 'publisher' },
+  { id: 'scmp-china', name: 'South China Morning Post — China', url: 'https://www.scmp.com/rss/4/feed', topic: 'world', publisherId: 'scmp', kind: 'publisher' },
+  { id: 'japantimes', name: 'The Japan Times', url: 'https://www.japantimes.co.jp/feed/', topic: 'world', publisherId: 'japantimes', kind: 'publisher' },
+  { id: 'hindu-intl', name: 'The Hindu — International', url: 'https://www.thehindu.com/news/international/feeder/default.rss', topic: 'world', publisherId: 'hindu', kind: 'publisher' },
+  { id: 'hindu-business', name: 'The Hindu — Business', url: 'https://www.thehindu.com/business/feeder/default.rss', topic: 'business', publisherId: 'hindu', kind: 'publisher' },
+  { id: 'straitstimes-asia', name: 'The Straits Times — Asia', url: 'https://www.straitstimes.com/news/asia/rss.xml', topic: 'world', publisherId: 'straitstimes', kind: 'publisher' },
+  { id: 'cna', name: 'CNA', url: 'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml', topic: 'world', publisherId: 'cna', kind: 'publisher' },
+  { id: 'yonhap', name: 'Yonhap News Agency', url: 'https://en.yna.co.kr/RSS/news.xml', topic: 'world', publisherId: 'yonhap', kind: 'publisher' },
+  { id: 'lemonde-en', name: 'Le Monde (English)', url: 'https://www.lemonde.fr/en/rss/une.xml', topic: 'world', publisherId: 'lemonde', kind: 'publisher' },
+  { id: 'spiegel-intl', name: 'Der Spiegel International', url: 'https://www.spiegel.de/international/index.rss', topic: 'world', publisherId: 'spiegel', kind: 'publisher' },
+  { id: 'euronews', name: 'Euronews', url: 'https://www.euronews.com/rss?format=mrss&level=theme&name=news', topic: 'world', publisherId: 'euronews', kind: 'publisher' },
+  { id: 'kyivindependent', name: 'The Kyiv Independent', url: 'https://kyivindependent.com/feed/', topic: 'world', publisherId: 'kyivindependent', kind: 'publisher' },
+  { id: 'timesofisrael', name: 'The Times of Israel', url: 'https://www.timesofisrael.com/feed/', topic: 'world', publisherId: 'timesofisrael', kind: 'publisher' },
+  { id: 'foreignpolicy', name: 'Foreign Policy', url: 'https://foreignpolicy.com/feed/', topic: 'world', publisherId: 'foreignpolicy', kind: 'publisher' },
+  { id: 'diplomat', name: 'The Diplomat', url: 'https://thediplomat.com/feed/', topic: 'world', publisherId: 'diplomat', kind: 'publisher' },
+  { id: 'defensenews', name: 'Defense News', url: 'https://www.defensenews.com/arc/outboundfeeds/rss/', topic: 'world', publisherId: 'defensenews', kind: 'publisher' },
+  // More official sources
+  { id: 'whitehouse', name: 'The White House — news', url: 'https://www.whitehouse.gov/news/feed/', topic: 'official', kind: 'publisher' },
+  { id: 'eu-council', name: 'Council of the EU — press releases', url: 'https://www.consilium.europa.eu/en/rss/pressreleases.ashx', topic: 'official', publisherId: 'eu', kind: 'publisher' },
+  { id: 'nato-news', name: 'NATO — news', url: 'https://www.nato.int/cps/rss/en/natohq/rssFeed.xsl/rssFeed.xml', topic: 'official', kind: 'publisher' },
+  { id: 'boj-news', name: 'Bank of Japan — what’s new', url: 'https://www.boj.or.jp/en/rss/whatsnew.xml', topic: 'official', publisherId: 'boj', kind: 'publisher' },
+  { id: 'rba-media', name: 'Reserve Bank of Australia — media releases', url: 'https://www.rba.gov.au/rss/rss-cb-media-releases.xml', topic: 'official', kind: 'publisher' },
 ];
 
 const REFRESH_MS = 30 * 60_000;
@@ -288,7 +335,13 @@ export function refreshNews() {
       for (let f = queue.shift(); f; f = queue.shift()) {
         const h = health.get(f.id)!; h.lastAttempt = new Date().toISOString();
         try {
-          const xml = await fetchText(f.url, { Accept: 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5' }, 20000);
+          // The primary address, then any official fallbacks (publishers move their feeds).
+          let xml = ''; let lastErr: any;
+          for (const url of [f.url, ...(f.fallbacks || [])]) {
+            try { xml = await fetchText(url, { Accept: 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5' }, 20000); if (/<(item|entry)\b/i.test(xml)) break; lastErr = new Error('No items in feed'); xml = ''; }
+            catch (e) { lastErr = e; }
+          }
+          if (!xml) throw lastErr || new Error('Feed unavailable');
           const r = ingest(f, xml, now);
           if (!r.items) throw new Error('Feed returned no items');
           Object.assign(h, { ok: true, lastOk: h.lastAttempt, lastError: undefined, items: r.items, added: r.added });
@@ -299,10 +352,11 @@ export function refreshNews() {
         }
       }
     };
-    await Promise.all([worker(), worker(), worker(), worker()]);
+    await Promise.all(Array.from({ length: 6 }, () => worker()));
     prune();
     lastRun = { at: now, ok, failed, added };
     reconcileSignals();
+    emitNewsChanges();
     save();
     console.log(`[news] ${ok}/${FEEDS.length} feeds ok, ${added} new headlines, ${articles.size} stored, ${signals.size} signals`);
   })().finally(() => { running = null; });
@@ -454,6 +508,30 @@ export function reconcileSignals() {
     // Every signal (even single-source) is listed on its entity, labelled by strength.
     for (const id of [target.id, ...s.relatedIds]) { const e = touch(getEntity(id)!); (e.attrs!.newsSignals ||= []).push(signalView(s)); }
   }
+  emitNew('signals', [...signals.values()].filter((x) => x.strength !== 'single-source' && (x.status === 'differs-from-record' || x.status === 'outcome-reported')).map((x): Change => ({
+    key: `signal:${x.key}:${x.status}`, kind: 'signal', entityIds: [x.entityId, ...(x.relatedIds || [])], title: x.summary || `${x.person} — ${x.entityName}`,
+    detail: `Corroborated by ${x.publishers.slice(0, 4).join(', ')}`, url: x.evidence[0]?.url, sourceId: 'trusted-news', quality: x.strength === 'official' ? 'official' : 'reported', importance: 8, at: x.firstSeen,
+  })));
+}
+
+/** Change feed: a story becomes a change once two independent trusted outlets (or an official
+ *  source) carry it within 72 hours; importance grows with corroboration. */
+function emitNewsChanges() {
+  const cutoff = new Date(Date.now() - 72 * 3600_000).toISOString();
+  const items: Change[] = [];
+  for (const [cid, list] of clusterInfo()) {
+    const recent = list.filter((a) => a.published >= cutoff && isTrusted(a.tier));
+    if (!recent.length) continue;
+    const pubs = new Set(recent.map((a) => a.publisherId || a.publisher));
+    const official = recent.some((a) => a.tier === 'official');
+    if (pubs.size < 2 && !official) continue;
+    const tags = [...new Set(list.flatMap((a) => a.tags.filter((t) => t.in === 'title').map((t) => t.id)))];
+    if (!tags.length) continue;
+    const lead = [...recent].sort((a, b) => TIER_INFO[a.tier].rank - TIER_INFO[b.tier].rank || a.published.localeCompare(b.published))[0];
+    items.push({ key: `news:${cid}`, kind: 'news', entityIds: tags, title: lead.title, detail: `Reported by ${[...new Set(recent.map((a) => a.publisher))].slice(0, 5).join(', ')}`,
+      url: lead.url, sourceId: 'trusted-news', quality: official ? 'official' : 'reported', importance: Math.min(8, (official ? 6 : 4) + Math.min(3, pubs.size - 1)), at: lead.published });
+  }
+  emitNew('news', items);
 }
 
 const signalView = (s: NewsSignal) => ({ key: s.key, kind: s.kind, entityId: s.entityId, entityName: s.entityName, person: s.person, role: s.role, roleLabel: s.role ? roleLabel[s.role] : undefined, status: s.status, strength: s.strength, publishers: s.publishers, firstSeen: s.firstSeen, lastSeen: s.lastSeen, summary: s.summary, recordHolders: s.recordHolders, relatedIds: s.relatedIds, evidence: s.evidence.slice(0, 6) });

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, useApi } from '../api';
 import { useApp, useAuth, useIsDark } from '../state';
 import { WorldMap, type HoverInfo, type CityPoint } from '../map/WorldMap';
@@ -18,6 +19,14 @@ export function MapPage() {
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [fly, setFly] = useState<{ id: string; n: number; coords?: [number, number] } | null>(null);
+  // Links can open the map on a layer: /?fill=sanctions:ALL (the parameter is removed once applied).
+  const [sp, setSp] = useSearchParams();
+  useEffect(() => {
+    const f = sp.get('fill');
+    if (!f) return;
+    if (layerDefFor(f)) setMap({ fill: f });
+    sp.delete('fill'); setSp(sp, { replace: true });
+  }, [sp]);
 
   const nav = useApi<any[]>('/geo/nav', 3600_000);
   const citiesQ = useApi<any[]>('/entities?type=city', 3600_000);

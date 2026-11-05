@@ -6,14 +6,19 @@ import { Card, EntityChip, Loading, Modal, Quality, SourceRef, Unavailable, loca
 import { RelGroups, WatchButton, NewNoteButton } from '../components/entityBits';
 import { GovernmentSection, MacroSection, TradeSection, CompaniesSection, MembersSection, QuoteSection, FundamentalsSection, PositionSection, ProducersSection, RankingSection } from './profile/Sections';
 import { ElectionSection } from './profile/ElectionSection';
+import { CalendarSection } from './EconCalendar';
 import { CurrencySection, RatesSection, OutlookSection, ConflictsSection, ConsensusSection, ProductTradeSection, ConflictBadge } from './profile/LiveSections';
 import { PRODUCTS } from '../../shared/products';
 import { NewsRow, ProvenanceCard, SignalItem, bannerSignals, type NewsItemView, type SignalView } from '../components/newsBits';
+import { AlertButton, RecentChanges } from '../components/alertBits';
+import { SanctionsTariffsSection, SanctionsMatchNotice } from './profile/SanctionsSection';
 import { isTrusted } from '../../shared/newsSources';
 import { TYPE_ICON, fmtUnit, fmtDate, ago } from '../format';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
 import type { Entity, RelView, Source, Fact } from '../../shared/types';
 
+// Organisations that run sanctions lists (their profiles list the regimes they impose).
+const SANCTIONING_IGOS = new Set(['igo:eu', 'igo:un']);
 const MAPPABLE = new Set(['country', 'state', 'county', 'city', 'region', 'igo', 'company', 'person', 'party', 'event']);
 
 export function ProfilePage() {
@@ -36,11 +41,13 @@ export function ProfilePage() {
   const showOnMap = () => { select(e.id, { fly: true }); nav('/'); };
   const sections: [string, string][] = [['overview', 'Overview']];
   if (t === 'country' || t === 'state' || t === 'city') sections.push(['government', 'Government']);
-  if (t === 'country') sections.push(['macro', 'Macro'], ['outlook', 'Outlook'], ['yields', 'Rates'], ['currency', 'Currency'], ['trade', 'Trade']);
+  if (t === 'country') sections.push(['macro', 'Macro'], ['outlook', 'Outlook'], ['yields', 'Rates'], ['currency', 'Currency'], ['trade', 'Trade'], ['sanctions', 'Sanctions & tariffs']);
   if (t === 'company' || (t === 'commodity' && e.attrs?.quoteSymbol)) sections.push(['market', 'Market data']);
   if (t === 'commodity' && PRODUCTS.some((p) => p.commodity === e.id)) sections.push(['traders', 'Exporters']);
   if (t === 'company') sections.push(['financials', 'Financials'], ...(e.attrs?.public ? [['consensus', 'Consensus'] as [string, string]] : []), ['position', 'My position']);
+  if (t === 'country' || t === 'igo') sections.splice(1, 0, ['calendar', 'Calendar']);
   if (t === 'igo') sections.push(['members', 'Members']);
+  if (SANCTIONING_IGOS.has(e.id)) sections.push(['sanctions', 'Sanctions']);
   const isElection = t === 'event' && e.attrs?.category === 'election';
   if (isElection) sections.push(['election', 'Result'], ['candidates', 'Candidates'], ['markets', 'Markets']);
   sections.push(['relationships', 'Relationships'], ['events', 'Events'], ['news', 'News'], ['notes', 'Research'], ['sources', 'Sources']);
@@ -65,11 +72,13 @@ export function ProfilePage() {
           {bannerSignals(e.attrs?.newsSignals, e.id).length > 0 && (
             <div className="stack" style={{ marginTop: 8, gap: 6 }}>{bannerSignals(e.attrs?.newsSignals, e.id).slice(0, 3).map((s: SignalView) => <SignalItem key={s.key} s={s} />)}</div>
           )}
+          {(t === 'person' || t === 'company') && <SanctionsMatchNotice id={e.id} />}
           {e.type === 'event' && e.attrs?.url && <div className="small" style={{ marginTop: 6 }}><a href={e.attrs.url} target="_blank" rel="noreferrer">Read the full, regularly updated article on Wikipedia ↗</a></div>}
           <div className="row wrap" style={{ marginTop: 10 }}>
             {MAPPABLE.has(t) && <button className="btn sm" onClick={showOnMap}>◎ Show on map</button>}
             <NewNoteButton entityIds={[e.id]} label="＋ New note" />
             <WatchButton id={e.id} />
+            <AlertButton entityId={e.id} name={e.name} type={t} />
             {t === 'country' && <CompareButton id={e.id} />}
             <Link className="btn sm" to={`/compare?a=${encodeURIComponent(e.id)}`}>⇄ Find connections</Link>
             <button className="btn ghost sm" onClick={() => setReport(true)}>⚑ Report an inconsistency</button>
@@ -83,11 +92,13 @@ export function ProfilePage() {
         {(t === 'country' || t === 'state' || t === 'city') && <GovernmentSection e={e} rels={rels} events={data.events} partyOf={data.partyOf} mayors={data.mayors} />}
         {isElection && <ElectionSection id={e.id} />}
         {(t === 'country' || t === 'state') && <ConflictsSection id={e.id} name={e.name} />}
+        {(t === 'country' || t === 'igo') && <CalendarSection placeId={e.id} name={e.name} />}
         {t === 'country' && e.iso3 && <MacroSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <OutlookSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <RatesSection iso3={e.iso3} />}
         {t === 'country' && <CurrencySection e={e} />}
         {t === 'country' && e.iso3 && <TradeSection iso3={e.iso3} rels={rels} />}
+        {(t === 'country' || SANCTIONING_IGOS.has(e.id)) && <SanctionsTariffsSection id={e.id} name={e.name} type={t} />}
         {(t === 'country' || t === 'state' || t === 'city' || t === 'region') && <CompaniesSection companies={data.companies || []} operating={operating} />}
         {(t === 'state' || t === 'country' || t === 'region') && <ChildrenCard e={e} children={data.children} counts={data.childCounts} />}
         {t === 'igo' && <MembersSection id={e.id} />}
@@ -115,6 +126,7 @@ export function ProfilePage() {
       </div>
       <div className="colSide">
         <NotesCard entityId={e.id} name={e.name} />
+        <RecentChanges entityId={e.id} name={e.name} type={t} />
         <ProvenanceCard p={data.provenance} />
         {t === 'company' && <CompanyFacts e={e} />}
       </div>

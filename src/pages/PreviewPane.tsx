@@ -3,6 +3,7 @@ import { useApi } from '../api';
 import { useApp, useAuth } from '../state';
 import { Loading, Quality, SourceRef, EntityChip } from '../components/common';
 import { RelGroups, WatchButton, NewNoteButton, PositionCompact } from '../components/entityBits';
+import { AlertButton } from '../components/alertBits';
 import { TYPE_ICON, fmtUnit, fmtDate, ago } from '../format';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
 
@@ -35,6 +36,7 @@ export function PreviewPane({ id, data, loading, error, onClose }: { id: string;
               <Link className="btn primary sm" to={profileUrl}>Open full profile →</Link>
               <NewNoteButton entityIds={[id]} />
               <WatchButton id={id} />
+              {data?.entity && <AlertButton entityId={id} name={data.entity.name} type={data.entity.type} />}
               {e.type === 'country' && <button className="btn sm" onClick={() => toggleCompare(id)} aria-pressed={compare.includes(id)}>{compare.includes(id) ? '✓ Comparing' : '⇄ Compare'}</button>}
             </div>
           </div>

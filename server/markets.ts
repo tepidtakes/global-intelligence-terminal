@@ -197,7 +197,7 @@ export async function policyRateHistory(iso3: string) {
 // ───────────────────────── 10-year government bond yields (OECD via FRED) ─────────────────────────
 const OECD_10Y = ['AU', 'AT', 'BE', 'CA', 'CL', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IS', 'IE', 'IL', 'IT', 'JP', 'KR', 'LV', 'LT', 'LU', 'MX', 'NL', 'NZ', 'NO', 'PL', 'PT', 'SK', 'SI', 'ES', 'SE', 'CH', 'GB', 'US', 'ZA', 'CR', 'CO', 'TR', 'IN', 'BR', 'CN', 'ID'];
 
-async function fredSeries(id: string, since = '2015-01-01') {
+export async function fredSeries(id: string, since = '2015-01-01') {
   return cached(`fred:${id}:${since}`, 24 * 3600, async () => {
     const rows = parseCsv(await fetchText(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=${since}`, {}, 20000));
     return rows.slice(1).map((r) => ({ t: r[0], v: parseFloat(r[1]) })).filter((p) => Number.isFinite(p.v));
@@ -314,14 +314,14 @@ export async function tenYearHistory(iso3: string) {
 // ───────────────────────── Yield curves ─────────────────────────
 export interface CurvePoint { label: string; years: number; value: number; }
 export interface Curve { date: string; points: CurvePoint[]; }
-export interface CurveResult { name: string; latest: Curve; monthAgo?: Curve; yearAgo?: Curve; sourceId: string; note?: string; fetchedAt?: string; stale?: boolean; }
+export interface CurveResult { name: string; latest: Curve; previous?: Curve; monthAgo?: Curve; yearAgo?: Curve; sourceId: string; note?: string; fetchedAt?: string; stale?: boolean; }
 
 function withComparisons(rows: Curve[], name: string, sourceId: string, note?: string): CurveResult {
   const sorted = rows.filter((r) => r.points.length >= 2).sort((a, b) => b.date.localeCompare(a.date));
   if (!sorted.length) throw new Error('No curve data');
   const latest = sorted[0];
   const find = (days: number) => sorted.find((r) => r.date <= daysAgo(days, new Date(latest.date)));
-  return { name, latest, monthAgo: find(30), yearAgo: find(365), sourceId, note };
+  return { name, latest, previous: sorted[1], monthAgo: find(30), yearAgo: find(365), sourceId, note };
 }
 
 async function canadaCurve() {

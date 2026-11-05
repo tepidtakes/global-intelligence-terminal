@@ -1,0 +1,14 @@
+﻿fileGenerationDate;Entity_LogicalId;Entity_EU_ReferenceNumber;Entity_UnitedNationId;Entity_DesignationDate;Entity_DesignationDetails;Entity_Remark;Entity_SubjectType;Entity_SubjectType_ClassificationCode;Entity_Regulation_Type;Entity_Regulation_OrganisationType;Entity_Regulation_PublicationDate;Entity_Regulation_EntryIntoForceDate;Entity_Regulation_NumberTitle;Entity_Regulation_Programme;Entity_Regulation_PublicationUrl;NameAlias_LastName;NameAlias_FirstName;NameAlias_MiddleName;NameAlias_WholeName;NameAlias_NameLanguage;NameAlias_Gender;NameAlias_Title;NameAlias_Function;NameAlias_LogicalId;Address_City;Address_Street;Address_PoBox;Address_ZipCode;Address_Region;Address_Place;Address_AsAtListingTime;Address_ContactInfo;Address_CountryIso2Code;Address_CountryDescription;Address_LogicalId;BirthDate_BirthDate;BirthDate_City;BirthDate_CountryIso2Code;BirthDate_CountryDescription;BirthDate_LogicalId;Identification_Number;Identification_TypeCode;Identification_CountryIso2Code;Identification_CountryDescription;Identification_LogicalId;Citizenship_CountryIso2Code;Citizenship_CountryDescription;Citizenship_LogicalId
+2026-11-04;13001;;;;;;person;P;regulation;council;2022-02-25;;;RUS;;PUTIN;Vladimir;Vladimirovich;Vladimir Vladimirovich PUTIN;EN;;;President of the Russian Federation;;;;;;;;;;;;;;;;;;;;;;;;;
+2026-11-04;13001;;;;;;person;P;regulation;council;2022-02-25;;;RUS;;;;;Владимир Владимирович ПУТИН;RU;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+2026-11-04;13001;;;;;;person;P;regulation;council;2022-02-25;;;RUS;;;;;;;;;;;;;;;;;;;;;;1952-10-07;Leningrad;RU;;;;;;;;;;
+2026-11-04;13001;;;;;;person;P;regulation;council;2022-02-25;;;RUS;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;RU;RUSSIAN FEDERATION;
+2026-11-04;13002;;;;;;enterprise;E;regulation;council;2026-10-23;;;UKR;;;;;Example Defence Systems JSC;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+2026-11-04;13002;;;;;;enterprise;E;regulation;council;2026-10-23;;;UKR;;;;;;;;;;;Moscow;;;;;;;;RU;RUSSIAN FEDERATION;;;;;;;;;;;;;;
+2026-11-04;13003;;;;;;person;P;regulation;council;2012-05-14;;;SYR;;;;;Example Al-Testi;;M;;;;;;;;;;;;;;;;;;;;;;;;;;;
+2026-11-04;13003;;;;;;person;P;regulation;council;2012-05-14;;;SYR;;;;;;;;;;;;;;;;;;;;;;1970-01-01;;LB;LEBANON;;;;;;;;;
+2026-11-04;13003;;;;;;person;P;regulation;council;2012-05-14;;;SYR;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;SY;SYRIAN ARAB REPUBLIC;
+2026-11-04;13004;;;;;;enterprise;E;regulation;council;2003-03-27;;;TAQA;;;;;Example Charity Foundation;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+2026-11-04;13004;;;;;;enterprise;E;regulation;council;2003-03-27;;;TAQA;;;;;;;;;;;Karachi;;;;;;;;PK;PAKISTAN;;;;;;;;;;;;;;
+2026-11-04;13005;;;;;;person;P;regulation;council;2020-10-02;;;BLR;;;;;Ivan Ivanovich EXAMPLEVICH;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+2026-11-04;13005;;;;;;person;P;regulation;council;2020-10-02;;;BLR;;;;;;;;;;;Minsk;;;;;;;;;BELARUS;;;;;;;;;;;;;;

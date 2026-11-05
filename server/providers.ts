@@ -27,7 +27,26 @@ export const WB_INDICATORS: Record<string, { label: string; unit: string; short:
   'PA.NUS.FCRF': { label: 'Official exchange rate (LCU per US$, period avg.)', unit: 'LCU per USD', short: 'FX rate' },
   'ST.INT.ARVL': { label: 'International tourism, number of arrivals', unit: 'arrivals', short: 'Tourist arrivals' },
   'ST.INT.RCPT.CD': { label: 'International tourism receipts (current US$)', unit: 'USD', short: 'Tourism receipts' },
+  // Tariffs each country applies (TRAINS via WITS, compiled by the World Bank)
+  'TM.TAX.MRCH.WM.AR.ZS': { label: 'Tariff rate, applied, weighted mean, all products (%)', unit: '%', short: 'Applied tariff (trade-weighted)' },
+  'TM.TAX.MRCH.SM.AR.ZS': { label: 'Tariff rate, applied, simple mean, all products (%)', unit: '%', short: 'Applied tariff (simple mean)' },
+  'TM.TAX.MRCH.WM.FN.ZS': { label: 'Tariff rate, most favoured nation, weighted mean, all products (%)', unit: '%', short: 'MFN tariff (trade-weighted)' },
+  // Reserves (IMF International Financial Statistics, via the World Bank)
+  'FI.RES.TOTL.CD': { label: 'Total reserves, including gold (current US$)', unit: 'USD', short: 'Reserves incl. gold' },
+  'FI.RES.XGLD.CD': { label: 'Total reserves, excluding gold (current US$)', unit: 'USD', short: 'Reserves excl. gold' },
+  'FI.RES.TOTL.MO': { label: 'Total reserves in months of imports', unit: 'months', short: 'Reserves (months of imports)' },
+  // Central-government budgets (IMF Government Finance Statistics, via the World Bank)
+  'GC.REV.XGRT.GD.ZS': { label: 'Central government revenue, excluding grants (% of GDP)', unit: '% of GDP', short: 'Revenue' },
+  'GC.TAX.TOTL.GD.ZS': { label: 'Tax revenue (% of GDP)', unit: '% of GDP', short: 'Tax revenue' },
+  'GC.XPN.TOTL.GD.ZS': { label: 'Central government expense (% of GDP)', unit: '% of GDP', short: 'Expense' },
+  'GC.XPN.INTP.RV.ZS': { label: 'Interest payments (% of revenue)', unit: '% of revenue', short: 'Interest / revenue' },
+  'MS.MIL.XPND.GD.ZS': { label: 'Military expenditure (% of GDP, SIPRI)', unit: '% of GDP', short: 'Military spending' },
+  'SE.XPD.TOTL.GD.ZS': { label: 'Government expenditure on education (% of GDP)', unit: '% of GDP', short: 'Education spending' },
+  'SH.XPD.GHED.GD.ZS': { label: 'Government health expenditure (% of GDP)', unit: '% of GDP', short: 'Health spending' },
 };
+export const TARIFF_INDICATORS = ['TM.TAX.MRCH.WM.AR.ZS', 'TM.TAX.MRCH.SM.AR.ZS', 'TM.TAX.MRCH.WM.FN.ZS'];
+export const RESERVE_INDICATORS = ['FI.RES.TOTL.CD', 'FI.RES.XGLD.CD', 'FI.RES.TOTL.MO'];
+export const BUDGET_INDICATORS = ['GC.REV.XGRT.GD.ZS', 'GC.TAX.TOTL.GD.ZS', 'GC.XPN.TOTL.GD.ZS', 'GC.XPN.INTP.RV.ZS', 'MS.MIL.XPND.GD.ZS', 'SE.XPD.TOTL.GD.ZS', 'SH.XPD.GHED.GD.ZS'];
 
 export const PROFILE_INDICATORS = [
   'SP.POP.TOTL', 'NY.GDP.MKTP.CD', 'NY.GDP.MKTP.PP.CD', 'NY.GDP.PCAP.CD', 'NY.GDP.MKTP.KD.ZG', 'FP.CPI.TOTL.ZG',
@@ -222,7 +241,7 @@ export async function usTreasuryCurve() {
     const yearAgo = prevYear.concat(cur).find((r) => r.date <= target);
     const monthTarget = new Date(Date.parse(latest.date) - 30 * 86400_000).toISOString().slice(0, 10);
     const monthAgo = cur.concat(prevYear).find((r) => r.date <= monthTarget);
-    return { latest, monthAgo, yearAgo, sourceId: 'us-treasury' };
+    return { latest, previous: cur[1] || prevYear[0], monthAgo, yearAgo, sourceId: 'us-treasury' };
   });
 }
 

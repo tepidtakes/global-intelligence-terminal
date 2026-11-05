@@ -8,6 +8,8 @@
 // Info     — worth knowing: Wikidata ambiguity, terms closed automatically, ageing curated facts.
 import { entities, sources, allRels, danglingRels, normName, getEntity, relationshipsFor } from './graph.js';
 import { DATA_QUALITIES, type DataQuality, type Entity } from '../shared/types.js';
+import { scheduleWarnings, calendarSourceIds } from './econCalendar.js';
+import { SANCTIONS_SOURCE_IDS } from './sanctions.js';
 
 export type Severity = 'error' | 'warning' | 'info';
 export interface Issue { severity: Severity; category: string; message: string; entityId?: string; entityName?: string; relatedIds?: string[]; }
@@ -28,6 +30,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   'leader-ambiguity': 'Live source lists competing officeholders',
   'election-result-conflict': 'Election result differs between sources',
   'result-missing': 'Election held, result not recorded',
+  'schedule-ending': 'Hand-entered schedule runs out within 90 days',
 };
 
 // Offices legitimately held by more than one person at once.
@@ -116,6 +119,10 @@ export function audit(force = false): Issue[] {
     const old = (e.facts || []).filter((f) => f.quality === 'curated' && f.asOf && monthsAgo(f.asOf) >= 6);
     if (old.length) push({ severity: 'info', category: 'stale-curated', entityId: e.id, message: `${old.length} curated fact${old.length > 1 ? 's' : ''} last verified ${old[0].asOf} (${monthsAgo(old[0].asOf!)} months ago).` });
   }
+
+  // Hand-entered calendars: every cited source must exist, and schedules must not run out unnoticed.
+  for (const id of [...calendarSourceIds(), ...SANCTIONS_SOURCE_IDS]) if (!sources.has(id)) push({ severity: 'error', category: 'unknown-source', message: `The calendar or sanctions data cites unknown source “${id}”.` });
+  for (const w of scheduleWarnings(90)) push({ severity: 'warning', category: 'schedule-ending', entityId: w.entityId, message: w.message });
 
   memo = { at: Date.now(), issues };
   return issues;

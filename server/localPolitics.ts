@@ -11,6 +11,7 @@ import { findParty } from './augment.js';
 import { AS_OF } from './data/curated.js';
 import { USER_AGENT } from './config.js';
 import type { Entity, Fact, Relationship } from '../shared/types.js';
+import { emitNew } from './changes.js';
 
 type NewRel = Omit<Relationship, 'id' | 'origin'>;
 const SRC = 'wikidata-local';
@@ -134,6 +135,10 @@ export async function loadMayors() {
     added++;
   }
   setLiveRels('wikidata-mayors', rels);
+  emitNew('mayors', rels.filter((x) => x.type === 'leads').map((x) => ({
+    key: `mayor:${x.to}:${x.from}`, kind: 'mayor' as const, entityIds: [x.to, x.from], title: `${getEntity(x.to)?.name}: ${getEntity(x.from)?.name} is ${x.role}${x.validFrom ? ` (since ${fmt(x.validFrom)})` : ''}`,
+    detail: 'Per Wikidata (community-maintained).', sourceId: SRC, quality: 'community' as const, importance: getEntity(x.to)?.attrs?.capital ? 5 : 4, at: x.validFrom ? `${x.validFrom}T00:00:00Z` : new Date().toISOString(),
+  })));
   setLiveRels('wikidata-mayor-parties', partyRels);
   return { detail: `${added} mayors (${cities} cities added to the map), ${matched} matched curated records, ${closed} curated terms closed`, fetchedAt: r.fetchedAt, stale: r.stale };
 }
