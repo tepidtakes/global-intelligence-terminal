@@ -33,6 +33,32 @@ Browser (React + MapLibre)                     Node server (Express, one process
   PostGIS geometry and the same tables. Geometry today ships as static TopoJSON
   (`world-atlas`, `us-atlas`), which MapLibre renders client-side.
 
+### Change feed, calendars and economic-security modules
+
+```
+ live loaders ──► recordChange / emitNew (server/changes.ts, SQLite change_feed)
+ (news, leaders,        │  first run of each producer = silent baseline
+  elections, markets,   ▼
+  calendar, sanctions,  onChange ──► alert rules (server/alerts.ts) ──► inbox · browser
+  tariffs, budgets)                    entities, watchlists, notes,      notifications ·
+                                       positions, places (+inside)       webhooks (outbox)
+```
+
+| Module | What it does |
+|---|---|
+| `server/changes.ts` | One feed of "what changed", with importance 1–10, sources and entities; `emitNew` turns snapshots into changes after a silent first run |
+| `server/alerts.ts` | Alert rules, matching, inbox, webhook outbox (allow-listed hosts), map counts, "add to note" |
+| `server/marketWatch.ts` | Price, FX and 10-year-yield moves past fixed buckets; BIS policy-rate changes |
+| `server/econCalendar.ts` | Release, central-bank, IGO, budget and election events; importance grading; results from FRED, Eurostat, BIS; schedule-expiry audit |
+| `server/sanctions.ts` | OFAC, UN, EU and UK lists → country aggregates, regimes, name matching, map tiers, new-designation changes |
+| `server/tariffs.ts` | Federal Register tariff actions; Census duties by country (effective rate, change); tariff changes |
+| `server/budgets.ts` | Fiscal years; IMF general-government table (Fiscal Monitor codes found by label); Eurostat COFOG; US Treasury live figures |
+| `server/reserves.ts` | Zip/CSV streaming for JODI oil and USDA grain files; EIA SPR; AGSI+ gas; strategic-reserve notes |
+| `server/tradeExplorer.ts` | All partners of a country and one pair from UN Comtrade (both sides' reports), with tariffs, sanctions and shared memberships |
+
+Each module keeps its parsed data in the provider cache, exposes a status for the Data page,
+and is covered by `npm run check:econ` on sample files in `scripts/fixtures/`.
+
 ## 2. Core entity schema
 
 Everything is an **Entity** joined by typed **Relationships**. Profiles, search, the map,

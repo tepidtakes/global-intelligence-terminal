@@ -73,6 +73,8 @@ export function DataPage() {
             <div className="tiny muted" style={{ marginTop: 6 }}>Run at start-up and every 12 hours. “Stale copy” means the source failed and the previous download is in use.</div>
           </Card>
 
+          <WatchLoaders data={data} />
+
           <Card title={`Trusted news feeds (${feedsOk}/${news.feeds.length} working)`} id="feeds">
             <div style={{ overflowX: 'auto' }}><table className="data">
               <thead><tr><th>Feed</th><th>Topic</th><th>Status</th><th className="r">Items</th><th>Last success</th></tr></thead>
@@ -149,6 +151,30 @@ function PublishersCard() {
     <Card title="Publisher list" id="publishers" actions={<button className="btn sm ghost" onClick={() => setOpen(!open)}>{open ? 'Hide' : `Show all ${pubs.length}`}</button>}>
       <div className="tiny muted">How each outlet is labelled. Unknown outlets show as “unrated”; government domains (.gov, .gov.uk, .gouv.fr…) count as official.</div>
       {open && <div className="stack" style={{ gap: 3, marginTop: 6 }}>{pubs.map((p) => <div key={p.id} className="tiny"><TierBadge tier={p.tier} /> {p.name} <span className="muted">· {p.domains.join(', ')}{p.note ? ` · ${p.note}` : ''}</span></div>)}</div>}
+    </Card>
+  );
+}
+
+/** Status of the calendar, sanctions, tariff and reserves loaders. */
+function WatchLoaders({ data }: { data: any }) {
+  const row = (name: string, ok: boolean | null, when: string | undefined, detail: React.ReactNode, href?: string) => (
+    <tr key={name}><td><strong>{href ? <Link to={href}>{name}</Link> : name}</strong></td><td><span className={`health ${ok === null ? '' : ok ? 'ok' : 'failing'}`} />{ok === null ? 'not yet run' : ok ? 'ok' : 'failed'}</td><td className="small">{when ? ago(when) : '—'}</td><td className="small">{detail}</td></tr>
+  );
+  const cal = data.calendar, san = data.sanctions, tar = data.tariffs, res = data.reserves;
+  const lists = san ? Object.entries<any>(san.lists) : [];
+  return (
+    <Card title="Calendars, sanctions, tariffs & reserves" id="watch">
+      <div style={{ overflowX: 'auto' }}><table className="data"><thead><tr><th>Loader</th><th>Status</th><th>Updated</th><th>Result</th></tr></thead>
+        <tbody>
+          {row('Economic & IGO calendar', cal ? !cal.errors.some((e: string) => /could not be loaded|failed/i.test(e)) : null, cal?.at, cal ? <>{Object.entries<number>(cal.counts).map(([k, v]) => `${v} ${k}`).join(' · ')}{cal.errors.length ? <div className="tiny" style={{ color: 'var(--warn)' }}>{cal.errors.join('; ')}</div> : null}</> : '—', '/calendar')}
+          {lists.map(([id, l]) => row(`Sanctions — ${id}`, !l.error, l.fetchedAt, l.error ? <span className="tiny">{l.error}</span> : `${l.count.toLocaleString()} listings${l.stale ? ' (stale copy)' : ''}`, '/?fill=sanctions:' + id))}
+          {!san && row('Sanctions lists', null, undefined, 'loads about 15 seconds after start-up')}
+          {row('US tariff actions (Federal Register)', tar?.actions ? !tar.actions.error : null, tar?.actions?.fetchedAt, tar?.actions ? (tar.actions.error ? <span className="tiny">{tar.actions.error}</span> : `${tar.actions.tariff} tariff action${tar.actions.tariff === 1 ? '' : 's'}, ${tar.actions.count - tar.actions.tariff} trade-remedy notice${tar.actions.count - tar.actions.tariff === 1 ? '' : 's'} (12 months)`) : '—', '/?fill=tariffs:us-actions')}
+          {row('US duties by country (Census)', tar ? !!tar.duties : null, tar?.duties?.fetchedAt, tar?.duties ? `${tar.duties.month}: ${tar.duties.partners} countries` : tar?.dutiesError ? <span className="tiny">{tar.dutiesError}</span> : '—', '/?fill=tariffs:us-effective')}
+          {row('Crude-oil stocks (JODI)', res ? !!res.oil : null, res?.oil?.fetchedAt, res?.oil ? `${res.oil.countries} countries reporting stocks` : res?.oilError ? <span className="tiny">{res.oilError}</span> : '—', '/?fill=reserves:oil-days')}
+          {row('Grain stocks (USDA PSD)', res ? !!res.grains : null, res?.grains?.fetchedAt, res?.grains ? Object.entries<string>(res.grains.years).map(([k, y]) => `${k} ${y}`).join(' · ') : res?.grainError ? <span className="tiny">{res.grainError}</span> : '—', '/?fill=reserves:grain-wheat')}
+        </tbody></table></div>
+      <div className="tiny muted" style={{ marginTop: 6 }}>Sanctions and tariffs refresh every 6 hours, reserves every 12, the calendar every 6 (results every 15 minutes). Optional free keys add sources: FRED_API_KEY (official US release dates), EIA_API_KEY (weekly SPR), AGSI_API_KEY (European gas storage), CENSUS_API_KEY (higher Census rate limit).</div>
     </Card>
   );
 }

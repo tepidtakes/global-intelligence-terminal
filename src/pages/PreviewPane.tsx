@@ -9,7 +9,7 @@ import { ENTITY_TYPE_LABEL } from '../../shared/types';
 
 export function PreviewPane({ id, data, loading, error, onClose }: { id: string; data: any; loading: boolean; error?: string; onClose: () => void }) {
   const { user } = useAuth();
-  const { setMap, compare, toggleCompare, select } = useApp();
+  const { setMap, compare, toggleCompare, select, map: mapCfg } = useApp();
   const nav = useNavigate();
   const isIgo = id.startsWith('igo:');
   const members = useApi<any[]>(isIgo ? `/igo/${encodeURIComponent(id)}/members` : null, 600_000);
@@ -38,6 +38,7 @@ export function PreviewPane({ id, data, loading, error, onClose }: { id: string;
               <WatchButton id={id} />
               {data?.entity && <AlertButton entityId={id} name={data.entity.name} type={data.entity.type} />}
               {e.type === 'country' && <button className="btn sm" onClick={() => toggleCompare(id)} aria-pressed={compare.includes(id)}>{compare.includes(id) ? '✓ Comparing' : '⇄ Compare'}</button>}
+              {e.type === 'country' && data?.entity?.iso3 && <TradeButtons iso3={data.entity.iso3} fill={mapCfg.fill} onMap={() => setMap({ fill: `tradewith:${data.entity.iso3}:total` })} />}
             </div>
           </div>
 
@@ -121,4 +122,12 @@ export function PreviewPane({ id, data, loading, error, onClose }: { id: string;
       )}
     </aside>
   );
+}
+
+/** Map a country's trade partners; when another country's trade map is showing, open that pair. */
+function TradeButtons({ iso3, fill, onMap }: { iso3: string; fill: string; onMap: () => void }) {
+  const other = fill.startsWith('tradewith:') ? fill.split(':')[1] : '';
+  if (other && other !== iso3) return <Link className="btn sm" to={`/trade?a=${other}&b=${iso3}`}>🚢 Trade with {other}</Link>;
+  if (other === iso3) return null;
+  return <button className="btn sm" onClick={onMap} title="Shade every country by how much it trades with this one">🚢 Trade partners</button>;
 }

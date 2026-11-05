@@ -136,6 +136,9 @@ export const HS_CHAPTERS: Record<string, string> = {
 // Comtrade uses a few reporter codes that differ from ISO 3166 numeric.
 const ISO_TO_COMTRADE: Record<string, string> = { '840': '842', '250': '251', '356': '699', '756': '757', '578': '579' };
 const COMTRADE_TO_ISO: Record<string, string> = Object.fromEntries(Object.entries(ISO_TO_COMTRADE).map(([a, b]) => [b, a]));
+/** UN Comtrade uses its own codes for a few countries (US 842, France 251, India 699, Switzerland 757, Norway 579). */
+export const toComtrade = (ccn3: string) => ISO_TO_COMTRADE[ccn3] || String(Number(ccn3));
+export const fromComtrade = (code: string | number) => (COMTRADE_TO_ISO[String(code)] || String(code)).padStart(3, '0');
 
 export const COMTRADE_AREAS: Record<string, string> = {
   '490': 'Other Asia, n.e.s.', '568': 'Other Europe, n.e.s.', '577': 'Other Africa, n.e.s.', '637': 'North & Central America, n.e.s.',
@@ -144,7 +147,7 @@ export const COMTRADE_AREAS: Record<string, string> = {
 
 // The public preview API allows roughly one request per second; back off on 429.
 let ctNext = 0;
-async function ctFetch(url: string) {
+export async function ctFetch(url: string) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const wait = ctNext - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));

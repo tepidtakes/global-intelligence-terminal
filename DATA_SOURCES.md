@@ -42,6 +42,24 @@ Missing values are shown as "—" or "no data", never as 0.
 | Heads of state/government, US governors, their parties | Wikidata | 24 h | CC0 |
 | Ongoing wars and conflicts, deaths by year | Wikipedia "List of ongoing armed conflicts" (which cites ACLED and UCDP) | 12 h | CC BY-SA 4.0 |
 | National elections (this year and next) | Wikipedia "national electoral calendar" pages | 12 h | CC BY-SA 4.0 |
+| Economic & IGO calendar — US release dates | BLS release calendar (iCalendar); with `FRED_API_KEY`, the FRED release calendar | 6 h | Public domain / FRED terms |
+| Central-bank decision dates, summits, assemblies and votes | Fed, ECB, Bank of England, Bank of Japan, Bank of Canada schedules; UN, EU, G20, APEC, ASEAN, OPEC+ announcements — entered by hand, checked against several sources | Edited in `server/econCalendar.ts` | Official publications |
+| Release results | FRED (BLS, BEA, Census series) · Eurostat HICP · BIS policy rates | 15 min after an event | Public domain / free with attribution |
+| Sanctions | US OFAC SDN list · UN Security Council consolidated list · EU financial sanctions file · UK Sanctions List (FCDO) | 12 h (checked every 6 h) | Public domain · UN terms · EU reuse · OGL v3 |
+| US tariff actions | Federal Register API (proclamations, executive orders, USTR, Commerce, CBP) | 6 h | Public domain |
+| US duties by country of origin | US Census Bureau international trade API (calculated duties, imports for consumption) | 12 h | Public domain |
+| Tariffs each country applies | World Bank WDI (UNCTAD TRAINS / WTO) | 24 h | CC BY 4.0 |
+| US federal debt, interest, average rates | US Treasury Fiscal Data (Debt to the Penny, interest expense, average interest rates) | 6–24 h | Public domain |
+| US monthly receipts, outlays, deficit | Monthly Treasury Statement, via FRED | 24 h | Public domain |
+| General-government revenue, spending, balances | IMF World Economic Outlook and Fiscal Monitor (DataMapper) | 24 h | Free reuse with attribution |
+| Spending by function (EU and EFTA) | Eurostat `gov_10a_exp` (COFOG) | 7 days | Free reuse with attribution |
+| Crude-oil stocks by country | JODI-Oil World Database | 7 days | Free reuse with attribution |
+| US Strategic Petroleum Reserve (weekly) | EIA (with `EIA_API_KEY`), otherwise the same series via FRED | 12–24 h | Public domain |
+| Grain stocks (wheat, corn, rice) | USDA Foreign Agricultural Service, PSD | 7 days | Public domain |
+| European gas storage | GIE AGSI+ (needs a free `AGSI_API_KEY`) | 6 h | Free with registration |
+| FX and gold reserves | World Bank (IMF International Financial Statistics) | 24 h | CC BY 4.0 |
+| How countries hold strategic oil reserves | Official pages (U.S. DOE, JOGMEC, ISPRL, EBV, IEA, EUR-Lex) — entered by hand | Edited in `server/reserves.ts` | Official publications |
+| Bilateral trade (all partners; one pair, both sides' reports) | UN Comtrade public API | 7 days | UN Comtrade terms |
 | Country names, codes, capitals, currencies, borders | `world-countries` package | Fixed (updates with the package) | ODbL 1.0 |
 | Map shapes | Natural Earth (`world-atlas`), US Census (`us-atlas`) | Fixed | Public domain |
 
@@ -137,6 +155,65 @@ mayors, governor, Congress delegation and state and city elections; country prof
 their capital's and other cities' leaders. Curated mayors are compared with Wikidata the same
 way as national leaders.
 
+## Paid publishers (WSJ, FT, Bloomberg…)
+
+The terminal reads only what publishers offer openly: their **official RSS feeds**
+(headline, summary, link). It never logs in to a publisher, never asks for or stores a
+password, and never downloads article text — publishers' terms forbid automated access to
+subscriber pages and the articles are copyrighted. If you subscribe, tick the outlet under
+**Settings → News subscriptions**: its stories get a direct link that opens on the
+publisher's site in your browser, where your own login applies, and the newsroom can show
+only your subscriptions.
+
+## Alerts: what changed
+
+Every live loader records **changes** into one feed (`server/changes.ts`): corroborated news
+(two or more trusted outlets, or one official source), new heads of state or government and
+governors, election results, conflict intensity, price/FX/yield moves past fixed thresholds,
+policy-rate decisions, data-release results, upcoming high-importance events, new sanctions
+designations, US tariff actions and month-on-month jumps in a big partner's effective US
+tariff, and the US federal debt passing another trillion. A loader's **first run is a
+silent baseline**, so starting the app never floods the inbox. Each change has an importance
+(1–10), a source and the entities it concerns; alert rules match on entities, places (and
+everything inside them), kinds and importance.
+
+## Economic & IGO calendar
+
+Dates come with a label saying how sure they are: **official** (fetched from an official
+calendar, or a published schedule entered by hand), **official rule** (e.g. China's loan
+prime rate on the 20th), or **≈ usual timing** (the agency's habit — e.g. UK CPI on a
+Wednesday mid-month — shown until the real date is published). US releases missing from the
+live calendars (BLS covers only its own releases) are shown at usual timing unless
+`FRED_API_KEY` is set. Importance = base for the kind of event + how much that economy
+matters worldwide + context, kept within 1–10, with every reason listed. Results are posted
+from FRED, Eurostat and the BIS within about 15 minutes of appearing there; consensus
+forecasts are licensed data and are not shown.
+
+## Sanctions and tariffs
+
+The four consolidated lists are read in full. A listing is **connected** to a country by
+nationality, citizenship or address (place of birth, passports and a ship's flag are left
+out); a **country programme** is one named after the country (US "IRAN", EU "RUS", UK
+"Russia", UN "DPRK"; the US and EU Ukraine-related regimes count as aimed at Russia).
+Everything else (terrorism, cyber, human rights, narcotics) is shown as individual listings.
+New entries since the last load become alerts. Name matches with people and companies in the
+app are labelled as name matches only.
+
+US tariffs are shown three ways: **actions** (Federal Register documents naming a country;
+anti-dumping and countervailing-duty notices counted separately), the **rate actually
+charged** (calculated duties ÷ value of imports for consumption, by country of origin, for
+the latest month, year to date, the month before and a year earlier), and every country's
+own **average applied tariff** (World Bank, with a lag).
+
+## Budgets and reserves
+
+General-government figures (all levels of government) come from the IMF; the current year
+and later are **projections** and are marked as such. Net interest is derived as primary
+balance minus overall balance. Central-government figures (World Bank) and EU spending by
+function (Eurostat) are labelled with their own coverage. Oil stocks are what each
+government reports to JODI (China does not report stocks); days of cover = crude stocks ÷
+refinery intake. Grain stocks are USDA's current-year projections.
+
 ## Rates: one number per country
 
 The 10-year yield on the map, on the Markets page and on a country's profile is now always
@@ -225,3 +302,10 @@ country code or ticker).
   rules recognise.
 - Some publishers' feeds may block automated readers or change address; the Data page shows
   which feeds failed and why. Headline searches for wire services depend on Google News.
+- The live formats of the newer sources (sanctions lists, Federal Register, Census, Treasury
+  Fiscal Data, Eurostat COFOG, JODI, USDA PSD, EIA, AGSI+) are read from their published
+  specifications and tested on sample files (`npm run check:econ`); if a publisher changes a
+  format, that source shows as failing on the Data page instead of showing wrong numbers.
+- Bilateral tariffs are shown only where the US is one side; sanctions name matches are not
+  identity checks; hand-entered central-bank and summit dates need adding each year (the
+  audit warns 90 days ahead).

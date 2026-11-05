@@ -1,0 +1,43 @@
+{
+ "data": [
+  {
+   "record_date": "2026-11-03",
+   "debt_held_public_amt": "30912345678901.23",
+   "intragov_hold_amt": "7412345678901.11",
+   "tot_pub_debt_out_amt": "38324691357802.34"
+  },
+  {
+   "record_date": "2026-11-02",
+   "debt_held_public_amt": "30900000000000.00",
+   "intragov_hold_amt": "7400000000000.00",
+   "tot_pub_debt_out_amt": "38300000000000.00"
+  },
+  {
+   "record_date": "2025-11-04",
+   "debt_held_public_amt": "29000000000000.00",
+   "intragov_hold_amt": "7200000000000.00",
+   "tot_pub_debt_out_amt": "36200000000000.00"
+  },
+  {
+   "record_date": "2025-11-03",
+   "debt_held_public_amt": "28990000000000.00",
+   "intragov_hold_amt": "7190000000000.00",
+   "tot_pub_debt_out_amt": "36180000000000.00"
+  },
+  {
+   "record_date": "2025-10-31",
+   "debt_held_public_amt": "28900000000000.00",
+   "intragov_hold_amt": "7100000000000.00",
+   "tot_pub_debt_out_amt": "36000000000000.00"
+  }
+ ],
+ "meta": {
+  "count": 5,
+  "labels": {
+   "record_date": "Record Date"
+  }
+ },
+ "links": {
+  "self": "&page%5Bnumber%5D=1&page%5Bsize%5D=300"
+ }
+}

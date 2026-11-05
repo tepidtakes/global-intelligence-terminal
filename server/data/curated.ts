@@ -120,6 +120,8 @@ export const SOURCES: Source[] = [
   { id: 'eurostat-cofog', name: 'General government expenditure by function (COFOG, gov_10a_exp)', publisher: 'Eurostat (European Commission)', url: 'https://ec.europa.eu/eurostat/databrowser/view/gov_10a_exp/default/table', license: 'Free reuse with attribution' },
   { id: 'jodi-oil', name: 'JODI-Oil World Database — crude oil production, refinery intake and closing stocks', publisher: 'Joint Organisations Data Initiative (APEC, Eurostat, GECF, IEA, IEF, OLADE, OPEC, UN Statistics Division)', url: 'https://www.jodidata.org/oil/', license: 'Free reuse with attribution' },
   { id: 'eia-spr', name: 'Weekly petroleum stocks — U.S. Strategic Petroleum Reserve and commercial crude', publisher: 'U.S. Energy Information Administration', url: 'https://www.eia.gov/dnav/pet/pet_stoc_wstk_dcu_nus_w.htm', license: 'Public domain' },
+  { id: 'gie-agsi', name: 'AGSI+ Aggregated Gas Storage Inventory (needs a free AGSI_API_KEY)', publisher: 'Gas Infrastructure Europe', url: 'https://agsi.gie.eu/', license: 'Free with attribution (registration required)' },
+  { id: 'oil-stock-programmes', name: 'Strategic oil reserve programmes — entered by hand from official pages (U.S. DOE, JOGMEC, ISPRL, EBV, IEA, EUR-Lex)', publisher: 'Respective governments and agencies', url: 'https://www.iea.org/about/oil-security-and-emergency-response' },
   { id: 'usda-psd', name: 'Production, Supply and Distribution (PSD) — grain ending stocks by country', publisher: 'U.S. Department of Agriculture, Foreign Agricultural Service', url: 'https://apps.fas.usda.gov/psdonline/app/index.html', license: 'Public domain' },
 ];
 

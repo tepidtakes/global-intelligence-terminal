@@ -3,6 +3,8 @@ import { api, useApi, invalidate } from '../api';
 import { useApp, useAuth, useIsDark, load, save } from '../state';
 import { LAYERS, GROUPS, COMMODITY_LAYERS, PRODUCTS, layerDefFor, defaultFill, palette, swatchFor, type LayerDef } from './layers';
 import { TYPE_ICON } from '../format';
+import { Link } from 'react-router-dom';
+import { EntityPicker } from '../components/common';
 
 const YEARS = ['', '2024', '2020', '2015', '2010', '2005', '2000', '1995', '1990'];
 type Tab = 'layers' | 'places' | 'saved';
@@ -135,6 +137,7 @@ function ActiveLayer({ def, swatch }: { def: LayerDef; swatch: string }) {
             <div className="tiny muted">First load of a product can take ~10 s (UN Comtrade rate limits); it is cached for a week after.</div>
           </>
         )}
+        {def.id.startsWith('tradewith') && <TradeWithPicker fill={cfg.fill} setFill={(fill) => setMap({ fill })} />}
         {def.id === 'commodity' && (
           <label className="field">Commodity
             <select className="input" value={cfg.fill.startsWith('commodity:') ? cfg.fill : 'commodity:crude-oil'} onChange={(e) => setMap({ fill: e.target.value })}>
@@ -269,5 +272,21 @@ function Saved() {
         </div>
       )}
     </section>
+  );
+}
+
+const TRADE_MEASURES: [string, string][] = [['total', 'Total'], ['exports', 'Exports'], ['imports', 'Imports'], ['share', 'Share'], ['balance', 'Balance']];
+function TradeWithPicker({ fill, setFill }: { fill: string; setFill: (f: string) => void }) {
+  const [, iso3 = 'USA', metric = 'total'] = fill.startsWith('tradewith:') ? fill.split(':') : [];
+  const country = useApi<any>(`/entity/${encodeURIComponent(`country:${iso3}`)}`, 3600_000);
+  return (
+    <>
+      <div className="small">Country: <strong>{country.data?.entity ? `${country.data.entity.flag || ''} ${country.data.entity.name}` : iso3}</strong> · <Link to={`/trade?a=${iso3}`}>pair explorer →</Link></div>
+      <EntityPicker types={['country']} placeholder="Change country…" onPick={(e) => { const i = e.id.slice(8); if (i) setFill(`tradewith:${i}:${metric}`); }} />
+      <div className="seg" role="group" aria-label="Measure">
+        {TRADE_MEASURES.map(([k, l]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setFill(`tradewith:${iso3}:${k}`)}>{l}</button>)}
+      </div>
+      <div className="tiny muted">Click a country on the map, then “Trade with …” in its preview, to compare both sides.</div>
+    </>
   );
 }

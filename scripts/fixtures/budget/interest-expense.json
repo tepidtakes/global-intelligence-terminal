@@ -1,0 +1,79 @@
+{
+ "data": [
+  {
+   "record_date": "2026-09-30",
+   "expense_catg_desc": "INTEREST EXPENSE ON PUBLIC ISSUES",
+   "expense_group_desc": "ACCRUED INTEREST EXPENSE",
+   "expense_type_desc": "Treasury Notes",
+   "month_expense_amt": "60000000000.0",
+   "fytd_expense_amt": "700000000000.0"
+  },
+  {
+   "record_date": "2026-09-30",
+   "expense_catg_desc": "INTEREST EXPENSE ON PUBLIC ISSUES",
+   "expense_group_desc": "ACCRUED INTEREST EXPENSE",
+   "expense_type_desc": "Treasury Bills",
+   "month_expense_amt": "20000000000.0",
+   "fytd_expense_amt": "250000000000.0"
+  },
+  {
+   "record_date": "2026-09-30",
+   "expense_catg_desc": "INTEREST EXPENSE ON INTRAGOVERNMENTAL HOLDINGS",
+   "expense_group_desc": "ACCRUED INTEREST EXPENSE",
+   "expense_type_desc": "Government Account Series",
+   "month_expense_amt": "15000000000.0",
+   "fytd_expense_amt": "200000000000.0"
+  },
+  {
+   "record_date": "2026-08-31",
+   "expense_catg_desc": "INTEREST EXPENSE ON PUBLIC ISSUES",
+   "expense_group_desc": "ACCRUED INTEREST EXPENSE",
+   "expense_type_desc": "Treasury Notes",
+   "month_expense_amt": "54000000000.0",
+   "fytd_expense_amt": "630000000000.0"
+  },
+  {
+   "record_date": "2026-08-31",
+   "expense_catg_desc": "INTEREST EXPENSE ON PUBLIC ISSUES",
+   "expense_group_desc": "ACCRUED INTEREST EXPENSE",
+   "expense_type_desc": "Treasury Bills",
+   "month_expense_amt": "18000000000.0",
+   "fytd_expense_amt": "225000000000.0"
+  },
+  {
+   "record_date": "2026-08-31",
+   "expense_catg_desc": "INTEREST EXPENSE ON INTRAGOVERNMENTAL HOLDINGS",
+   "expense_group_desc": "ACCRUED INTEREST EXPENSE",
+   "expense_type_desc": "Government Account Series",
+   "month_expense_amt": "13500000000.0",
+   "fytd_expense_amt": "180000000000.0"
+  },
+  {
+   "record_date": "2025-09-30",
+   "expense_catg_desc": "INTEREST EXPENSE ON PUBLIC ISSUES",
+   "expense_group_desc": "ACCRUED INTEREST EXPENSE",
+   "expense_type_desc": "Treasury Notes",
+   "month_expense_amt": "48000000000.0",
+   "fytd_expense_amt": "560000000000.0"
+  },
+  {
+   "record_date": "2025-09-30",
+   "expense_catg_desc": "INTEREST EXPENSE ON PUBLIC ISSUES",
+   "expense_group_desc": "ACCRUED INTEREST EXPENSE",
+   "expense_type_desc": "Treasury Bills",
+   "month_expense_amt": "16000000000.0",
+   "fytd_expense_amt": "200000000000.0"
+  },
+  {
+   "record_date": "2025-09-30",
+   "expense_catg_desc": "INTEREST EXPENSE ON INTRAGOVERNMENTAL HOLDINGS",
+   "expense_group_desc": "ACCRUED INTEREST EXPENSE",
+   "expense_type_desc": "Government Account Series",
+   "month_expense_amt": "12000000000.0",
+   "fytd_expense_amt": "160000000000.0"
+  }
+ ],
+ "meta": {
+  "count": 9
+ }
+}

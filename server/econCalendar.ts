@@ -274,6 +274,7 @@ export const IGO_EVENTS: IgoDef[] = [
   { id: 'ep-plenary-2026-11-sxb', title: 'European Parliament plenary — Strasbourg (votes)', placeIds: ['igo:eu'], start: '2026-11-23', end: '2026-11-26', base: 4, baseWhy: 'Parliament voting session (incl. annual EU budget)', url: 'https://www.europarl.europa.eu/plenary/en/home.html', basis: 'official-curated', votes: true },
   { id: 'opec-plus-2026-11', title: 'OPEC and non-OPEC Ministerial Meeting (OPEC+) — output policy', placeIds: ['igo:opec-plus', 'igo:opec'], start: '2026-11-29', base: 6, baseWhy: 'Oil-output decision', url: 'https://www.opec.org/', basis: 'to-verify', note: 'Date set at the 7 June 2026 meeting (reported by TASS); confirm on opec.org.' },
   { id: 'ep-plenary-2026-12-sxb', title: 'European Parliament plenary — Strasbourg (votes)', placeIds: ['igo:eu'], start: '2026-12-14', end: '2026-12-17', base: 4, baseWhy: 'Parliament voting session', url: 'https://www.europarl.europa.eu/plenary/en/home.html', basis: 'official-curated', votes: true },
+  { id: 'g20-2026', title: 'G20 Leaders’ Summit — Miami', placeIds: ['igo:g20', 'country:USA'], start: '2026-12-14', end: '2026-12-15', base: 5, baseWhy: 'Leaders’ summit of the largest economies', url: 'https://en.wikipedia.org/wiki/2026_G20_Miami_summit', basis: 'official-curated' },
   { id: 'euco-2026-12', title: 'European Council summit (EU heads of government)', placeIds: ['igo:eu'], start: '2026-12-16', end: '2026-12-17', base: 5, baseWhy: 'EU leaders’ summit (decisions by consensus)', url: 'https://www.consilium.europa.eu/en/meetings/calendar/', basis: 'to-verify', note: 'June 2026 planning gives 16–17 December; an earlier plan said 17–18 — confirm on the Council calendar.' },
 ];
 function igoEvents(): CalEvent[] {
@@ -402,7 +403,7 @@ export async function buildCalendar() {
   // sales need FRED) is shown at its usual timing instead, labelled as such.
   const liveIds = new Set(live.map((e) => e.indicator || ''));
   const fallback = USUAL.filter((u) => u.fallback === 'us' && !liveIds.has(u.id));
-  if (fallback.length) errors.push(`${fallback.map((u) => u.title.replace(/^US /, '').replace(/ \(.*\)$/, '')).join(', ')}: shown at usual timing (≈) — ${bls.status === 'rejected' ? 'the BLS calendar could not be loaded' : 'not in the BLS calendar'}${process.env.FRED_API_KEY ? '' : '; set FRED_API_KEY for official dates'}`);
+  if (fallback.length) errors.push(`${fallback.map((u) => u.title.replace(/^US /, '').replace(/ \(.*\)$/, '')).join(' · ')}: shown at usual timing (≈) — ${bls.status === 'rejected' ? 'the BLS calendar could not be loaded' : 'not in the BLS calendar'}${process.env.FRED_API_KEY ? '' : '; set FRED_API_KEY for official dates'}`);
   const all = new Map<string, CalEvent>();
   for (const e of [...live, ...bankEvents(), ...usualEvents(from, to, liveIds), ...igoEvents(), ...budgetEvents(from, to)]) {
     if (e.start.slice(0, 10) < iso(from) || e.start.slice(0, 10) > iso(to)) continue;

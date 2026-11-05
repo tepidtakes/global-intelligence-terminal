@@ -12,6 +12,8 @@ import { PRODUCTS } from '../../shared/products';
 import { NewsRow, ProvenanceCard, SignalItem, bannerSignals, type NewsItemView, type SignalView } from '../components/newsBits';
 import { AlertButton, RecentChanges } from '../components/alertBits';
 import { SanctionsTariffsSection, SanctionsMatchNotice } from './profile/SanctionsSection';
+import { BudgetSection } from './profile/BudgetSection';
+import { ReservesSection, CommodityStocksSection } from './profile/ReservesSection';
 import { isTrusted } from '../../shared/newsSources';
 import { TYPE_ICON, fmtUnit, fmtDate, ago } from '../format';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
@@ -19,6 +21,8 @@ import type { Entity, RelView, Source, Fact } from '../../shared/types';
 
 // Organisations that run sanctions lists (their profiles list the regimes they impose).
 const SANCTIONING_IGOS = new Set(['igo:eu', 'igo:un']);
+// Commodities with country stock data (JODI oil, USDA grain).
+const STOCKED = new Set(['commodity:crude-oil', 'commodity:wheat', 'commodity:corn', 'commodity:rice']);
 const MAPPABLE = new Set(['country', 'state', 'county', 'city', 'region', 'igo', 'company', 'person', 'party', 'event']);
 
 export function ProfilePage() {
@@ -41,13 +45,15 @@ export function ProfilePage() {
   const showOnMap = () => { select(e.id, { fly: true }); nav('/'); };
   const sections: [string, string][] = [['overview', 'Overview']];
   if (t === 'country' || t === 'state' || t === 'city') sections.push(['government', 'Government']);
-  if (t === 'country') sections.push(['macro', 'Macro'], ['outlook', 'Outlook'], ['yields', 'Rates'], ['currency', 'Currency'], ['trade', 'Trade'], ['sanctions', 'Sanctions & tariffs']);
+  if (t === 'country') sections.push(['macro', 'Macro'], ['outlook', 'Outlook'], ['yields', 'Rates'], ['currency', 'Currency'], ['budget', 'Budget'], ['reserves', 'Reserves'], ['trade', 'Trade'], ['sanctions', 'Sanctions & tariffs']);
   if (t === 'company' || (t === 'commodity' && e.attrs?.quoteSymbol)) sections.push(['market', 'Market data']);
   if (t === 'commodity' && PRODUCTS.some((p) => p.commodity === e.id)) sections.push(['traders', 'Exporters']);
   if (t === 'company') sections.push(['financials', 'Financials'], ...(e.attrs?.public ? [['consensus', 'Consensus'] as [string, string]] : []), ['position', 'My position']);
   if (t === 'country' || t === 'igo') sections.splice(1, 0, ['calendar', 'Calendar']);
   if (t === 'igo') sections.push(['members', 'Members']);
   if (SANCTIONING_IGOS.has(e.id)) sections.push(['sanctions', 'Sanctions']);
+  if (e.id === 'igo:eu') sections.push(['budget', 'Budgets'], ['reserves', 'Reserves']);
+  if (STOCKED.has(e.id)) sections.push(['stocks', 'Stocks']);
   const isElection = t === 'event' && e.attrs?.category === 'election';
   if (isElection) sections.push(['election', 'Result'], ['candidates', 'Candidates'], ['markets', 'Markets']);
   sections.push(['relationships', 'Relationships'], ['events', 'Events'], ['news', 'News'], ['notes', 'Research'], ['sources', 'Sources']);
@@ -97,6 +103,8 @@ export function ProfilePage() {
         {t === 'country' && e.iso3 && <OutlookSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <RatesSection iso3={e.iso3} />}
         {t === 'country' && <CurrencySection e={e} />}
+        {(t === 'country' || e.id === 'igo:eu') && <BudgetSection id={e.id} name={e.name} isEU={e.id === 'igo:eu'} />}
+        {(t === 'country' || e.id === 'igo:eu') && <ReservesSection id={e.id} name={e.name} isEU={e.id === 'igo:eu'} />}
         {t === 'country' && e.iso3 && <TradeSection iso3={e.iso3} rels={rels} />}
         {(t === 'country' || SANCTIONING_IGOS.has(e.id)) && <SanctionsTariffsSection id={e.id} name={e.name} type={t} />}
         {(t === 'country' || t === 'state' || t === 'city' || t === 'region') && <CompaniesSection companies={data.companies || []} operating={operating} />}
@@ -111,6 +119,7 @@ export function ProfilePage() {
         {t === 'company' && !e.attrs?.public && <Card title="Private company" id="private"><div className="small">Private companies do not publish audited statements to a public regulator. Ownership and corporate developments are shown above; valuation and revenue appear only when the company or a regulator discloses them.</div></Card>}
         {(t === 'commodity') && <ProducersSection e={e} rels={rels} />}
         {t === 'commodity' && <ProductTradeSection e={e} />}
+        {STOCKED.has(e.id) && <CommodityStocksSection id={e.id} />}
         {t === 'commodity' && data.children.length > 0 && <Card title="Benchmarks & sub-markets"><div className="chips">{data.children.map((c: any) => <EntityChip key={c.id} e={c} />)}</div></Card>}
         {t === 'commodity' && e.attrs?.wbRankings && <RankingSection codes={e.attrs.wbRankings} />}
         {t === 'person' && <RolesCard rels={rels} />}

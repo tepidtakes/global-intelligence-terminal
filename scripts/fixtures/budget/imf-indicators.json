@@ -1,0 +1,39 @@
+{
+ "indicators": {
+  "GGXCNL_NGDP": {
+   "label": "General government net lending/borrowing",
+   "unit": "Percent of GDP",
+   "dataset": "WEO",
+   "source": "World Economic Outlook (October 2026)"
+  },
+  "GGR_G01_GDP_PT": {
+   "label": "Revenue",
+   "unit": "Percent of GDP",
+   "dataset": "FM",
+   "source": "Fiscal Monitor (October 2026)"
+  },
+  "G_X_G01_GDP_PT": {
+   "label": "Expenditure",
+   "unit": "Percent of GDP",
+   "dataset": "FM",
+   "source": "Fiscal Monitor (October 2026)"
+  },
+  "GGXONLB_G01_GDP_PT": {
+   "label": "Primary net lending/borrowing (also referred as primary balance)",
+   "unit": "Percent of GDP",
+   "dataset": "FM",
+   "source": "Fiscal Monitor (October 2026)"
+  },
+  "GGCBP_G01_PGDP_PT": {
+   "label": "Cyclically adjusted primary balance",
+   "unit": "Percent of potential GDP",
+   "dataset": "FM"
+  },
+  "rev": {
+   "label": "Government revenue, percent of GDP",
+   "unit": "% of GDP",
+   "dataset": "FPP",
+   "source": "Public Finances in Modern History"
+  }
+ }
+}

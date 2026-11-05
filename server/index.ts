@@ -28,6 +28,9 @@ import { startCalendar, calendarFor, calendarPlaces, calendarStatus } from './ec
 import { changesFor, recentChanges, emitNew, CHANGE_KINDS, type Change } from './changes.js';
 import { startSanctions, sanctionsFor, listingsFor, regimesOf, sanctionsLayer, sanctionsStatus, sanctionsMeta, LIST_OF_IMPOSER, LISTS, LIST_IDS, type ListId } from './sanctions.js';
 import { startTariffs, tariffsFor, tariffLayer, tariffsStatus } from './tariffs.js';
+import { startBudgets, budgetFor } from './budgets.js';
+import { partnersView, tradePair, tradeWithLayer } from './tradeExplorer.js';
+import { startReserves, reservesFor, stocksForCommodity, reservesLayer, gasLayer, reservesStatus, GRAINS } from './reserves.js';
 import crypto from 'node:crypto';
 import { normName } from './graph.js';
 import { canonicalUrl, titleKey, sameStory } from './newsParse.js';
@@ -212,7 +215,7 @@ api.get('/map/layer/:layer', wrap(async (req, res) => {
     }
     const years = Object.values(values).map((v) => v.period).sort();
     return res.json({ kind: 'numeric', label: r.data.label, unit: r.data.unit, scale: DIVERGING.has(code) ? 'diverging' : 'sequential', values, detail, sourceIds: ['world-bank-wdi'], lastUpdated: r.data.lastUpdated, fetchedAt: r.fetchedAt, stale: r.stale,
-      note: year ? undefined : `Most recent year each country reported (${years[0] || '—'}–${years.at(-1) || '—'}).${dropped ? ` ${dropped} countries whose latest figure is older than ${oldest} are left blank.` : ''}${code === 'GC.DOD.TOTL.GD.ZS' || code === 'GC.NLD.TOTL.GD.ZS' ? ' Central government only — for general government (all levels) use the IMF layers.' : ''}` });
+      note: year ? undefined : `Most recent year each country reported (${years[0] || '—'}–${years.at(-1) || '—'}).${dropped ? ` ${dropped} countries whose latest figure is older than ${oldest} are left blank.` : ''}${code.startsWith('GC.') ? ' Central government only — for general government (all levels) use the IMF layers.' : ''}` });
   }
   if (layer === 'income') {
     const r = await wbCountryMeta();
@@ -392,6 +395,30 @@ api.get('/map/layer/:layer', wrap(async (req, res) => {
       scale: which === 'us-change' ? 'diverging' : 'sequential', values: t.values, detail: t.detail, sourceIds: ['census-trade'], fetchedAt: t.fetchedAt, stale: 'stale' in t ? t.stale : false,
       note: 'Calculated duties ÷ value of imports for consumption, from the US Census Bureau’s monthly trade data. This is the average rate importers actually declared, after exemptions and trade agreements — usually well below headline rates. Refunds and later court rulings are not reflected.' });
   }
+  if (layer.startsWith('tradewith:')) {
+    const [, iso3, metric = 'total'] = layer.split(':');
+    if (!byIso3.has(iso3) || !['total', 'exports', 'imports', 'balance', 'share'].includes(metric)) return res.status(404).json({ error: 'Unknown trade layer' });
+    const t = await tradeWithLayer(iso3, metric as any);
+    const name = getEntity(`country:${iso3}`)!.name;
+    const label = { total: `Trade with ${name} (exports + imports)`, exports: `${name}’s exports to each country`, imports: `${name}’s imports from each country`, balance: `${name}’s trade balance with each country`, share: `Share of ${name}’s trade` }[metric as 'total'];
+    return res.json({ kind: 'numeric', label: `${label}, ${t.year}`, unit: metric === 'share' ? '%' : 'USD', scale: metric === 'balance' ? 'diverging' : 'sequential', values: t.values, detail: t.detail, sourceIds: ['un-comtrade'], fetchedAt: t.fetchedAt, stale: t.stale, focus: `country:${iso3}`,
+      note: `Goods trade as reported by ${name} to UN Comtrade for ${t.year}.${metric === 'balance' ? ' Green = surplus with that country, red = deficit.' : ''}${t.unreported > 0 ? ` US$${(t.unreported / 1e9).toFixed(1)} bn is recorded against unspecified areas and is not on the map.` : ''} The partner’s own report can differ — compare both sides on the trade page.` });
+  }
+  if (layer.startsWith('reserves:')) {
+    const which = layer.slice(9);
+    if (which === 'gas') {
+      const g = await gasLayer();
+      if (!Object.keys(g.values).length) return res.status(503).json({ error: g.error || 'Gas storage data unavailable' });
+      return res.json({ kind: 'numeric', label: 'Natural-gas storage — % full', unit: '%', scale: 'sequential', values: g.values, detail: g.detail, sourceIds: ['gie-agsi'], fetchedAt: g.fetchedAt, note: 'Working gas in storage as a share of capacity, latest gas day, as reported to Gas Infrastructure Europe. Countries without storage sites show no data.' });
+    }
+    const r = reservesLayer(which);
+    if (!Object.keys(r.values).length) return res.status(503).json({ error: r.error || 'Reserves data unavailable' });
+    if (which.startsWith('oil')) return res.json({ kind: 'numeric', label: which === 'oil-days' ? 'Crude-oil stocks — days of refinery intake' : 'Crude-oil stocks (million barrels)', unit: which === 'oil-days' ? 'days' : 'm bbl', scale: 'sequential', values: r.values, detail: r.detail, sourceIds: ['jodi-oil'], fetchedAt: r.fetchedAt, stale: r.stale,
+      note: 'Closing crude-oil stocks as reported by each government to JODI (latest month each). Days = stocks ÷ refinery intake. China and several other large holders do not report stocks; strategic and commercial stocks are not separated.' });
+    const g = GRAINS[which.replace(/^grain-/, '')];
+    return res.json({ kind: 'numeric', label: `${g.label} stocks — ending stocks as % of a year’s use (${'year' in r ? r.year : ''})`, unit: '%', scale: 'sequential', values: r.values, detail: r.detail, sourceIds: ['usda-psd'], fetchedAt: r.fetchedAt, stale: r.stale,
+      note: 'USDA’s current projection for the marketing year (revised monthly with the WASDE report). Higher = a larger buffer relative to a year’s consumption; big exporters often run lower ratios than importers.' });
+  }
   if (layer === 'alerts') {
     if (!req.userId) return res.status(401).json({ error: 'Sign in to see your alerts on the map' });
     const values: Record<string, { value: number; period: string }> = {}; const detail: Record<string, string> = {};
@@ -428,6 +455,18 @@ api.get('/macro/:iso3', wrap(async (req, res) => {
   });
 }));
 
+// Bilateral trade: every partner of a country, and one pair A ↔ B (registered before /trade/:iso3).
+api.get('/trade/products', (_req, res) => res.json(PRODUCTS));
+api.get('/trade/partners/:iso3', wrap(async (req, res) => {
+  const iso3 = req.params.iso3.toUpperCase();
+  if (!byIso3.has(iso3)) return res.status(404).json({ error: 'Unknown country' });
+  res.json(await partnersView(iso3));
+}));
+api.get('/trade/pair', wrap(async (req, res) => {
+  const a = String(req.query.a || '').toUpperCase(), b = String(req.query.b || '').toUpperCase();
+  if (!byIso3.has(a) || !byIso3.has(b) || a === b) return res.status(400).json({ error: 'Pick two different countries' });
+  res.json(await tradePair(a, b));
+}));
 api.get('/trade/:iso3', wrap(async (req, res) => {
   const e = getEntity(`country:${req.params.iso3.toUpperCase()}`);
   if (!e?.ccn3) return res.status(404).json({ error: 'No trade reporter code for this entity' });
@@ -490,7 +529,6 @@ api.get('/consensus/:id', wrap(async (req, res) => {
   catch (err: any) { res.json({ unavailable: true, reason: `Analyst estimates unavailable right now (${err.message}). Nothing is shown rather than a guess.` }); }
 }));
 
-api.get('/trade/products', (_req, res) => res.json(PRODUCTS));
 api.get('/trade/product/:hs', wrap(async (req, res) => {
   const flow = req.query.flow === 'M' ? 'M' : 'X';
   const r = await comtradeProduct(req.params.hs, flow);
@@ -530,6 +568,19 @@ api.get('/sanctions/place/:id', (req, res) => {
     imposes: imposes ? { list: imposes, name: LISTS[imposes].name, authority: LISTS[imposes].authority, search: LISTS[imposes].search, sourceId: LISTS[imposes].sourceId, regimes: regimesOf(imposes).slice(0, 80) } : null,
   });
 });
+// Government budget: IMF general government, World Bank central government, Eurostat spending by function, US live figures.
+api.get('/budget/place/:id', wrap(async (req, res) => {
+  const b = await budgetFor(req.params.id);
+  if (!b) return res.status(404).json({ error: 'Not found' });
+  res.json(b);
+}));
+// Reserves and stocks: oil (JODI, EIA), grain (USDA), gas storage (AGSI+), how strategic oil reserves are held.
+api.get('/reserves/place/:id', wrap(async (req, res) => {
+  const r = await reservesFor(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Not found' });
+  res.json(r);
+}));
+api.get('/reserves/commodity/:id', (req, res) => res.json(stocksForCommodity(req.params.id)));
 api.get('/sanctions/entity/:id', (req, res) => res.json({ matches: listingsFor(req.params.id), status: sanctionsStatus() }));
 api.get('/tariffs/place/:id', wrap(async (req, res) => {
   const e = getEntity(req.params.id); if (!e) return res.status(404).json({ error: 'Not found' });
@@ -620,6 +671,7 @@ const PROVIDER_LABELS: Record<string, { label: string; sourceId?: string }> = {
   bis: { label: 'BIS policy rates', sourceId: 'bis-policy' }, fred: { label: 'FRED (OECD yields, FOMC projections)', sourceId: 'oecd-mei' }, oecd: { label: 'OECD 10-year yields', sourceId: 'oecd-mei' },
   curve: { label: 'Government yield curves (ECB, BoE, MOF, BoC)', sourceId: 'ecb-yield-curve' }, imf: { label: 'IMF World Economic Outlook', sourceId: 'imf-weo' },
   sanctions: { label: 'Sanctions lists (OFAC, EU, UK, UN)', sourceId: 'ofac-sdn' }, tariffs: { label: 'US tariffs (Federal Register, Census)', sourceId: 'federal-register' }, econ: { label: 'Release calendars (BLS, FRED)', sourceId: 'bls-schedule' },
+  budget: { label: 'US Treasury Fiscal Data', sourceId: 'us-treasury-fiscal' }, reserves: { label: 'Reserves (JODI oil, USDA grain, EIA, AGSI+)', sourceId: 'jodi-oil' }, eurostat: { label: 'Eurostat (spending by function)', sourceId: 'eurostat-cofog' },
 };
 /** ok = last fetch worked; stale = last fetch failed and an older copy was served; failing = failed with no copy. */
 function providerRows() {
@@ -630,7 +682,7 @@ function providerRows() {
   }).sort((a, b) => a.label.localeCompare(b.label));
 }
 api.get('/provenance/status', (_req, res) => {
-  res.json({ providers: providerRows(), live: liveStatus, news: newsStatus(), calendar: calendarStatus(), sanctions: sanctionsStatus(), tariffs: tariffsStatus(), coverage: coverage(), generatedAt: new Date().toISOString() });
+  res.json({ providers: providerRows(), live: liveStatus, news: newsStatus(), calendar: calendarStatus(), sanctions: sanctionsStatus(), tariffs: tariffsStatus(), reserves: reservesStatus(), coverage: coverage(), generatedAt: new Date().toISOString() });
 });
 api.get('/quality/report', (req, res) => {
   const issues = audit();
@@ -772,6 +824,8 @@ startMarketWatch();
 startCalendar();
 startSanctions();
 startTariffs();
+startBudgets();
+startReserves();
 // Warm the caches behind the first screens people open (default map layer, map previews, rates),
 // a few seconds after start-up and at low concurrency, so the first visit does not wait on providers.
 setTimeout(() => {
