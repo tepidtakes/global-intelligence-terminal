@@ -131,11 +131,16 @@ export function NotePage() {
   }, [user, noteId, editor]);
 
   // Pick up edits made in Obsidian while this note is open (only when nothing is unsaved here).
+  // Only polls when a vault is connected, and only fetches the note when its stamp changed.
+  const vault = useApi<any>(user ? '/obsidian' : null, 60_000);
+  const vaultConnected = !!vault.data?.config;
   useEffect(() => {
-    if (!id || !user) return;
+    if (!id || !user || !vaultConnected) return;
     const t = setInterval(async () => {
       if (dirty.current || saving.current || document.hidden) return;
       try {
+        const st = await api<{ extUpdatedAt?: string }>(`/notes/${id}/stamp`);
+        if (!(st.extUpdatedAt && metaRef.current.updatedAt && st.extUpdatedAt > metaRef.current.updatedAt)) return;
         const n = await api(`/notes/${id}`);
         if (n.extUpdatedAt && metaRef.current.updatedAt && n.extUpdatedAt > metaRef.current.updatedAt && !dirty.current) {
           applyNote(n); setStatus('saved'); toast('Updated with changes from Obsidian');
@@ -144,7 +149,7 @@ export function NotePage() {
       } catch { /* offline: try again next tick */ }
     }, 4000);
     return () => clearInterval(t);
-  }, [id, user, applyNote, toast]);
+  }, [id, user, vaultConnected, applyNote, toast]);
 
   const markDirty = () => { dirty.current = true; setStatus('dirty'); };
 

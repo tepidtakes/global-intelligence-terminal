@@ -14,9 +14,9 @@ const relsBy = (rels: RelView[], type: string, dir: 'out' | 'in') => rels.filter
 
 // ───────── Government & politics ─────────
 const isLegislator = (role?: string) => /^(U\.S\. (Senator|Representative)|Delegate to the U\.S\. House|Resident Commissioner)/.test(role || '');
-const SRC_TAG: Record<string, string> = { 'wikidata-leaders': 'Wikidata', congress: 'Congress' };
+const SRC_TAG: Record<string, string> = { 'wikidata-leaders': 'Wikidata', 'wikidata-mayors': 'Wikidata', congress: 'Congress' };
 
-export function GovernmentSection({ e, rels, events, partyOf = {} }: { e: Entity; rels: RelView[]; events: any[]; partyOf?: Record<string, any> }) {
+export function GovernmentSection({ e, rels, events, partyOf = {}, mayors = [] }: { e: Entity; rels: RelView[]; events: any[]; partyOf?: Record<string, any>; mayors?: any[] }) {
   const today = new Date().toISOString().slice(0, 10);
   const current = (r: RelView) => !r.rel.validTo || r.rel.validTo > today;
   const hos = relsBy(rels, 'head_of_state', 'in').filter(current), hog = relsBy(rels, 'head_of_government', 'in').filter(current);
@@ -32,7 +32,8 @@ export function GovernmentSection({ e, rels, events, partyOf = {} }: { e: Entity
   const seat = (r: RelView) => /Senator/.test(r.rel.role || '') ? 0 : Number(/-(\d+)$/.exec(r.rel.role || '')?.[1] || 1);
   const legislators = officials.filter((r) => isLegislator(r.rel.role)).sort((a, b) => seat(a) - seat(b) || a.other.name.localeCompare(b.other.name));
   const [showAll, setShowAll] = useState(false);
-  if (!exec.length && !legislators.length && !parties.length && !igos.length) return null;
+  const [allMayors, setAllMayors] = useState(false);
+  if (!exec.length && !legislators.length && !parties.length && !igos.length && !mayors.length && !elections.length) return null;
   const party = (id: string) => partyOf[id] ? <Link to={`/entity/${encodeURIComponent(partyOf[id].id)}`}>{partyOf[id].name}</Link> : <span className="muted">—</span>;
   const tag = (r: RelView) => r.rel.origin && SRC_TAG[r.rel.origin] ? <span className="lbadge" title={r.rel.origin === 'congress' ? 'Loaded live from the congress-legislators dataset' : 'Loaded live from Wikidata (community-maintained) — verify'} style={{ marginLeft: 6 }}>{SRC_TAG[r.rel.origin]}</span> : null;
   return (
@@ -64,7 +65,22 @@ export function GovernmentSection({ e, rels, events, partyOf = {} }: { e: Entity
           <div className="chips">{parties.map((r) => <EntityChip key={r.rel.id} e={{ ...r.other, name: (governing.has(r.other.id) ? '● ' : '') + r.other.name }} />)}</div></div>
       )}
       {igos.length > 0 && <div className="relGroup"><div className="lbl">International memberships ({igos.length})</div><div className="chips">{igos.map((r) => <EntityChip key={r.rel.id} e={r.other} title={r.rel.validFrom ? `Member since ${r.rel.validFrom}${r.rel.validTo ? ` until ${r.rel.validTo}` : ''}` : undefined} />)}</div></div>}
-      {elections.length > 0 && <div className="relGroup"><div className="lbl">Elections</div>{elections.map((x) => <div key={x.id} className="small"><span className="badge">{fmtDate(x.date)}</span> <Link to={`/entity/${encodeURIComponent(x.id)}`}>{x.name}</Link> <span className="muted">· {String(x.status).replace(/-/g, ' ')}</span></div>)}</div>}
+      {mayors.length > 0 && (
+        <div className="relGroup">
+          <div className="lbl">{e.type === 'country' ? 'City leaders' : 'Mayors'} ({mayors.length})</div>
+          <table className="data"><tbody>{(allMayors ? mayors : mayors.slice(0, 10)).map((m: any) => (
+            <tr key={m.city.id + m.person.id}>
+              <td><Link to={`/entity/${encodeURIComponent(m.city.id)}`}>{m.city.name}</Link>{m.capital && <span className="tiny muted"> · capital</span>}{m.population ? <div className="tiny muted">{(m.population / 1e6 >= 1 ? `${(m.population / 1e6).toFixed(1)}M` : `${Math.round(m.population / 1e3)}k`)} people</div> : null}</td>
+              <td className="small muted">{m.role}</td>
+              <td><Link to={`/entity/${encodeURIComponent(m.person.id)}`}><strong>{m.person.name}</strong></Link>{m.origin === 'wikidata-mayors' && <span className="lbadge" style={{ marginLeft: 6 }} title="Loaded live from Wikidata (community-maintained) — verify">Wikidata</span>}</td>
+              <td className="small">{m.party ? <Link to={`/entity/${encodeURIComponent(m.party.id)}`}>{m.party.name}</Link> : <span className="muted">—</span>}</td>
+              <td className="tab small muted">{m.since ? `since ${fmtDate(m.since)}` : ''}</td>
+            </tr>
+          ))}</tbody></table>
+          {mayors.length > 10 && <button className="btn ghost sm" style={{ marginTop: 4 }} onClick={() => setAllMayors(!allMayors)}>{allMayors ? 'Show fewer' : `Show all ${mayors.length}`}</button>}
+        </div>
+      )}
+      {elections.length > 0 && <div className="relGroup"><div className="lbl">Elections <Link className="tiny" to="/elections">all elections ›</Link></div>{elections.map((x) => <div key={x.id} className="small" style={{ marginBottom: 2 }}><span className="badge">{fmtDate(x.date)}</span> {x.scope && x.scope !== 'national' && <span className="badge">{x.scope}</span>} <Link to={`/entity/${encodeURIComponent(x.id)}`}>{x.name}</Link> <span className="muted">· {x.winner ? <>won by <strong style={{ color: 'var(--text)' }}>{x.winner}</strong></> : String(x.status).replace(/-/g, ' ')}</span></div>)}</div>}
       {ratings.length > 0 && (
         <div className="relGroup"><div className="lbl">Sovereign credit ratings (long-term, foreign currency)</div>
           <div className="row wrap">{ratings.map((r) => <span key={r.agency} className="badge" title={`As of ${r.asOf}`}>{r.agency}: <strong style={{ color: 'var(--text)' }}>{r.rating}</strong> <span className="muted">({r.asOf})</span></span>)}</div>

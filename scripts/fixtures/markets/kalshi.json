@@ -1,0 +1,9 @@
+{"cursor":"","events":[
+ {"event_ticker":"PRESFRANCE-27","series_ticker":"PRESFRANCE","title":"Who will win the 2027 French presidential election?","sub_title":"Before May 2027","category":"Elections",
+  "markets":[
+   {"ticker":"PRESFRANCE-27-JBAR","yes_sub_title":"Jordan Bardella","yes_bid":33,"yes_ask":35,"last_price":34,"volume":520000,"close_time":"2027-05-08T23:59:00Z","status":"active"},
+   {"ticker":"PRESFRANCE-27-EPHI","yes_sub_title":"Edouard Philippe","yes_bid":25,"yes_ask":27,"last_price":26,"volume":410000,"close_time":"2027-05-08T23:59:00Z","status":"active"},
+   {"ticker":"PRESFRANCE-27-OTH","yes_sub_title":"Other","yes_bid":0,"yes_ask":0,"last_price":12,"volume":20000,"close_time":"2027-05-08T23:59:00Z","status":"active"}
+  ]},
+ {"event_ticker":"FEDRATE-26DEC","series_ticker":"FED","title":"Fed decision in December","category":"Economics","markets":[{"ticker":"X","yes_sub_title":"Cut","yes_bid":60,"yes_ask":62,"volume":1000,"status":"active"}]}
+]}

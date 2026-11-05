@@ -26,14 +26,19 @@ Missing values are shown as "—" or "no data", never as 0.
 | Exports/imports by product and partner; "who exports what" | UN Comtrade public API | 7 days | UN Comtrade terms (free tier, rate-limited) |
 | IMF growth, inflation, unemployment, debt forecasts | IMF World Economic Outlook (DataMapper) | 24 h | Free reuse with attribution |
 | Central-bank policy rates | Bank for International Settlements | 6 h | Free reuse with attribution |
-| 10-year government bond yields (monthly) | OECD, via the St. Louis Fed (FRED) | 24 h | OECD terms |
+| 10-year government bond yields | Daily: US Treasury, Bank of Canada, Japan MOF, Bank of England (par yields). Monthly: ECB convergence yields (all EU members), OECD via FRED (others) | 6–24 h | Free with attribution / OECD terms |
 | Daily yield curves | US Treasury · European Central Bank · Bank of England · Japan Ministry of Finance · Bank of Canada | 6 h | Public / free with attribution |
 | Fed projections (FOMC medians) | Federal Reserve, via FRED | 24 h | Public domain |
 | Company financials (US filers) | SEC EDGAR | 24 h | Public domain |
 | Share prices, FX, commodity futures, fed funds futures | Yahoo Finance (unofficial endpoints) | 5–15 min | **Personal use only** — see below |
 | Analyst consensus (targets, ratings, estimates) | Yahoo Finance | 6 h | **Personal use only** |
-| Headlines | Google News RSS (fallback: GDELT) | 1–2 h | **Personal feed-reader use**; links go to the publisher |
+| Headlines for one profile | Google News RSS (fallback: GDELT) | 1–2 h | **Personal feed-reader use**; links go to the publisher |
+| Trusted news feeds (newsroom, profile news, signals, "In the news" map layer) | Publishers' own RSS feeds, official press-release feeds, and wire headlines via Google News site searches — [details below](#trusted-news) | 30 min | Headlines and links only, for personal feed-reader use; each article stays with its publisher |
 | Members of Congress | `unitedstates/congress-legislators` | 24 h | Public domain (CC0) |
+| Mayors / city heads of government (capitals, US cities over 250k, curated cities) | Wikidata | 24 h | CC0 |
+| Election results, candidates, turnout; party ideology; candidates' policy positions | Wikipedia election, party and "Political positions of …" articles | 30 min near polling day, otherwise 12 h; policies 7 days | CC BY-SA 4.0 |
+| US governor, Senate and big-city mayoral elections; mayoral elections in curated world cities | Wikipedia election articles | 12 h | CC BY-SA 4.0 |
+| Election odds | Polymarket (Gamma API) and Kalshi (public API) | 15 min | Public market data; prices are bets, not polls or forecasts |
 | Heads of state/government, US governors, their parties | Wikidata | 24 h | CC0 |
 | Ongoing wars and conflicts, deaths by year | Wikipedia "List of ongoing armed conflicts" (which cites ACLED and UCDP) | 12 h | CC BY-SA 4.0 |
 | Sides of each war (states, armed groups, supporters, former participants) and the wars inside each listed conflict | The "Belligerents" box of each war's own Wikipedia article (~200 articles, read 20 per request) | 24 h | CC BY-SA 4.0 |
@@ -43,6 +48,108 @@ Missing values are shown as "—" or "no data", never as 0.
 
 The full list with links is in the app (every profile has a **Sources** section) and in
 `server/data/curated.ts` (`SOURCES`).
+
+## Trusted news
+
+<a id="trusted-news"></a>Every 30 minutes the terminal reads 27 news feeds and keeps the
+headlines for 14 days (`data/news/store.json`). It stores the headline, a short summary
+where the feed provides one, the outlet, the time and the link — never the article.
+
+**Which feeds.** Publishers' own RSS: BBC (world, business), The Guardian (world, business),
+The New York Times (world, business), NPR, Deutsche Welle (world, business), France 24,
+Al Jazeera, CNBC (world, economy), CBC, ABC (Australia). Official sources: Federal Reserve,
+European Central Bank, Bank of England, IMF, UN News, SEC, WTO. Wire services and paywalled
+papers publish no open feed, so their headlines come from Google News searches limited to
+their sites: Reuters, Associated Press, Bloomberg, Financial Times, Wall Street Journal.
+The Data page shows whether each feed worked on the last run, and why not.
+
+**Outlet tiers.** Every headline anywhere in the terminal is labelled with what kind of
+outlet published it (the full list is in `shared/newsSources.ts` and on the Data page):
+
+| Tier | Meaning |
+|---|---|
+| official | A government, central bank, regulator or international organisation (also any .gov, .gov.uk, .gouv.fr… site) |
+| wire | News agencies whose copy others republish: Reuters, AP, AFP, Bloomberg, dpa, Kyodo, Yonhap… |
+| public broadcaster | BBC, NPR, PBS, DW, France 24, CBC, ABC Australia, NHK… |
+| major outlet | Established papers and broadcasters with public corrections policies |
+| specialist | Specialist or regional outlets with an editorial track record in their field |
+| state media | Government-controlled outlets (Xinhua, TASS, RT, Press TV…): a government's stated position, not independent reporting |
+| unrated | Anything not in the list — shown, but check the original |
+
+Tiers describe the kind of outlet, not its politics. "Trusted" means the first five.
+
+**Stories and corroboration.** Headlines from different outlets about the same event (most
+content words shared, within 72 hours) are grouped into one story. "✓ 3 trusted outlets"
+means three *different* trusted outlets carried it.
+
+**Linking to profiles.** Headlines are linked to the countries, US states, organisations,
+companies, parties, people and commodities they name. To avoid false matches: names that are
+also everyday words (Apple, Shell, Labour, gold, oil) only count with supporting context
+(business, political or market words); places with the same name (Georgia, Congo) are told
+apart by the other names in the headline, or not linked at all; "Beijing", "the Kremlin" or
+"Downing Street" count as their country; sitting heads of state and government are also
+matched by surname ("Trump and Xi meet").
+
+**Signals: news that updates profiles.** When trusted headlines say someone was appointed
+(CEO, chair, prime minister, president, finance minister), is leaving, or won an election,
+the terminal compares that with its records:
+
+- **Reported by two or more independent trusted outlets, or by an official source, and not
+  what the record shows** → the profile gets a **reported** fact (dashed label) naming the
+  outlets and the date, and the person the record still lists gets a warning. For an
+  election that has just taken place, the reported winner is added to the election.
+- **One outlet only** → listed in the newsroom's signals panel as "single source"; nothing
+  on the profile changes.
+- **Matches the record** → nothing to do.
+
+Headlines never close a term, delete a relationship or replace a curated fact. They tell
+you where to look; the official source settles it.
+
+## Elections
+
+**Results.** Each election links to its Wikipedia article. The terminal reads the article's
+results box — candidates, parties, votes, percentages, seats, turnout and who holds the office
+afterwards — every 30 minutes from ten days before polling day to two days after, and every 12
+hours otherwise. Until the article names a winner the election shows **counting** (with the
+current leader, if the article lists one); the terminal never declares a winner itself. When
+trusted news outlets also report a winner, the profile shows whether the two agree (✓) or not
+(⚠, also listed in the consistency audit). Official results come from each country's
+electoral authority.
+
+**Candidates and policies.** Candidates link to their profiles (created if missing). For each
+one the profile shows their party's ideology and left–right position as stated on the party's
+Wikipedia page, and a summary of their policy positions from the "Political positions of …"
+article — or, if there is none, the "Political positions" / "Platform" section of their own
+article — with a link to the full text and its sources.
+
+**Prediction markets.** Open election markets on Polymarket and Kalshi are matched to an
+election by place (country, US state or city), office (president, legislature, governor,
+mayor, Senate), year and timing, then to candidates by surname or party. A market about a
+different office, year or place is never attached. The profile lists every matched market
+and combines them into one market-implied chance per candidate (weighted by trading volume).
+Markets with less than $25,000 traded are marked **thin**. These prices are what traders pay
+for "this candidate wins" — useful as a live read of expectations, not a poll, and not a
+forecast by the terminal.
+
+**Local politics.** Mayors (or a city's head of government, e.g. the Governor of Tokyo) come
+from Wikidata for every national capital, every US city over 250,000 people and every curated
+city; cities the terminal didn't know are added to the map. State profiles list their cities'
+mayors, governor, Congress delegation and state and city elections; country profiles list
+their capital's and other cities' leaders. Curated mayors are compared with Wikidata the same
+way as national leaders.
+
+## Rates: one number per country
+
+The 10-year yield on the map, on the Markets page and on a country's profile is now always
+the same figure, from one resolver: a **daily close** where an official daily series exists
+(US Treasury par yield, Bank of Canada benchmark, Japan MOF, Bank of England par yield);
+otherwise the **monthly average** from the ECB (EU members, including Bulgaria, Croatia,
+Cyprus, Malta and Romania) or the OECD. Each value shows its date and whether it is daily or
+monthly. Monthly values more than 4 months old, daily values more than 14 days old and policy
+rates last reported more than 120 days ago are marked **stale** and left off the map. World
+Bank "latest available" map layers leave out countries whose latest figure is more than six
+years old. Central-government debt (World Bank) and general-government debt (IMF) are labelled
+as such — they measure different things and are no longer both called "Govt debt".
 
 ## How the live updating works
 
@@ -65,6 +172,14 @@ The full list with links is in the app (every profile has a **Sources** section)
             │
             ▼
      Added to the app's knowledge graph, replacing the previous batch
+
+  Separately, every 30 minutes:
+     27 trusted news feeds ─► de-duplicate into stories ─► link to profiles
+            │
+            ▼
+     Signals (new CEO, new prime minister, election winner) checked against the records
+        ├─ 2+ trusted outlets or official, differs ─► "reported" fact + warning
+        └─ otherwise ─► listed only
 ```
 
 **Wars and their sides.** Wikipedia's conflict list groups wars into rows (the 2026 Iran war
@@ -79,6 +194,12 @@ states and groups that no longer fight; they are kept out of "wars between state
 "who is fighting" map. Wikipedia only allows a few hundred anonymous requests an hour, so
 articles are fetched 20 at a time through one polite queue; a failed refresh is retried after
 5 minutes and the last good copy stays in use meanwhile.
+**Checking freshness yourself.** The **Data** page (top bar, or <http://localhost:5180/data>)
+shows each provider's state — *ok*, *stale* (the source failed and the last good copy is
+being served) or *failing* (no copy to fall back on) — when each background loader last
+downloaded its data, each news feed's status, and a consistency audit of the whole
+dataset. Facts loaded in the background show "Retrieved … ago"; scheduled events whose date
+has passed switch to "outcome not recorded" automatically instead of staying "scheduled".
 
 **Leaders: live data vs. the hand-checked list.** When Wikidata says a different person took
 office *after* the June 2026 check, the app trusts the newer record: it closes the old term,
@@ -102,6 +223,7 @@ country code or ticker).
 | community | From Wikidata or Wikipedia — usually current, but check before relying on it |
 | forecast | An institution's projection (IMF, Fed) — not an outcome and not a survey consensus |
 | estimate | An estimate (e.g. conflict deaths, analyst EPS forecasts) |
+| reported | Stated by trusted news outlets (named next to it) but not yet in an official or structured record — verify |
 | manual | Something you typed in |
 
 ## Known gaps
@@ -112,4 +234,8 @@ country code or ticker).
   yields for ~30 countries; policy rates for ~40 central banks.
 - Recent trade years are incomplete until countries report to UN Comtrade.
 - Sub-national areas (states, counties) are loaded for the United States only.
-- Curated facts can go stale. Use **Report an inconsistency** on any profile.
+- Curated facts can go stale. Use **Report an inconsistency** on any profile; corroborated
+  news signals flag many changes automatically, but only for roles and events the signal
+  rules recognise.
+- Some publishers' feeds may block automated readers or change address; the Data page shows
+  which feeds failed and why. Headline searches for wire services depend on Google News.

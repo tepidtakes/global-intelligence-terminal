@@ -47,6 +47,8 @@ export const LAYERS: LayerDef[] = [
     color: { kind: 'categories', colors: { soon: ['#d97706', '#f59e0b'], upcoming: ['#f5c66b', '#8a6418'], recent: ['#8aa4c8', '#4f6a90'] } } },
   { id: 'govtype', label: 'Government type', group: 'politics', hint: 'Presidential, parliamentary, monarchy or one-party state.', keywords: 'regime democracy',
     color: { kind: 'categories', colors: { presidential: ['#2a78d6', '#3987e5'], parliamentary: ['#1baf7a', '#199e70'], monarchy: ['#6250d6', '#9085e9'], 'one-party': ['#c8312d', '#e66767'] } } },
+  { id: 'news', label: 'In the news (48 h)', group: 'politics', live: true, hint: 'How many separate stories from trusted outlets (wires, public broadcasters, major papers, official sources) named each country in a headline in the last 48 hours.', keywords: 'headlines attention media coverage breaking',
+    color: { kind: 'magnitude', hue: 'rose' } },
   { id: 'igo', label: 'Organization membership', group: 'politics', hint: 'NATO, EU, OPEC, BRICS, G7… — up to three at once, by year.', keywords: 'nato eu opec brics g20 alliance', color: { kind: 'auto' } },
   // Security
   { id: 'conflicts', label: 'Wars & armed conflicts', group: 'security', live: true, hint: '“Where”: countries where fighting takes place. “Who”: countries fighting in a war, wherever it is fought. Shaded by the deadliest war.', keywords: 'war fighting military belligerents',
@@ -68,13 +70,13 @@ export const LAYERS: LayerDef[] = [
     color: { kind: 'categories', colors: { 'High income': ['#0e7a5a', '#9af2cb'], 'Upper middle income': ['#b7e6cf', '#2a8f6b'], 'Lower middle income': ['#f0956f', '#8c2f22'], 'Low income': ['#8f1d14', '#ff9575'] } } },
   { id: 'wb:SP.POP.TOTL', label: 'Population', group: 'economy', yearable: true, hint: 'Darker purple = more people.', keywords: 'people demographics', color: { kind: 'magnitude', hue: 'purple' } },
   // Public finances
-  { id: 'wb:GC.DOD.TOTL.GD.ZS', label: 'Government debt / GDP', group: 'finance', yearable: true, hint: 'Green = low debt, red = high debt.', keywords: 'sovereign borrowing', color: { kind: 'better', dir: 'low' } },
-  { id: 'wb:GC.NLD.TOTL.GD.ZS', label: 'Budget balance / GDP', group: 'finance', yearable: true, hint: 'Green = surplus, red = deficit.', keywords: 'fiscal deficit surplus', color: { kind: 'signed', good: 'positive' } },
+  { id: 'wb:GC.DOD.TOTL.GD.ZS', label: 'Central government debt / GDP', group: 'finance', yearable: true, hint: 'World Bank, central government only. Green = low debt, red = high debt. For all levels of government use “Debt forecast” (IMF general government).', keywords: 'sovereign borrowing', color: { kind: 'better', dir: 'low' } },
+  { id: 'wb:GC.NLD.TOTL.GD.ZS', label: 'Central government budget balance / GDP', group: 'finance', yearable: true, hint: 'World Bank, central government only. Green = surplus, red = deficit.', keywords: 'fiscal deficit surplus', color: { kind: 'signed', good: 'positive' } },
   // IMF outlook
   { id: 'imf:NGDP_RPCH', label: 'Growth forecast', group: 'outlook', live: true, hint: 'IMF projected real GDP growth. Green = growing, red = contracting.', keywords: 'projection outlook weo', variants: imfVariants('NGDP_RPCH'), color: { kind: 'signed', good: 'positive' } },
   { id: 'imf:PCPIPCH', label: 'Inflation forecast', group: 'outlook', live: true, hint: 'IMF projected inflation. Green = near 2%, red = far above (or below zero).', keywords: 'projection prices', variants: imfVariants('PCPIPCH'), color: { kind: 'target', target: 2 } },
   { id: 'imf:LUR', label: 'Unemployment forecast', group: 'outlook', live: true, hint: 'IMF projected unemployment. Green = low.', keywords: 'projection jobs', variants: imfVariants('LUR'), color: { kind: 'better', dir: 'low' } },
-  { id: 'imf:GGXWDG_NGDP', label: 'Debt forecast', group: 'outlook', live: true, hint: 'IMF projected general-government debt / GDP. Green = low.', keywords: 'projection sovereign', variants: imfVariants('GGXWDG_NGDP'), color: { kind: 'better', dir: 'low' } },
+  { id: 'imf:GGXWDG_NGDP', label: 'Debt forecast', group: 'outlook', live: true, hint: 'IMF general-government (all levels) debt / GDP — the standard comparison measure; last year is an IMF estimate. Green = low.', keywords: 'projection sovereign', variants: imfVariants('GGXWDG_NGDP'), color: { kind: 'better', dir: 'low' } },
   // Trade
   { id: 'trade', label: 'Who exports / imports a product', group: 'trade', live: true, hint: 'Pick a product — crude oil, chips, wheat… — and see every country’s exports or imports (UN Comtrade).', keywords: 'exporters importers hs comtrade goods', color: { kind: 'magnitude', hue: 'ocean' } },
   { id: 'commodity', label: 'Commodity producers', group: 'trade', hint: 'Top producers and exporters of a commodity, from USGS, EIA and USDA rankings.', keywords: 'mining oil grain', color: { kind: 'categories', colors: {} } },
@@ -85,7 +87,7 @@ export const LAYERS: LayerDef[] = [
   { id: 'fx', label: 'Currency vs US dollar', group: 'markets', live: true, hint: 'Green = currency strengthened against the dollar, red = weakened.', keywords: 'fx forex exchange rate devaluation',
     variants: [{ id: 'fx:m1', label: '1M' }, { id: 'fx:ytd', label: 'YTD' }, { id: 'fx:y1', label: '1Y' }, { id: 'fx:y5', label: '5Y' }], color: { kind: 'signed', good: 'positive' } },
   { id: 'policy-rate', label: 'Central-bank policy rate', group: 'markets', live: true, hint: 'Official interest rate (BIS). Darker = tighter money.', keywords: 'interest rate monetary fed ecb', color: { kind: 'magnitude', hue: 'gold' } },
-  { id: 'bond10y', label: '10-year bond yield', group: 'markets', live: true, hint: 'Government borrowing cost. Green = cheap, red = expensive (OECD, monthly).', keywords: 'sovereign yield rates', color: { kind: 'better', dir: 'low' } },
+  { id: 'bond10y', label: '10-year bond yield', group: 'markets', live: true, hint: 'Government borrowing cost. Green = cheap, red = expensive. Daily closes for the US, Canada, Japan and UK; monthly averages elsewhere (ECB, OECD).', keywords: 'sovereign yield rates', color: { kind: 'better', dir: 'low' } },
   { id: 'wb:FR.INR.LEND', label: 'Bank lending rate', group: 'markets', yearable: true, hint: 'Typical bank lending rate. Green = cheaper credit.', keywords: 'interest credit', color: { kind: 'better', dir: 'low' } },
   { id: 'wb:CM.MKT.LCAP.GD.ZS', label: 'Stock-market size / GDP', group: 'markets', yearable: true, hint: 'Listed-company market cap relative to the economy. Darker = deeper market.', keywords: 'equities', color: { kind: 'magnitude', hue: 'indigo' } },
   { id: 'wb:BX.KLT.DINV.WD.GD.ZS', label: 'Foreign direct investment', group: 'markets', yearable: true, hint: 'Net FDI inflows / GDP. Green = more inflows.', keywords: 'fdi capital', color: { kind: 'better', dir: 'high' } },

@@ -70,7 +70,10 @@ Optional settings (environment variables): `CONTACT_EMAIL` (sent to SEC/Wikipedi
 which ask API users for one), `ALLOW_SIGNUP=0`, `HOST`, `PORT`, `TERMINAL_VAULT`. The
 server listens on this computer only unless you change `HOST` — see [SECURITY.md](SECURITY.md).
 
-Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:live`.
+Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:live` ·
+`npm run check:news` (news parsing, tagging and signals, offline) · `npm run check:data`
+(consistency audit of the built-in dataset, offline; fails on errors) · `npm run check:parsers`
+(rates, election, prediction-market and mayor parsers on fixtures, offline).
 
 ## What's in it
 
@@ -102,7 +105,9 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
   partner) · US Treasury (par yield curve) · SEC EDGAR (US and 20-F filer financials) ·
   Yahoo Finance chart endpoint (delayed quotes, futures, dividends) · Google News RSS /
   GDELT (headlines linking to publishers).
-  Plus: BIS central-bank policy rates · OECD 10-year yields (via FRED) · daily government
+  Plus: BIS central-bank policy rates · 10-year government yields (one figure everywhere:
+  daily closes for the US, Canada, Japan and UK; ECB monthly for EU members; OECD monthly via
+  FRED elsewhere; out-of-date values flagged, not shown as current) · daily government
   yield curves for the US (Treasury), euro area (ECB AAA curve), UK (Bank of England),
   Japan (MOF) and Canada (Bank of Canada) · IMF World Economic Outlook projections · FOMC
   median projections and fed-funds-futures-implied rates · analyst consensus (price
@@ -122,6 +127,40 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
   (e.g. United States, Israel & allies vs Iran & the Axis of Resistance; Russia vs Ukraine),
   each country's involvement on its profile (which side, with whom, against whom), armed-group
   profiles, and two map views: *who is fighting* (by deadliest war) and *sides in one war*.
+- **Trusted newsroom** (refreshed every 30 min): headlines from wire services (Reuters, AP,
+  Bloomberg, FT, WSJ via headline search), public broadcasters (BBC, NPR, DW, France 24, CBC,
+  ABC), major papers (NYT, Guardian, CNBC, Al Jazeera) and official sources (Fed, ECB, Bank of
+  England, IMF, UN, SEC, WTO). The same story from several outlets is shown once with every
+  outlet that carried it ("✓ 3 trusted outlets"); every headline is labelled with its
+  outlet's tier (official, wire, public broadcaster, major, specialist, state media, unrated)
+  and linked to the countries, companies, people, organisations and commodities it names.
+  Profiles show these alongside a live headline search, trusted outlets first. Map layer
+  **In the news (48 h)** shades countries by how many separate stories named them.
+- **News signals**: appointments, departures and election wins stated in trusted
+  headlines are checked against the records. When two or more independent trusted outlets
+  (or an official source) report something the record doesn't show — e.g. a new CEO — the
+  profile gets a dashed **reported** fact naming the outlets, and the person the record
+  still lists gets a warning. Records are flagged, never overwritten; single-source reports
+  are listed but flag nothing.
+- **Elections page** (`/elections`) and election profiles: upcoming and recent national
+  elections plus US governor, Senate and big-city mayoral races and mayoral elections in major
+  world cities. Results, turnout and candidates are read from each election's Wikipedia
+  article — every 30 minutes around polling day — and shown as "counting" until a winner is
+  recorded (never guessed), with a ✓/⚠ check against what trusted news reports. Candidates
+  link to their profiles, with their party's stated ideology and position and a summary of
+  their policy positions (from their "Political positions" article or section). **Prediction
+  markets**: Polymarket and Kalshi prices matched to each election and candidate, combined
+  into one market-implied chance, with each market listed separately and thin markets marked.
+- **Local politics**: mayors (or city heads of government) of every national capital, every
+  US city over 250,000 people and every curated city, from Wikidata — new cities appear on the
+  map — shown on city, state and country profiles alongside each state's governor, Congress
+  delegation and local elections.
+- **Data page** (`/data`): every live provider's status (ok / serving a cached copy /
+  failing), when each background loader last downloaded its data, every news feed's
+  health, facts by quality label, and a consistency audit (unknown sources, broken links,
+  conflicting values, duplicate people, past events still "scheduled", competing
+  officeholders, news that contradicts a record). Every profile has a **Data quality** card
+  with the same, for that entity. Live facts show when they were retrieved.
 - **Markets page** (commodities, currencies, rates & yield curves) and **Conflicts page**.
 - **Curated dataset** (`server/data/curated.ts`): 10 deeply curated countries, 61 with
   government type, 12 IGOs, 18 parties, 57 people, ~115 companies across the US, Europe,
@@ -159,6 +198,13 @@ server/          Express API (one process; mounts Vite in dev)
   markets.ts     FX, commodity futures, policy rates, yield curves, IMF, Fed, consensus
   worldEvents.ts Wikipedia conflict list + electoral calendar parsers
   augment.ts     live graph additions: Congress, Wikidata leaders, conflicts, elections
+  newsroom.ts    trusted news feeds: ingest, de-duplicate, tag entities, signals
+  newsParse.ts   feed parsing, entity tagger, headline signal extraction (pure, tested)
+  consistency.ts provenance & consistency audit (Data page, npm run check:data)
+  elections.ts   election articles: results, candidates, local races, candidate policies
+  electionParse.ts  Infobox election / party parsers (pure, tested)
+  predictionMarkets.ts  Polymarket + Kalshi, matched to elections and candidates
+  localPolitics.ts  mayors and city heads of government (Wikidata)
   private.ts     per-user notes, positions, catalysts, watchlists, views, prefs
   notes.ts       note storage, [[wikilinks]], backlinks
   obsidian.ts    two-way Obsidian vault sync (Markdown ⇄ notes, Windows-safe)
@@ -166,6 +212,10 @@ server/          Express API (one process; mounts Vite in dev)
 scripts/check-obsidian.mts  conversion + file-name checks (npm run check:obsidian)
 scripts/check-tickers.mts   every quote symbol resolves to the right security (npm run check:tickers)
 scripts/check-live.mts      conflict & election parsers against live Wikipedia (npm run check:live)
+scripts/check-news.mts      news parsing, tagging, clustering and signals on fixtures (npm run check:news)
+scripts/check-data.mts      consistency audit of the built-in dataset (npm run check:data)
+scripts/check-parsers.mts   rates, elections, markets and mayors on fixtures (npm run check:parsers)
+shared/newsSources.ts       outlet registry and tiers
 shared/types.ts  entity / relationship vocabulary
 shared/products.ts  HS codes for "who exports / imports what"
 src/             React UI (map, profiles, research, portfolio, calendar…)
@@ -173,6 +223,14 @@ db/postgres-schema.sql   production target schema (PostgreSQL + PostGIS)
 docs/ARCHITECTURE.md     architecture, schema, data requirements, roadmap
 data/            runtime: SQLite DB, provider cache, uploads (git-ignored)
 ```
+
+## Speed and screen sizes
+
+Each page loads only the code it needs (a country profile is about 100 KB compressed; the map,
+with its geometry, about 580 KB), responses are gzip-compressed, and built files are cached by
+the browser for a year. Pages show data the terminal already has immediately and refresh it in
+the background, always with its real retrieval time. The layout works from phones (menu, map
+drawer and bottom sheet) through tablets and laptops to 4K monitors.
 
 ## Known limits (honest list)
 

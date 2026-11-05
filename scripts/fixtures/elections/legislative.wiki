@@ -1,0 +1,32 @@
+{{Infobox election
+| election_name = 2025 German federal election
+| country = Germany
+| type = parliamentary
+| ongoing = no
+| election_date = 23 February 2025
+| seats_for_election = All 630 seats in the [[Bundestag]]
+| majority_seats = 316
+| turnout = 82.5%
+| leader1 = [[Friedrich Merz]]
+| party1 = [[Christian Democratic Union of Germany|CDU]]/[[Christian Social Union in Bavaria|CSU]]
+| last_election1 = 197
+| seats1 = 208
+| popular_vote1 = 14,158,105
+| percentage1 = 28.5%
+| leader2 = [[Alice Weidel]]
+| party2 = [[Alternative for Germany|AfD]]
+| seats1_before = 
+| seats2 = 152
+| popular_vote2 = 10,328,780
+| percentage2 = 20.8%
+| leader3 = [[Olaf Scholz]]
+| party3 = [[Social Democratic Party of Germany|SPD]]
+| seats3 = 120
+| popular_vote3 = 8,149,124
+| percentage3 = 16.4%
+| title = [[Chancellor of Germany|Chancellor]]
+| before_election = [[Olaf Scholz]]
+| before_party = [[Social Democratic Party of Germany|SPD]]
+| after_election = [[Friedrich Merz]]
+| after_party = [[Christian Democratic Union of Germany|CDU/CSU]]
+}}

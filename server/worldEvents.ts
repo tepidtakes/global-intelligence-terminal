@@ -11,11 +11,11 @@ const WP_UA = { 'User-Agent': USER_AGENT };
 
 // Wikipedia limits how fast one client may call its API (HTTP 429 when exceeded). All calls
 // go through one queue: one request at a time, a short gap between them, and a back-off
-// (honouring Retry-After) when Wikipedia asks us to slow down.
+// when Wikipedia asks us to slow down. Every module that calls the Wikipedia API must use this.
 let wpChain: Promise<unknown> = Promise.resolve();
 let wpNext = 0;
 const WP_GAP_MS = 750;
-function wpJson(url: string): Promise<any> {
+export function wpJson(url: string): Promise<any> {
   const job = wpChain.then(async () => {
     for (let attempt = 0; ; attempt++) {
       const wait = wpNext - Date.now();
@@ -54,7 +54,7 @@ export function plain(s: string) {
     .replace(/'''?/g, '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 }
-const firstLink = (s: string) => /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/.exec(s)?.[1]?.trim();
+export const firstLink = (s: string) => /\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/.exec(s)?.[1]?.trim();
 
 // ───────────────────────── Conflicts ─────────────────────────
 export type Intensity = 'major-war' | 'minor-war' | 'conflict' | 'skirmish';
@@ -388,7 +388,7 @@ export async function warInfos(articles: string[]) {
     }
     return { infos, notFound: titles.filter((t) => !pages.has(t)), errors };
   });
-  return { infos: new Map(Object.entries(r.data.infos)), failed: r.data.notFound.length, errors: (r.data.errors || []).concat(r.data.notFound.slice(0, 3).map((t) => `${t}: not loaded`)), stale: r.stale };
+  return { infos: new Map(Object.entries(r.data.infos)), failed: r.data.notFound.length, errors: (r.data.errors || []).concat(r.data.notFound.slice(0, 3).map((t) => `${t}: not loaded`)), stale: r.stale, fetchedAt: r.fetchedAt };
 }
 
 /** One war (used by checks). */

@@ -6,7 +6,9 @@
   "author": "Jackson F.",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "tsx server/index.ts",
     "build": "vite build",
@@ -14,7 +16,10 @@
     "typecheck": "tsc --noEmit",
     "check:obsidian": "tsx scripts/check-obsidian.mts",
     "check:tickers": "tsx scripts/check-tickers.mts",
-    "check:live": "tsx scripts/check-live.mts"
+    "check:live": "tsx scripts/check-live.mts",
+    "check:news": "tsx scripts/check-news.mts",
+    "check:data": "tsx scripts/check-data.mts",
+    "check:parsers": "tsx scripts/check-parsers.mts"
   },
   "dependencies": {
     "@tiptap/extension-link": "~2.11.5",
@@ -28,6 +33,7 @@
     "@tiptap/pm": "~2.11.5",
     "@tiptap/react": "~2.11.5",
     "@tiptap/starter-kit": "~2.11.5",
+    "compression": "^1.8.1",
     "express": "^4.21.2",
     "maplibre-gl": "^4.7.1",
     "marked": "^15.0.12",
@@ -43,6 +49,7 @@
     "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
     "@types/express": "^4.17.21",
     "@types/geojson": "^7946.0.14",
     "@types/node": "^22.10.0",

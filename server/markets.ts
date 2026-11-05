@@ -3,7 +3,9 @@
 //   FX & commodity futures ... Yahoo Finance spark endpoint (delayed)
 //   Policy rates ............. BIS central bank policy rates (official)
 //   Yield curves ............. US Treasury, Bank of Canada, Japan MOF, Bank of England, ECB
-//   10-year yields ........... OECD Main Economic Indicators via FRED (monthly, official)
+//   10-year yields ........... one resolver for map, Markets page and profiles: daily official
+//                              closes (US Treasury, Bank of Canada, Japan MOF, Bank of England par
+//                              yields) > ECB monthly convergence yields (EU) > OECD monthly via FRED
 //   Forecasts ................ IMF World Economic Outlook (DataMapper); FOMC Summary of
 //                              Economic Projections (via FRED); fed funds futures (CBOT, delayed)
 //   Analyst consensus ........ Yahoo Finance quoteSummary (broker estimates, delayed)
@@ -12,6 +14,12 @@ import { entities, getEntity } from './graph.js';
 import { usTreasuryCurve, minorUnitFactor } from './providers.js';
 
 const BROWSER_UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' };
+/** Run fn over items with at most `limit` in flight. */
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length); let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i], i); } }));
+  return out;
+}
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const daysAgo = (n: number, from = new Date()) => isoDate(new Date(from.getTime() - n * 86400_000));
 
@@ -158,11 +166,14 @@ export async function policyRates() {
     const rows = parseCsv(await fetchText('https://stats.bis.org/api/v1/data/WS_CBPOL/D./all?lastNObservations=1&format=csv', {}, 30000));
     const h = rows[0]; const col = (n: string) => h.indexOf(n);
     const map = iso2to3();
-    const out: Record<string, { value: number; date: string; bank: string; area: string }> = {};
+    const out: Record<string, { value: number; date: string; bank: string; area: string; stale: boolean }> = {};
+    const staleBefore = daysAgo(120);
     for (const r of rows.slice(1)) {
       const area = r[col('REF_AREA')]; const v = parseFloat(r[col('OBS_VALUE')]);
       if (!Number.isFinite(v)) continue;
-      const rec = { value: v, date: r[col('TIME_PERIOD')], bank: r[col('SOURCE_REF')], area };
+      // A bank that stopped reporting keeps its last value forever; flag it rather than show it as current.
+      const date = r[col('TIME_PERIOD')];
+      const rec = { value: v, date, bank: r[col('SOURCE_REF')], area, stale: date < staleBefore };
       if (area === 'XM') for (const iso of EURO_AREA) out[iso] = rec;
       else if (map[area]) out[map[area]] = rec;
     }
@@ -193,29 +204,111 @@ async function fredSeries(id: string, since = '2015-01-01') {
   });
 }
 
-export async function tenYearYields() {
-  return cached('oecd:10y:all', 24 * 3600, async () => {
+/** Latest OECD monthly 10-year yield per country (no age cut-off here: staleness is flagged by the resolver). */
+async function oecdTenYear() {
+  return cached('oecd:10y:latest', 24 * 3600, async () => {
     const map = iso2to3();
     const out: Record<string, { value: number; period: string }> = {};
-    const cutoff = daysAgo(270).slice(0, 7);
-    for (let i = 0; i < OECD_10Y.length; i += 6) {
-      const batch = OECD_10Y.slice(i, i + 6);
-      const res = await Promise.allSettled(batch.map((c) => fredSeries(`IRLTLT01${c}M156N`, daysAgo(400))));
-      res.forEach((r, j) => {
-        if (r.status !== 'fulfilled') return;
-        const last = r.value.data.at(-1);
-        if (last && last.t.slice(0, 7) >= cutoff && map[batch[j]]) out[map[batch[j]]] = { value: last.v, period: last.t.slice(0, 7) };
-      });
-    }
+    // Up to 8 requests at a time (was 8 sequential batches of 6).
+    await mapLimit(OECD_10Y, 8, async (c) => {
+      try {
+        const last = (await fredSeries(`IRLTLT01${c}M156N`, daysAgo(400))).data.at(-1);
+        if (last && map[c]) out[map[c]] = { value: last.v, period: last.t.slice(0, 7) };
+      } catch { /* that country has no series */ }
+    });
     if (!Object.keys(out).length) throw new Error('FRED unreachable');
     return out;
   });
 }
 
-export async function tenYearHistory(iso3: string) {
+// ECB "long-term interest rate for convergence purposes": 10-year benchmark yields for every EU
+// member (euro and non-euro), monthly. Fills gaps the OECD leaves (Bulgaria, Croatia, Cyprus, Malta, Romania).
+const ECB_IRS = 'https://data-api.ecb.europa.eu/service/data/IRS/M.{AREA}.L.L40.CI.0000..N.Z';
+export function parseEcbIrs(csv: string) {
+  const rows = parseCsv(csv); const h = rows[0] || [];
+  const ai = h.indexOf('REF_AREA'), ti = h.indexOf('TIME_PERIOD'), vi = h.indexOf('OBS_VALUE');
+  return rows.slice(1).map((r) => ({ area: r[ai] === 'GR' || r[ai] === 'EL' ? 'GR' : r[ai], t: r[ti], v: parseFloat(r[vi]) })).filter((p) => p.area && /^\d{4}-\d{2}$/.test(p.t) && Number.isFinite(p.v));
+}
+async function ecbTenYear() {
+  return cached('ecb:irs:latest', 24 * 3600, async () => {
+    const map = iso2to3();
+    const out: Record<string, { value: number; period: string }> = {};
+    for (const p of parseEcbIrs(await fetchText(`${ECB_IRS.replace('{AREA}', '')}?lastNObservations=1&format=csvdata`, {}, 30000))) {
+      const iso = map[p.area]; if (iso && (!out[iso] || p.t > out[iso].period)) out[iso] = { value: p.v, period: p.t };
+    }
+    if (!Object.keys(out).length) throw new Error('ECB long-term rates unavailable');
+    return out;
+  });
+}
+
+export interface TenYear { value: number; date: string; frequency: 'daily' | 'monthly'; sourceId: string; basis: string; stale: boolean; }
+const DAILY_10Y: Record<string, string> = { USA: 'US Treasury 10-year par yield, daily close', CAN: 'Government of Canada 10-year benchmark, daily', JPN: 'JGB 10-year, daily (Japan MOF)', GBR: 'UK gilt 10-year nominal par yield, daily (Bank of England)' };
+const monthsBack = (n: number) => { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - n); return d.toISOString().slice(0, 7); };
+
+/** Best available 10-year government yield for every country — the single source of truth for the
+ *  map layer, the Markets page and country profiles, so they never disagree. Daily official closes
+ *  beat monthly averages; a monthly value more than 4 months old, or a daily one more than 14 days
+ *  old, is returned with stale = true (shown with its date, left off the map). */
+export async function tenYearBoard() {
+  const [oecd, ecb, ...curves] = await Promise.allSettled([oecdTenYear(), ecbTenYear(), ...Object.keys(DAILY_10Y).map((iso) => yieldCurve(iso))]);
+  const data: Record<string, TenYear> = {};
+  const errors: string[] = []; let fetchedAt = new Date().toISOString(); let stale = false;
+  const monthlyCut = monthsBack(4), dailyCut = daysAgo(14);
+  const note = (r: PromiseSettledResult<any>, label: string) => {
+    if (r.status === 'rejected') { errors.push(`${label}: ${r.reason?.message || r.reason}`); return null; }
+    if (r.value?.fetchedAt && r.value.fetchedAt < fetchedAt) fetchedAt = r.value.fetchedAt;
+    stale ||= !!r.value?.stale;
+    return r.value;
+  };
+  const o = note(oecd, 'OECD');
+  for (const [iso, v] of Object.entries<any>(o?.data || {})) data[iso] = { value: v.value, date: v.period, frequency: 'monthly', sourceId: 'oecd-mei', basis: 'Monthly average (OECD)', stale: v.period < monthlyCut };
+  const e = note(ecb, 'ECB');
+  for (const [iso, v] of Object.entries<any>(e?.data || {})) if (!data[iso] || v.period >= data[iso].date) data[iso] = { value: v.value, date: v.period, frequency: 'monthly', sourceId: 'ecb-irs', basis: 'Monthly average, EU convergence benchmark (ECB)', stale: v.period < monthlyCut };
+  Object.keys(DAILY_10Y).forEach((iso, i) => {
+    const c = note(curves[i], iso);
+    const ten = c?.latest?.points.find((p: CurvePoint) => p.years === 10);
+    if (ten) data[iso] = { value: ten.value, date: c.latest.date, frequency: 'daily', sourceId: c.sourceId, basis: DAILY_10Y[iso], stale: c.latest.date < dailyCut };
+  });
+  if (!Object.keys(data).length) throw new Error(errors.join(' · ') || 'No 10-year yield source reachable');
+  return { data, fetchedAt, stale, errors };
+}
+
+const EU_NON_EURO = ['CZE', 'HUN', 'POL', 'ROU', 'SWE', 'DNK'];
+/** The same answer tenYearBoard gives for one country, fetching only that country's sources —
+ *  a profile no longer waits for ~45 series it does not show. Same priority and staleness rules. */
+export async function tenYearFor(iso3: string): Promise<TenYear | null> {
+  const monthlyCut = monthsBack(4);
+  if (DAILY_10Y[iso3]) {
+    try {
+      const c = await yieldCurve(iso3);
+      const ten = c?.latest.points.find((p) => p.years === 10);
+      if (c && ten) return { value: ten.value, date: c.latest.date, frequency: 'daily', sourceId: c.sourceId, basis: DAILY_10Y[iso3], stale: c.latest.date < daysAgo(14) };
+    } catch { /* fall through to monthly */ }
+  }
+  if (EURO_AREA.includes(iso3) || EU_NON_EURO.includes(iso3)) {
+    try { const v = (await ecbTenYear()).data[iso3]; if (v) return { value: v.value, date: v.period, frequency: 'monthly', sourceId: 'ecb-irs', basis: 'Monthly average, EU convergence benchmark (ECB)', stale: v.period < monthlyCut }; } catch { /* fall through */ }
+  }
   const iso2 = getEntity(`country:${iso3}`)?.iso2;
   if (!iso2 || !OECD_10Y.includes(iso2)) return null;
-  try { const r = await fredSeries(`IRLTLT01${iso2}M156N`); return r.data.length ? { points: r.data, fetchedAt: r.fetchedAt } : null; } catch { return null; }
+  try {
+    const last = (await fredSeries(`IRLTLT01${iso2}M156N`, daysAgo(400))).data.at(-1);
+    return last ? { value: last.v, date: last.t.slice(0, 7), frequency: 'monthly', sourceId: 'oecd-mei', basis: 'Monthly average (OECD)', stale: last.t.slice(0, 7) < monthlyCut } : null;
+  } catch { return null; }
+}
+
+/** Monthly 10-year history for a profile chart (ECB for EU members, else OECD). */
+export async function tenYearHistory(iso3: string) {
+  const iso2 = getEntity(`country:${iso3}`)?.iso2;
+  if (!iso2) return null;
+  const eu = getEntity(`country:${iso3}`) && (EURO_AREA.includes(iso3) || EU_NON_EURO.includes(iso3));
+  if (eu) {
+    try {
+      const r = await cached(`ecb:irs:${iso2}`, 24 * 3600, async () => parseEcbIrs(await fetchText(`${ECB_IRS.replace('{AREA}', iso2 === 'GR' ? 'GR' : iso2)}?startPeriod=${new Date().getFullYear() - 10}-01&format=csvdata`, {}, 30000)).map((p) => ({ t: `${p.t}-01`, v: p.v })));
+      if (r.data.length) return { points: r.data.sort((a, b) => a.t.localeCompare(b.t)), fetchedAt: r.fetchedAt, sourceId: 'ecb-irs' };
+    } catch { /* fall back to OECD */ }
+  }
+  if (!OECD_10Y.includes(iso2)) return null;
+  try { const r = await fredSeries(`IRLTLT01${iso2}M156N`); return r.data.length ? { points: r.data, fetchedAt: r.fetchedAt, sourceId: 'oecd-mei' } : null; } catch { return null; }
 }
 
 // ───────────────────────── Yield curves ─────────────────────────
@@ -275,16 +368,30 @@ async function japanCurve() {
   });
 }
 
+// Par yields are what gilts are quoted on (comparable with US Treasury par yields); the fitted
+// zero-coupon curve is only used if the par series are missing.
+const BOE_PAR: [string, string, number][] = [['IUDSNPY', '5 Yr', 5], ['IUDMNPY', '10 Yr', 10], ['IUDLNPY', '20 Yr', 20]];
+const BOE_ZERO: [string, string, number][] = [['IUDSNZC', '5 Yr', 5], ['IUDMNZC', '10 Yr', 10], ['IUDLNZC', '20 Yr', 20]];
+export function parseBoeCurve(csv: string) {
+  const rows = parseCsv(csv);
+  if (rows[0]?.[0] !== 'DATE') throw new Error('Bank of England data unavailable');
+  const h = rows[0].map((x) => x.trim());
+  const build = (set: [string, string, number][]) => rows.slice(1).map((r) => ({
+    date: isoDate(new Date(`${r[0]} UTC`)),
+    points: set.map(([code, label, years]) => ({ label, years, value: parseFloat(r[h.indexOf(code)]) })).filter((p) => Number.isFinite(p.value)),
+  })).filter((c) => c.points.length >= 2 && /^\d{4}-\d{2}-\d{2}$/.test(c.date));
+  const par = build(BOE_PAR);
+  return par.length ? { rows: par, kind: 'par' as const } : { rows: build(BOE_ZERO), kind: 'zero' as const };
+}
 async function ukCurve() {
-  return cached('curve:GBR', 6 * 3600, async () => {
+  return cached('curve:GBR:v2', 6 * 3600, async () => {
     const from = new Date(Date.now() - 380 * 86400_000);
     const fmt = (d: Date) => `${String(d.getUTCDate()).padStart(2, '0')}/${d.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })}/${d.getUTCFullYear()}`;
-    const csv = await fetchText(`https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=${fmt(from)}&Dateto=now&SeriesCodes=IUDSNZC,IUDMNZC,IUDLNZC&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N`, BROWSER_UA, 25000);
-    const rows = parseCsv(csv);
-    if (rows[0]?.[0] !== 'DATE') throw new Error('Bank of England data unavailable');
-    const tenor: [string, number][] = [['5 Yr', 5], ['10 Yr', 10], ['20 Yr', 20]];
-    const curves = rows.slice(1).map((r) => ({ date: isoDate(new Date(`${r[0]} UTC`)), points: tenor.map(([label, years], i) => ({ label, years, value: parseFloat(r[i + 1]) })).filter((p) => Number.isFinite(p.value)) }));
-    return withComparisons(curves, 'UK gilt nominal zero-coupon yields', 'bank-of-england', 'Fitted zero-coupon yields at 5, 10 and 20 years (Bank of England yield-curve estimates).');
+    const codes = [...BOE_PAR, ...BOE_ZERO].map(([c]) => c).join(',');
+    const csv = await fetchText(`https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=${fmt(from)}&Dateto=now&SeriesCodes=${codes}&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N`, BROWSER_UA, 25000);
+    const { rows, kind } = parseBoeCurve(csv);
+    return withComparisons(rows, kind === 'par' ? 'UK gilt nominal par yields' : 'UK gilt nominal zero-coupon yields', 'bank-of-england',
+      kind === 'par' ? 'Nominal par yields at 5, 10 and 20 years (Bank of England yield-curve estimates) — comparable with quoted gilt yields.' : 'Fitted zero-coupon yields at 5, 10 and 20 years (par yields were unavailable).');
   });
 }
 
@@ -323,8 +430,8 @@ export const IMF_INDICATORS: Record<string, { label: string; unit: string; short
   NGDP_RPCH: { label: 'Real GDP growth', unit: '%', short: 'Growth' },
   PCPIPCH: { label: 'Inflation, average consumer prices', unit: '%', short: 'Inflation' },
   LUR: { label: 'Unemployment rate', unit: '%', short: 'Unemployment' },
-  GGXWDG_NGDP: { label: 'General government gross debt', unit: '% of GDP', short: 'Govt debt' },
-  GGXCNL_NGDP: { label: 'General government net lending/borrowing', unit: '% of GDP', short: 'Fiscal balance' },
+  GGXWDG_NGDP: { label: 'General government gross debt', unit: '% of GDP', short: 'General govt debt' },
+  GGXCNL_NGDP: { label: 'General government net lending/borrowing', unit: '% of GDP', short: 'General govt balance' },
   BCA_NGDPD: { label: 'Current account balance', unit: '% of GDP', short: 'Current account' },
   NGDPD: { label: 'GDP, current prices', unit: 'USD bn', short: 'GDP' },
   NGDPDPC: { label: 'GDP per capita, current prices', unit: 'USD', short: 'GDP / capita' },

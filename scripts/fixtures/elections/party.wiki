@@ -1,0 +1,13 @@
+{{Infobox political party
+| name = Christian Democratic Party
+| leader = [[Rodrigo Paz Pereira]]
+| founded = 1954
+| ideology = {{plainlist|
+* [[Christian democracy]]<ref>{{cite web|url=x}}</ref>
+* [[Conservatism]]
+* [[Economic liberalism]]
+}}
+| position = [[Centre-right politics|Centre-right]]<ref name="a"/>
+| international = [[Centrist Democrat International]]
+| colours = {{color box|#FF6600}} Orange
+}}

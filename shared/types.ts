@@ -12,7 +12,10 @@ export const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
 };
 
 /** How trustworthy / fresh a value is. Shown next to every number. */
-export type DataQuality = 'live' | 'delayed' | 'official' | 'estimate' | 'historical' | 'curated' | 'manual' | 'community' | 'forecast';
+export type DataQuality = 'live' | 'delayed' | 'official' | 'estimate' | 'historical' | 'curated' | 'manual' | 'community' | 'forecast' | 'reported';
+
+/** Every quality label, for validation. 'reported' = stated by trusted news outlets, not yet in a structured record. */
+export const DATA_QUALITIES: DataQuality[] = ['live', 'delayed', 'official', 'estimate', 'historical', 'curated', 'manual', 'community', 'forecast', 'reported'];
 
 export interface Source {
   id: string;
@@ -28,6 +31,7 @@ export interface Fact {
   unit?: string;
   period?: string;   // reporting period the value describes, e.g. "2025"
   asOf?: string;     // when the value was observed / last verified
+  retrievedAt?: string; // when a live value was fetched from its source (ISO timestamp)
   sourceId: string;
   quality: DataQuality;
   note?: string;
@@ -62,7 +66,7 @@ export type RelType =
   | 'belongs_to_party' | 'party_in' | 'governing_party' | 'located_in' | 'capital_of'
   | 'headquartered_in' | 'operates_in' | 'produces' | 'exports' | 'imports' | 'consumes'
   | 'trade_partner' | 'subsidiary_of' | 'competitor_of' | 'in_industry' | 'affects' | 'uses'
-  | 'in_region' | 'shareholder_of' | 'borders' | 'supplies' | 'fights_in';
+  | 'in_region' | 'shareholder_of' | 'borders' | 'supplies' | 'fights_in' | 'candidate_in';
 
 export interface Relationship {
   id: string;
@@ -107,6 +111,7 @@ export const REL_LABELS: Record<RelType, { fwd: string; inv: string }> = {
   borders: { fwd: 'Neighbors', inv: 'Neighbors' },
   supplies: { fwd: 'Supplies', inv: 'Key suppliers' },
   fights_in: { fwd: 'Fighting in', inv: 'Belligerents' },
+  candidate_in: { fwd: 'Candidate in', inv: 'Candidates' },
 };
 
 /** A relationship as seen from one entity, with the other side resolved. */

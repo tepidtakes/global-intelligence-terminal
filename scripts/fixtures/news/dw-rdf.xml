@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel rdf:about="https://www.dw.com"><title>DW</title></channel>
+<item rdf:about="https://www.dw.com/en/bolivia-runoff-paz-wins/a-70000001?maca=en-rss-en-world-4025-rdf"><title>Bolivia: Rodrigo Paz wins presidential runoff election</title><link>https://www.dw.com/en/bolivia-runoff-paz-wins/a-70000001?maca=en-rss-en-world-4025-rdf</link><description>The centrist senator defeated former President Jorge Quiroga.</description><dc:date>{{D1}}</dc:date></item>
+<item rdf:about="https://www.dw.com/en/nvidia-results/a-70000002"><title>Nvidia shares jump after record quarterly revenue</title><link>https://www.dw.com/en/nvidia-results/a-70000002</link><description>The chipmaker beat analyst expectations again.</description><dc:date>{{D2}}</dc:date></item>
+</rdf:RDF>

@@ -1,0 +1,13 @@
+[
+ {"id":"9001","slug":"france-presidential-election-2027","title":"France Presidential Election 2027","endDate":"2027-05-09T00:00:00Z","volume":"48210000.5","liquidity":"2100000","closed":false,
+  "markets":[
+   {"question":"Will Jordan Bardella win the 2027 French presidential election?","groupItemTitle":"Jordan Bardella","outcomes":"[\"Yes\",\"No\"]","outcomePrices":"[\"0.36\",\"0.64\"]","bestBid":0.355,"bestAsk":0.365,"volumeNum":12000000,"active":true,"closed":false},
+   {"question":"Will Édouard Philippe win the 2027 French presidential election?","groupItemTitle":"Édouard Philippe","outcomes":"[\"Yes\",\"No\"]","outcomePrices":"[\"0.24\",\"0.76\"]","bestBid":0.235,"bestAsk":0.245,"volumeNum":8000000,"active":true,"closed":false},
+   {"question":"Will Marine Le Pen win?","groupItemTitle":"Marine Le Pen","outcomes":"[\"Yes\",\"No\"]","outcomePrices":"[\"0.04\",\"0.96\"]","volumeNum":3000000,"active":true,"closed":false},
+   {"question":"Will Gabriel Attal win?","groupItemTitle":"Gabriel Attal","outcomes":"[\"Yes\",\"No\"]","outcomePrices":"[\"0.08\",\"0.92\"]","volumeNum":2000000,"active":true,"closed":true}
+  ]},
+ {"id":"9002","slug":"pennsylvania-governor-2026","title":"Pennsylvania Governor Election Winner","endDate":"2026-11-04T00:00:00Z","volume":"350000","closed":false,
+  "markets":[{"question":"Which party wins PA governor?","outcomes":"[\"Democratic\",\"Republican\"]","outcomePrices":"[\"0.93\",\"0.07\"]","volumeNum":350000,"active":true,"closed":false}]},
+ {"id":"9003","slug":"bardella-pm-2026","title":"Will Bardella become French Prime Minister in 2026?","endDate":"2026-12-31T00:00:00Z","volume":"90000","closed":false,
+  "markets":[{"question":"Bardella PM in 2026?","outcomes":"[\"Yes\",\"No\"]","outcomePrices":"[\"0.05\",\"0.95\"]","volumeNum":90000,"active":true,"closed":false}]}
+]
