@@ -14,6 +14,7 @@ import { findParty, liveStatus } from './augment.js';
 import { parseElectionInfobox, electionOutcome, parsePartyInfobox, sentences, type ElectionInfo, type Contender } from './electionParse.js';
 import { plain, wpJson } from './worldEvents.js';
 import type { Entity, Fact, Relationship } from '../shared/types.js';
+import { emitNew, type Change } from './changes.js';
 
 const WP = 'https://en.wikipedia.org/w/api.php';
 const SRC = 'wikipedia-election-results';
@@ -137,7 +138,26 @@ export function applyElectionInfo(e: Entity, article: string, info: ElectionInfo
   return out;
 }
 
-function flushCandidateRels() { setLiveRels('election-candidates', [...candidateRels.values()].flat()); }
+function flushCandidateRels() { setLiveRels('election-candidates', [...candidateRels.values()].flat()); emitElectionChanges(); }
+
+/** Change feed: polls closing (counting) and results declared, national and local. */
+function emitElectionChanges() {
+  const items: Change[] = [];
+  for (const e of entities.values()) {
+    const el = e.attrs?.election;
+    if (!isElection(e) || !el || (el.status !== 'counting' && el.status !== 'completed')) continue;
+    const local = (e.attrs?.scope || 'national') !== 'national';
+    const place = placeOf(e);
+    const winnerId = el.winner?.name ? findPerson([el.winner.name, ...(el.winner.link ? [el.winner.link.replace(/\s*\(.*\)$/, '')] : [])]) : undefined;
+    items.push({
+      key: `election:${e.id}:${el.status}${el.winner?.name ? `:${slugify(el.winner.name)}` : ''}`, kind: 'election', entityIds: [e.id, ...(place ? [place.id] : []), ...(winnerId ? [winnerId] : [])],
+      title: el.status === 'completed' && el.winner?.name ? `${e.name}: won by ${el.winner.name}${el.winner.party ? ` (${el.winner.party})` : ''}` : `${e.name}: polls closed, counting under way`,
+      detail: 'From the election’s Wikipedia article; official results come from the electoral authority.', url: el.url, sourceId: SRC, quality: 'community',
+      importance: el.status === 'completed' ? (local ? 6 : 9) : (local ? 4 : 6), at: el.fetchedAt || new Date().toISOString(),
+    });
+  }
+  emitNew('elections', items);
+}
 
 // ───────────────────────── Refresh loop ─────────────────────────
 let lastDetails: { at: string; hot: number; cold: number; updated: number } | null = null;

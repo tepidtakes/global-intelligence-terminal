@@ -12,7 +12,7 @@ import { PRODUCTS, productByHs, type ProductGroup } from '../../shared/products'
 export type Hue = 'blue' | 'purple' | 'ocean' | 'amber' | 'indigo' | 'olive' | 'steel' | 'gold' | 'rose';
 export type ColorRule =
   | { kind: 'better'; dir: 'high' | 'low' }              // ranked; green = better end
-  | { kind: 'signed'; good: 'positive' | 'negative' }    // centred on zero
+  | { kind: 'signed'; good: 'positive' | 'negative'; words?: [string, string] } // centred on zero; words = what each side means
   | { kind: 'target'; target: number }                   // e.g. inflation: close to target = green
   | { kind: 'magnitude'; hue: Hue }                      // size only, no judgement
   | { kind: 'categories'; colors: Record<string, string | [string, string]> }
@@ -27,21 +27,28 @@ export interface LayerDef {
 }
 
 export const GROUPS: { id: string; label: string; icon: string }[] = [
+  { id: 'web', label: 'Connections', icon: '❖' },
   { id: 'politics', label: 'Politics & elections', icon: '🏛' },
   { id: 'security', label: 'Conflict & security', icon: '⚔' },
   { id: 'economy', label: 'Economy & people', icon: '📈' },
   { id: 'finance', label: 'Public finances', icon: '🏦' },
   { id: 'outlook', label: 'Forecasts (IMF)', icon: '🔭' },
   { id: 'trade', label: 'Trade & commodities', icon: '🚢' },
+  { id: 'sanctions', label: 'Sanctions & tariffs', icon: '⛔' },
+  { id: 'reserves', label: 'Reserves & stocks', icon: '🛢' },
   { id: 'markets', label: 'Markets & rates', icon: '💱' },
   { id: 'personal', label: 'My portfolio', icon: '👤' },
   { id: 'history', label: 'Historical', icon: '🕰' },
+  { id: 'catalog', label: 'Indicator catalog', icon: '🔎' },
 ];
 
 const Y = new Date().getFullYear();
 const imfVariants = (code: string) => [{ id: `imf:${code}:${Y}`, label: String(Y) }, { id: `imf:${code}:${Y + 1}`, label: String(Y + 1) }, { id: `imf:${code}:${Y - 1}`, label: `${Y - 1} (est.)` }];
 
 export const LAYERS: LayerDef[] = [
+  // The web: any entity's connections, placed on the map
+  { id: 'web', label: 'Where something is connected', group: 'web', live: true, hint: 'Pick any country, organization, company, person or commodity: countries are shaded by how they connect to it — members, trade partners, sanctions, head offices, people, news.', keywords: 'network links relations connections web graph members partners',
+    color: { kind: 'auto' } },
   // Politics
   { id: 'elections', label: 'Elections', group: 'politics', live: true, hint: 'National elections in the next 12 months and the last 60 days (Wikipedia electoral calendars).', keywords: 'vote ballot',
     color: { kind: 'categories', colors: { soon: ['#d97706', '#f59e0b'], upcoming: ['#f5c66b', '#8a6418'], recent: ['#8aa4c8', '#4f6a90'] } } },
@@ -71,7 +78,13 @@ export const LAYERS: LayerDef[] = [
   { id: 'wb:SP.POP.TOTL', label: 'Population', group: 'economy', yearable: true, hint: 'Darker purple = more people.', keywords: 'people demographics', color: { kind: 'magnitude', hue: 'purple' } },
   // Public finances
   { id: 'wb:GC.DOD.TOTL.GD.ZS', label: 'Central government debt / GDP', group: 'finance', yearable: true, hint: 'World Bank, central government only. Green = low debt, red = high debt. For all levels of government use “Debt forecast” (IMF general government).', keywords: 'sovereign borrowing', color: { kind: 'better', dir: 'low' } },
-  { id: 'wb:GC.NLD.TOTL.GD.ZS', label: 'Central government budget balance / GDP', group: 'finance', yearable: true, hint: 'World Bank, central government only. Green = surplus, red = deficit.', keywords: 'fiscal deficit surplus', color: { kind: 'signed', good: 'positive' } },
+  { id: 'wb:GC.NLD.TOTL.GD.ZS', label: 'Central government budget balance / GDP', group: 'finance', yearable: true, hint: 'World Bank, central government only. Green = surplus, red = deficit.', keywords: 'fiscal deficit surplus', color: { kind: 'signed', good: 'positive', words: ['surplus', 'deficit'] } },
+  { id: 'imf:GGXCNL_NGDP', label: 'Budget balance (all levels of government)', group: 'finance', live: true, hint: 'IMF general-government surplus (green) or deficit (red) as % of GDP; this year and next are IMF projections.', keywords: 'fiscal deficit surplus budget', variants: imfVariants('GGXCNL_NGDP'), color: { kind: 'signed', good: 'positive', words: ['surplus', 'deficit'] } },
+  { id: 'wb:GC.REV.XGRT.GD.ZS', label: 'Government revenue', group: 'finance', yearable: true, hint: 'Central-government revenue (excluding grants) or tax revenue as % of GDP. Darker = larger state.', keywords: 'taxes budget income fiscal',
+    variants: [{ id: 'wb:GC.REV.XGRT.GD.ZS', label: 'Revenue' }, { id: 'wb:GC.TAX.TOTL.GD.ZS', label: 'Tax' }], color: { kind: 'magnitude', hue: 'steel' } },
+  { id: 'wb:GC.XPN.TOTL.GD.ZS', label: 'Government spending', group: 'finance', yearable: true, hint: 'Central-government spending, or what governments spend on defence (SIPRI), health and education, as % of GDP. Darker = more.', keywords: 'expenditure budget military defence defense health education',
+    variants: [{ id: 'wb:GC.XPN.TOTL.GD.ZS', label: 'Total' }, { id: 'wb:MS.MIL.XPND.GD.ZS', label: 'Defence' }, { id: 'wb:SH.XPD.GHED.GD.ZS', label: 'Health' }, { id: 'wb:SE.XPD.TOTL.GD.ZS', label: 'Education' }], color: { kind: 'magnitude', hue: 'indigo' } },
+  { id: 'wb:GC.XPN.INTP.RV.ZS', label: 'Interest burden', group: 'finance', yearable: true, hint: 'Interest the central government pays as a share of its revenue. Green = light burden, red = heavy.', keywords: 'debt service interest payments', color: { kind: 'better', dir: 'low' } },
   // IMF outlook
   { id: 'imf:NGDP_RPCH', label: 'Growth forecast', group: 'outlook', live: true, hint: 'IMF projected real GDP growth. Green = growing, red = contracting.', keywords: 'projection outlook weo', variants: imfVariants('NGDP_RPCH'), color: { kind: 'signed', good: 'positive' } },
   { id: 'imf:PCPIPCH', label: 'Inflation forecast', group: 'outlook', live: true, hint: 'IMF projected inflation. Green = near 2%, red = far above (or below zero).', keywords: 'projection prices', variants: imfVariants('PCPIPCH'), color: { kind: 'target', target: 2 } },
@@ -79,10 +92,35 @@ export const LAYERS: LayerDef[] = [
   { id: 'imf:GGXWDG_NGDP', label: 'Debt forecast', group: 'outlook', live: true, hint: 'IMF general-government (all levels) debt / GDP — the standard comparison measure; last year is an IMF estimate. Green = low.', keywords: 'projection sovereign', variants: imfVariants('GGXWDG_NGDP'), color: { kind: 'better', dir: 'low' } },
   // Trade
   { id: 'trade', label: 'Who exports / imports a product', group: 'trade', live: true, hint: 'Pick a product — crude oil, chips, wheat… — and see every country’s exports or imports (UN Comtrade).', keywords: 'exporters importers hs comtrade goods', color: { kind: 'magnitude', hue: 'ocean' } },
+  { id: 'tradewith', label: 'Trade with a country', group: 'trade', live: true, hint: 'Pick a country to see how much it trades with every other one — exports, imports or share of its trade (UN Comtrade, as that country reports). Darker = more.', keywords: 'bilateral partners exports imports dependency',
+    color: { kind: 'magnitude', hue: 'ocean' } },
+  { id: 'tradewith-balance', label: 'Trade balance with a country', group: 'trade', live: true, hint: 'Pick a country to see its goods surplus (green) or deficit (red) with every other one (UN Comtrade).', keywords: 'bilateral trade deficit surplus',
+    color: { kind: 'signed', good: 'positive', words: ['surplus with that country', 'deficit'] } },
   { id: 'commodity', label: 'Commodity producers', group: 'trade', hint: 'Top producers and exporters of a commodity, from USGS, EIA and USDA rankings.', keywords: 'mining oil grain', color: { kind: 'categories', colors: {} } },
   { id: 'wb:NE.EXP.GNFS.CD', label: 'Total exports', group: 'trade', yearable: true, hint: 'Goods and services exports. Darker = larger.', keywords: 'trade', variants: [{ id: 'wb:NE.EXP.GNFS.CD', label: 'US$' }, { id: 'wb:NE.EXP.GNFS.ZS', label: '% of GDP' }], color: { kind: 'magnitude', hue: 'ocean' } },
-  { id: 'wb:BN.CAB.XOKA.GD.ZS', label: 'Current-account balance', group: 'trade', yearable: true, hint: 'Green = surplus (earns more abroad than it spends), red = deficit.', keywords: 'balance of payments', color: { kind: 'signed', good: 'positive' } },
+  { id: 'wb:BN.CAB.XOKA.GD.ZS', label: 'Current-account balance', group: 'trade', yearable: true, hint: 'Green = surplus (earns more abroad than it spends), red = deficit.', keywords: 'balance of payments', color: { kind: 'signed', good: 'positive', words: ['surplus', 'deficit'] } },
   { id: 'wb:TX.VAL.FUEL.ZS.UN', label: 'Fuel share of exports', group: 'trade', yearable: true, hint: 'How dependent exports are on oil, gas and coal. Darker amber = more.', keywords: 'oil petrostate', color: { kind: 'magnitude', hue: 'amber' } },
+  // Sanctions & tariffs
+  { id: 'sanctions:ALL', label: 'Sanctions', group: 'sanctions', live: true, hint: 'Darkest: a sanctions programme aimed at the country (Russia, Iran, North Korea…). Lighter: people, companies and ships on the US (OFAC), EU, UK or UN lists connected to it by nationality or address.', keywords: 'ofac sdn embargo designations blacklist restrictive measures',
+    variants: [{ id: 'sanctions:ALL', label: 'All' }, { id: 'sanctions:US', label: 'US' }, { id: 'sanctions:EU', label: 'EU' }, { id: 'sanctions:UK', label: 'UK' }, { id: 'sanctions:UN', label: 'UN' }],
+    color: { kind: 'categories', colors: { programme: ['#4a2178', '#c3a9f5'], many: ['#9479cf', '#7458b0'], some: ['#d9cdf2', '#3d3259'] } } },
+  { id: 'tariffs:us-effective', label: 'US tariffs by country of origin', group: 'sanctions', live: true, hint: 'The average US tariff actually charged on each country’s goods in the latest month (duties ÷ imports, US Census). Darker = higher.', keywords: 'tariff duties customs trade war reciprocal effective rate',
+    color: { kind: 'magnitude', hue: 'rose' } },
+  { id: 'tariffs:us-change', label: 'US tariffs — change in a year', group: 'sanctions', live: true, hint: 'Change in the effective US tariff on each country’s goods since the same month a year earlier. Red = tariffs went up, green = down.', keywords: 'tariff increase trade war',
+    color: { kind: 'signed', good: 'negative', words: ['tariffs went down', 'tariffs went up'] } },
+  { id: 'tariffs:us-actions', label: 'US tariff actions', group: 'sanctions', live: true, hint: 'How many US tariff actions in the last 12 months — proclamations, executive orders, USTR, Commerce and CBP notices in the Federal Register — name each country.', keywords: 'section 301 232 federal register proclamation executive order',
+    color: { kind: 'magnitude', hue: 'amber' } },
+  { id: 'wb:TM.TAX.MRCH.WM.AR.ZS', label: 'Tariffs each country applies', group: 'sanctions', yearable: true, hint: 'The average tariff a country charges on its own imports (World Bank, from UNCTAD/WTO data; a year or more behind). Darker = higher.', keywords: 'protectionism mfn import duties',
+    variants: [{ id: 'wb:TM.TAX.MRCH.WM.AR.ZS', label: 'Trade-weighted' }, { id: 'wb:TM.TAX.MRCH.SM.AR.ZS', label: 'Simple mean' }, { id: 'wb:TM.TAX.MRCH.WM.FN.ZS', label: 'MFN' }], color: { kind: 'magnitude', hue: 'rose' } },
+  // Reserves & stocks
+  { id: 'reserves:oil-days', label: 'Crude-oil stocks', group: 'reserves', live: true, hint: 'Crude-oil stocks each government reports to JODI, in days of refinery intake or in barrels. Darker = more. China and some others do not report.', keywords: 'oil reserve spr strategic petroleum inventory',
+    variants: [{ id: 'reserves:oil-days', label: 'Days' }, { id: 'reserves:oil-stocks', label: 'Barrels' }], color: { kind: 'magnitude', hue: 'amber' } },
+  { id: 'reserves:grain-wheat', label: 'Grain stocks', group: 'reserves', live: true, hint: 'Ending stocks of wheat, corn or rice as a share of a year’s domestic use (USDA projection for the current marketing year). Darker = bigger buffer.', keywords: 'food security wheat corn maize rice stockpile wasde',
+    variants: [{ id: 'reserves:grain-wheat', label: 'Wheat' }, { id: 'reserves:grain-corn', label: 'Corn' }, { id: 'reserves:grain-rice', label: 'Rice' }], color: { kind: 'magnitude', hue: 'olive' } },
+  { id: 'reserves:gas', label: 'Gas storage (Europe)', group: 'reserves', live: true, hint: 'How full each country’s natural-gas storage is today (GIE AGSI+; needs a free AGSI_API_KEY). Green = fuller.', keywords: 'natural gas storage winter lng', color: { kind: 'better', dir: 'high' } },
+  { id: 'wb:FI.RES.TOTL.MO', label: 'Foreign-exchange reserves (months of imports)', group: 'reserves', yearable: true, hint: 'How many months of imports a country’s reserves (incl. gold) could pay for. Green = more cover.', keywords: 'fx reserves central bank adequacy', color: { kind: 'better', dir: 'high' } },
+  { id: 'wb:FI.RES.TOTL.CD', label: 'Foreign-exchange & gold reserves', group: 'reserves', yearable: true, hint: 'Central-bank reserves in US dollars, including or excluding gold. Darker = larger.', keywords: 'fx reserves gold central bank',
+    variants: [{ id: 'wb:FI.RES.TOTL.CD', label: 'Incl. gold' }, { id: 'wb:FI.RES.XGLD.CD', label: 'Excl. gold' }], color: { kind: 'magnitude', hue: 'gold' } },
   // Markets & rates
   { id: 'fx', label: 'Currency vs US dollar', group: 'markets', live: true, hint: 'Green = currency strengthened against the dollar, red = weakened.', keywords: 'fx forex exchange rate devaluation',
     variants: [{ id: 'fx:m1', label: '1M' }, { id: 'fx:ytd', label: 'YTD' }, { id: 'fx:y1', label: '1Y' }, { id: 'fx:y5', label: '5Y' }], color: { kind: 'signed', good: 'positive' } },
@@ -92,6 +130,8 @@ export const LAYERS: LayerDef[] = [
   { id: 'wb:CM.MKT.LCAP.GD.ZS', label: 'Stock-market size / GDP', group: 'markets', yearable: true, hint: 'Listed-company market cap relative to the economy. Darker = deeper market.', keywords: 'equities', color: { kind: 'magnitude', hue: 'indigo' } },
   { id: 'wb:BX.KLT.DINV.WD.GD.ZS', label: 'Foreign direct investment', group: 'markets', yearable: true, hint: 'Net FDI inflows / GDP. Green = more inflows.', keywords: 'fdi capital', color: { kind: 'better', dir: 'high' } },
   // Personal & historical
+  { id: 'alerts', label: 'My alerts', group: 'personal', needsAuth: true, live: true, hint: 'Countries shaded by your unread alerts — where the news, leadership changes, market moves or data releases your rules watch for happened.', keywords: 'notifications changes inbox watch',
+    color: { kind: 'magnitude', hue: 'rose' } },
   { id: 'exposure', label: 'My position exposure', group: 'personal', needsAuth: true, hint: 'Where your open positions are headquartered or operate.', color: { kind: 'categories', colors: { hq: ['#1c5cab', '#5598e7'], ops: ['#9ec5f4', '#1c3f6b'] } } },
   { id: 'three-worlds', label: 'Cold War “Three Worlds”', group: 'history', historical: true, hint: 'First (US-aligned), Second (Soviet-aligned) and Third (non-aligned) worlds, c. 1950–1991.',
     color: { kind: 'categories', colors: { first: ['#2a78d6', '#3987e5'], second: ['#c8312d', '#e66767'], third: ['#a9a69c', '#6b6a64'] } } },
@@ -108,32 +148,53 @@ const COMMODITY_HUE: Record<string, Hue> = {
 const PRODUCT_HUE: Record<ProductGroup, Hue> = { Energy: 'amber', 'Metals & minerals': 'steel', 'Agriculture & food': 'olive', 'Manufactured goods': 'indigo', 'Chemicals & materials': 'purple' };
 export { PRODUCTS };
 
+// Layers for any series in the indicator catalog (World Bank, IMF), made on demand. The catalog
+// does not say which end of a series is better, so they use a neutral size scale.
+const catalogDefs = new Map<string, LayerDef>();
+export function catalogDef(fill: string): LayerDef {
+  const id = fill.startsWith('imf:') ? fill.split(':').slice(0, 2).join(':') : fill;
+  let d = catalogDefs.get(id);
+  if (!d) {
+    const imf = id.startsWith('imf:');
+    d = { id, label: id.split(':')[1], group: 'catalog', live: imf, yearable: !imf, hint: `From the ${imf ? 'IMF' : 'World Bank'} indicator catalog. Darker = larger — the catalog does not say which end is better.`,
+      color: { kind: 'magnitude', hue: 'steel' }, ...(imf ? { variants: imfVariants(id.slice(4)) } : {}) };
+    catalogDefs.set(id, d);
+  }
+  return d;
+}
 export function layerDefFor(fill: string) {
+  if (fill.startsWith('web:')) return LAYERS.find((l) => l.id === 'web')!;
   if (fill.startsWith('commodity:')) return LAYERS.find((l) => l.id === 'commodity')!;
   if (fill.startsWith('trade:')) return LAYERS.find((l) => l.id === 'trade')!;
+  if (fill.startsWith('tradewith:')) return LAYERS.find((l) => l.id === (fill.endsWith(':balance') ? 'tradewith-balance' : 'tradewith'))!;
   if (fill.startsWith('fx:')) return LAYERS.find((l) => l.id === 'fx')!;
-  if (fill.startsWith('imf:')) return LAYERS.find((l) => l.id === fill.split(':').slice(0, 2).join(':'));
+  if (fill.startsWith('imf:')) return LAYERS.find((l) => l.id === fill.split(':').slice(0, 2).join(':')) || catalogDef(fill);
   if (fill === 'war' || fill.startsWith('war:')) return LAYERS.find((l) => l.id === 'war')!;
-  return LAYERS.find((l) => l.id === fill || l.variants?.some((v) => v.id === fill));
+  return LAYERS.find((l) => l.id === fill || l.variants?.some((v) => v.id === fill)) || (fill.startsWith('wb:') ? catalogDef(fill) : undefined);
 }
 /** The concrete layer id to load when a layer is picked from the list. */
 export function defaultFill(def: LayerDef) {
   if (def.id === 'commodity') return 'commodity:crude-oil';
   if (def.id === 'trade') return 'trade:X:2709';
+  if (def.id === 'web') return 'web:igo:nato';
+  if (def.id === 'tradewith') return 'tradewith:USA:total';
+  if (def.id === 'tradewith-balance') return 'tradewith:USA:balance';
   if (def.variants) return def.id === 'fx' ? 'fx:y1' : def.variants[0].id;
   return def.id;
 }
 
 // ───────────── Palettes ─────────────
-export interface Palette { dark: boolean; goodBad: string[]; neutral: string; cat: string[]; nodata: string; former: string; line: string; ocean: string; hover: string; sel: string; overlay: string; }
+export interface Palette { dark: boolean; goodBad: string[]; neutral: string; cat: string[]; catWide: string[]; nodata: string; former: string; line: string; ocean: string; hover: string; sel: string; overlay: string; }
 export function palette(dark: boolean): Palette {
   return dark ? {
     dark, goodBad: ['#ff9575', '#8c2f22', '#2a8f6b', '#9af2cb'], neutral: '#4a4842',
     cat: ['#3987e5', '#d95926', '#199e70', '#d55181'],
+    catWide: ['#3987e5', '#d95926', '#199e70', '#d55181', '#9085e9', '#d4aa1c', '#4fb0c2', '#c97b52', '#8fae3a', '#8c99a5', '#e66767', '#6fb3ff'],
     nodata: '#232321', former: '#5a5953', line: '#4a4a46', ocean: '#111416', hover: '#f0efec', sel: '#eda100', overlay: '#f0efec',
   } : {
     dark, goodBad: ['#8f1d14', '#f0956f', '#b7e6cf', '#0e7a5a'], neutral: '#ebe6d6',
     cat: ['#2a78d6', '#eb6834', '#1baf7a', '#e87ba4'],
+    catWide: ['#2a78d6', '#eb6834', '#1baf7a', '#e87ba4', '#6250d6', '#c9a227', '#1d8399', '#a35d3d', '#76841f', '#5d6b78', '#c8312d', '#5598e7'],
     nodata: '#cfcdc5', former: '#a9a69c', line: '#9d9a90', ocean: '#dfe6ec', hover: '#0b0b0b', sel: '#c98500', overlay: '#0b0b0b',
   };
 }
@@ -224,7 +285,7 @@ export function colorize(data: LayerData | undefined, pal: Palette, classify: 'q
       breaks = [-tt, -tt / 4, tt / 4, tt].map(nice);
       ramp = betterRamp(pal); if (rule.good === 'negative') ramp = [...ramp].reverse();
       labels = [`< ${sf(breaks[0])}`, `${sf(breaks[0])} to ${sf(breaks[1])}`, `${sf(breaks[1])} to ${sf(breaks[2])} (little change)`, `${sf(breaks[2])} to ${sf(breaks[3])}`, `> ${sf(breaks[3])}`];
-      hint = rule.good === 'positive' ? 'Green = positive (better) · red = negative (worse)' : 'Green = negative (better) · red = positive (worse)';
+      hint = rule.words ? `Green = ${rule.words[0]} · red = ${rule.words[1]}` : rule.good === 'positive' ? 'Green = positive (better) · red = negative (worse)' : 'Green = negative (better) · red = positive (worse)';
     } else {
       if (classify === 'equal') { const [mn, mx] = [vals[0], vals[vals.length - 1]]; breaks = [1, 2, 3, 4].map((i) => mn + (mx - mn) * i / 5); }
       else if (classify === 'log' && vals[0] > 0) { const [a, b] = [Math.log10(vals[0]), Math.log10(vals[vals.length - 1])]; breaks = [1, 2, 3, 4].map((i) => 10 ** (a + (b - a) * i / 5)); }
@@ -248,6 +309,9 @@ export function colorize(data: LayerData | undefined, pal: Palette, classify: 'q
     cats.forEach((c, i) => { map[c.key] = steps[i] || ramp[2]; });
   } else if (rule.kind === 'categories') {
     cats.forEach((c, i) => { map[c.key] = rule.colors[c.key] ? pick(rule.colors[c.key], pal.dark) : pal.cat[i % pal.cat.length]; });
+  } else if (def?.id === 'web') {
+    // The entity's own country in the highlight color; each kind of connection its own color.
+    let n = 0; cats.forEach((c) => { map[c.key] = c.key === 'self' ? pal.sel : pal.catWide[n++ % pal.catWide.length]; });
   } else {
     cats.forEach((c, i) => { map[c.key] = c.key === 'former' ? pal.former : pal.cat[i % pal.cat.length]; });
   }

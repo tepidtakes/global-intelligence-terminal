@@ -6,15 +6,26 @@ import { Card, EntityChip, Loading, Modal, Quality, SourceRef, Unavailable, loca
 import { RelGroups, WatchButton, NewNoteButton } from '../components/entityBits';
 import { GovernmentSection, MacroSection, TradeSection, CompaniesSection, MembersSection, QuoteSection, FundamentalsSection, PositionSection, ProducersSection, RankingSection } from './profile/Sections';
 import { ElectionSection } from './profile/ElectionSection';
+import { CalendarSection } from './EconCalendar';
 import { CurrencySection, RatesSection, OutlookSection, ConflictsSection, ConsensusSection, ProductTradeSection, ConflictBadge, SidesView } from './profile/LiveSections';
 import { PRODUCTS } from '../../shared/products';
 import { NewsRow, ProvenanceCard, SignalItem, bannerSignals, type NewsItemView, type SignalView } from '../components/newsBits';
+import { AlertButton, RecentChanges } from '../components/alertBits';
+import { SanctionsTariffsSection, SanctionsMatchNotice } from './profile/SanctionsSection';
+import { BudgetSection } from './profile/BudgetSection';
+import { ReservesSection, CommodityStocksSection } from './profile/ReservesSection';
+import { AgreementSection } from './profile/AgreementSection';
+import { ConnectionsCard, IndicatorExplorer } from '../components/WebBits';
 import { isTrusted } from '../../shared/newsSources';
 import { TYPE_ICON, fmtUnit, fmtDate, ago } from '../format';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
 import type { Entity, RelView, Source, Fact } from '../../shared/types';
 
-const MAPPABLE = new Set(['country', 'state', 'county', 'city', 'region', 'igo', 'company', 'person', 'party', 'event']);
+// Organisations that run sanctions lists (their profiles list the regimes they impose).
+const SANCTIONING_IGOS = new Set(['igo:eu', 'igo:un']);
+// Commodities with country stock data (JODI oil, USDA grain).
+const STOCKED = new Set(['commodity:crude-oil', 'commodity:wheat', 'commodity:corn', 'commodity:rice']);
+const MAPPABLE = new Set(['country', 'state', 'county', 'city', 'region', 'igo', 'institution', 'company', 'person', 'party', 'event']);
 
 export function ProfilePage() {
   const id = decodeURIComponent(useParams().id!);
@@ -36,14 +47,19 @@ export function ProfilePage() {
   const showOnMap = () => { select(e.id, { fly: true }); nav('/'); };
   const sections: [string, string][] = [['overview', 'Overview']];
   if (t === 'country' || t === 'state' || t === 'city') sections.push(['government', 'Government']);
-  if (t === 'country') sections.push(['macro', 'Macro'], ['outlook', 'Outlook'], ['yields', 'Rates'], ['currency', 'Currency'], ['trade', 'Trade']);
+  if (t === 'country') sections.push(['macro', 'Macro'], ['outlook', 'Outlook'], ['yields', 'Rates'], ['currency', 'Currency'], ['budget', 'Budget'], ['reserves', 'Reserves'], ['trade', 'Trade'], ['sanctions', 'Sanctions & tariffs']);
   if (t === 'company' || (t === 'commodity' && e.attrs?.quoteSymbol)) sections.push(['market', 'Market data']);
   if (t === 'commodity' && PRODUCTS.some((p) => p.commodity === e.id)) sections.push(['traders', 'Exporters']);
   if (t === 'company') sections.push(['financials', 'Financials'], ...(e.attrs?.public ? [['consensus', 'Consensus'] as [string, string]] : []), ['position', 'My position']);
+  if (t === 'country' || t === 'igo' || t === 'institution') sections.splice(1, 0, ['calendar', 'Calendar']);
   if (t === 'igo') sections.push(['members', 'Members']);
+  if (SANCTIONING_IGOS.has(e.id)) sections.push(['sanctions', 'Sanctions']);
+  if (e.id === 'igo:eu') sections.push(['budget', 'Budgets'], ['reserves', 'Reserves']);
+  if (STOCKED.has(e.id)) sections.push(['stocks', 'Stocks']);
   const isElection = t === 'event' && e.attrs?.category === 'election';
   if (isElection) sections.push(['election', 'Result'], ['candidates', 'Candidates'], ['markets', 'Markets']);
-  sections.push(['relationships', 'Relationships'], ['events', 'Events'], ['news', 'News'], ['notes', 'Research'], ['sources', 'Sources']);
+  if (t === 'country') sections.push(['indicators', 'Indicators']);
+  sections.push(['relationships', 'Connections'], ['events', 'Events'], ['news', 'News'], ['notes', 'Research'], ['sources', 'Sources']);
 
   const operating = rels.filter((r) => r.rel.type === 'operates_in' && r.direction === 'in');
 
@@ -65,11 +81,13 @@ export function ProfilePage() {
           {bannerSignals(e.attrs?.newsSignals, e.id).length > 0 && (
             <div className="stack" style={{ marginTop: 8, gap: 6 }}>{bannerSignals(e.attrs?.newsSignals, e.id).slice(0, 3).map((s: SignalView) => <SignalItem key={s.key} s={s} />)}</div>
           )}
+          {(t === 'person' || t === 'company') && <SanctionsMatchNotice id={e.id} />}
           {e.type === 'event' && e.attrs?.url && <div className="small" style={{ marginTop: 6 }}><a href={e.attrs.url} target="_blank" rel="noreferrer">Read the full, regularly updated article on Wikipedia ↗</a></div>}
           <div className="row wrap" style={{ marginTop: 10 }}>
             {MAPPABLE.has(t) && <button className="btn sm" onClick={showOnMap}>◎ Show on map</button>}
             <NewNoteButton entityIds={[e.id]} label="＋ New note" />
             <WatchButton id={e.id} />
+            <AlertButton entityId={e.id} name={e.name} type={t} />
             {t === 'country' && <CompareButton id={e.id} />}
             <Link className="btn sm" to={`/compare?a=${encodeURIComponent(e.id)}`}>⇄ Find connections</Link>
             <button className="btn ghost sm" onClick={() => setReport(true)}>⚑ Report an inconsistency</button>
@@ -83,11 +101,16 @@ export function ProfilePage() {
         {(t === 'country' || t === 'state' || t === 'city') && <GovernmentSection e={e} rels={rels} events={data.events} partyOf={data.partyOf} mayors={data.mayors} />}
         {isElection && <ElectionSection id={e.id} />}
         {(t === 'country' || t === 'state' || t === 'group') && <ConflictsSection id={e.id} name={e.name} />}
+        {(t === 'country' || t === 'igo' || t === 'institution') && <CalendarSection placeId={e.id} name={e.name} />}
         {t === 'country' && e.iso3 && <MacroSection iso3={e.iso3} />}
+        {t === 'country' && e.iso3 && <AgreementSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <OutlookSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <RatesSection iso3={e.iso3} />}
         {t === 'country' && <CurrencySection e={e} />}
+        {(t === 'country' || e.id === 'igo:eu') && <BudgetSection id={e.id} name={e.name} isEU={e.id === 'igo:eu'} />}
+        {(t === 'country' || e.id === 'igo:eu') && <ReservesSection id={e.id} name={e.name} isEU={e.id === 'igo:eu'} />}
         {t === 'country' && e.iso3 && <TradeSection iso3={e.iso3} rels={rels} />}
+        {(t === 'country' || SANCTIONING_IGOS.has(e.id)) && <SanctionsTariffsSection id={e.id} name={e.name} type={t} />}
         {(t === 'country' || t === 'state' || t === 'city' || t === 'region') && <CompaniesSection companies={data.companies || []} operating={operating} />}
         {(t === 'state' || t === 'country' || t === 'region') && <ChildrenCard e={e} children={data.children} counts={data.childCounts} />}
         {t === 'igo' && <MembersSection id={e.id} />}
@@ -100,15 +123,15 @@ export function ProfilePage() {
         {t === 'company' && !e.attrs?.public && <Card title="Private company" id="private"><div className="small">Private companies do not publish audited statements to a public regulator. Ownership and corporate developments are shown above; valuation and revenue appear only when the company or a regulator discloses them.</div></Card>}
         {(t === 'commodity') && <ProducersSection e={e} rels={rels} />}
         {t === 'commodity' && <ProductTradeSection e={e} />}
+        {STOCKED.has(e.id) && <CommodityStocksSection id={e.id} />}
         {t === 'commodity' && data.children.length > 0 && <Card title="Benchmarks & sub-markets"><div className="chips">{data.children.map((c: any) => <EntityChip key={c.id} e={c} />)}</div></Card>}
         {t === 'commodity' && e.attrs?.wbRankings && <RankingSection codes={e.attrs.wbRankings} />}
         {t === 'person' && <RolesCard rels={rels} />}
         {t === 'party' && <PartyMembersCard rels={rels} />}
         {t === 'event' && e.attrs?.category === 'conflict' ? <WarCard e={e} rels={rels} kids={data.children} parents={data.parents} /> : t === 'event' && <EventCard e={e} rels={rels} />}
         {t === 'group' && e.attrs?.url && <Card title="About this group"><div className="small">Added because Wikipedia lists it as a belligerent in at least one ongoing war. <a href={e.attrs.url} target="_blank" rel="noreferrer">Read about it on Wikipedia ↗</a></div></Card>}
-        <Card title="Relationships" id="relationships" actions={<span className="tiny muted">{rels.length} links · click any to navigate</span>}>
-          {rels.length ? <RelGroups rels={rels} maxPer={40} /> : <div className="small muted">No relationships recorded yet.</div>}
-        </Card>
+        {t === 'country' && e.iso3 && <IndicatorExplorer iso3={e.iso3} name={e.name} />}
+        <ConnectionsCard id={e.id} name={e.name} />
         {e.timeline && e.timeline.length > 0 && <TimelineCard items={e.timeline} />}
         <EventsCard events={data.events} catalysts={data.user?.catalysts || []} entityId={e.id} />
         <NewsCard id={e.id} />
@@ -116,6 +139,7 @@ export function ProfilePage() {
       </div>
       <div className="colSide">
         <NotesCard entityId={e.id} name={e.name} />
+        <RecentChanges entityId={e.id} name={e.name} type={t} />
         <ProvenanceCard p={data.provenance} />
         {t === 'company' && <CompanyFacts e={e} />}
       </div>

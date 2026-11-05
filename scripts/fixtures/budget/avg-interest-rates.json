@@ -1,0 +1,43 @@
+{
+ "data": [
+  {
+   "record_date": "2026-10-31",
+   "security_type_desc": "Marketable",
+   "security_desc": "Treasury Bills",
+   "avg_interest_rate_amt": "3.952"
+  },
+  {
+   "record_date": "2026-10-31",
+   "security_type_desc": "Marketable",
+   "security_desc": "Treasury Notes",
+   "avg_interest_rate_amt": "3.301"
+  },
+  {
+   "record_date": "2026-10-31",
+   "security_type_desc": "Marketable",
+   "security_desc": "Treasury Bonds",
+   "avg_interest_rate_amt": "3.452"
+  },
+  {
+   "record_date": "2026-10-31",
+   "security_type_desc": "Marketable",
+   "security_desc": "Total Marketable",
+   "avg_interest_rate_amt": "3.402"
+  },
+  {
+   "record_date": "2026-10-31",
+   "security_type_desc": "Interest-bearing Debt",
+   "security_desc": "Total Interest-bearing Debt",
+   "avg_interest_rate_amt": "3.355"
+  },
+  {
+   "record_date": "2026-09-30",
+   "security_type_desc": "Marketable",
+   "security_desc": "Total Marketable",
+   "avg_interest_rate_amt": "3.390"
+  }
+ ],
+ "meta": {
+  "count": 6
+ }
+}

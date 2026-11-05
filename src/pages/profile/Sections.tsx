@@ -151,11 +151,11 @@ export function YieldCurveSection({ iso3 }: { iso3: string }) {
 
 // ───────── Trade ─────────
 export function TradeSection({ iso3, rels }: { iso3: string; rels: RelView[] }) {
-  const [flow, setFlow] = useState<'X' | 'M'>('X');
-  const { data, loading, error } = useApi<any>(`/trade/${iso3}?flow=${flow}`, 3600_000);
+  const [flow, setFlow] = useState<'X' | 'M' | 'P'>('X');
+  const { data, loading, error } = useApi<any>(flow === 'P' ? null : `/trade/${iso3}?flow=${flow}`, 3600_000);
   const curatedExports = relsBy(rels, 'exports', 'out'), curatedImports = relsBy(rels, 'imports', 'out'), produces = relsBy(rels, 'produces', 'out');
   return (
-    <Card title="International trade" id="trade" actions={<div className="seg"><button className={flow === 'X' ? 'on' : ''} onClick={() => setFlow('X')}>Exports</button><button className={flow === 'M' ? 'on' : ''} onClick={() => setFlow('M')}>Imports</button></div>}>
+    <Card title="International trade" id="trade" actions={<div className="seg"><button className={flow === 'X' ? 'on' : ''} onClick={() => setFlow('X')}>Exports</button><button className={flow === 'M' ? 'on' : ''} onClick={() => setFlow('M')}>Imports</button><button className={flow === 'P' ? 'on' : ''} onClick={() => setFlow('P')}>Partners</button></div>}>
       {(curatedExports.length > 0 || produces.length > 0 || curatedImports.length > 0) && (
         <div style={{ marginBottom: 12 }}>
           {produces.length > 0 && <div className="relGroup"><div className="lbl">Major production</div><div className="chips">{produces.map((r) => <EntityChip key={r.rel.id} e={r.other} title={r.rel.note} />)}</div></div>}
@@ -163,7 +163,7 @@ export function TradeSection({ iso3, rels }: { iso3: string; rels: RelView[] }) 
           {curatedImports.length > 0 && <div className="relGroup"><div className="lbl">Key import commodities</div><div className="chips">{curatedImports.map((r) => <EntityChip key={r.rel.id} e={r.other} title={r.rel.note} />)}</div></div>}
         </div>
       )}
-      {loading && !data ? <Loading lines={6} /> : error ? <Unavailable>UN Comtrade unavailable: {error.message}</Unavailable> : !data?.year ? <Unavailable>No recent annual trade data reported to UN Comtrade.</Unavailable> : (
+      {flow === 'P' ? <TradePartners iso3={iso3} /> : loading && !data ? <Loading lines={6} /> : error ? <Unavailable>UN Comtrade unavailable: {error.message}</Unavailable> : !data?.year ? <Unavailable>No recent annual trade data reported to UN Comtrade.</Unavailable> : (
         <div className="grid2" style={{ gap: 20, alignItems: 'start' }}>
           <div>
             <h3 style={{ marginBottom: 6 }}>{flow === 'X' ? 'Exports' : 'Imports'} by product, {data.year}</h3>
@@ -183,8 +183,38 @@ export function TradeSection({ iso3, rels }: { iso3: string; rels: RelView[] }) 
           </div>
         </div>
       )}
-      {data?.year && <div style={{ marginTop: 8 }}><SourceRef id="un-comtrade" /> <span className="tiny muted">· Goods trade by HS chapter as reported by {iso3}, current US$ · retrieved {ago(data.fetchedAt)}</span></div>}
+      {flow !== 'P' && data?.year && <div style={{ marginTop: 8 }}><SourceRef id="un-comtrade" /> <span className="tiny muted">· Goods trade by HS chapter as reported by {iso3}, current US$ · retrieved {ago(data.fetchedAt)}</span></div>}
     </Card>
+  );
+}
+
+/** Every partner: exports, imports, balance, share — with links to the pair explorer and the map. */
+function TradePartners({ iso3 }: { iso3: string }) {
+  const { data, loading, error } = useApi<any>(`/trade/partners/${iso3}`, 3600_000);
+  const { setMap } = useApp();
+  if (loading && !data) return <Loading lines={6} />;
+  if (error) return <Unavailable>UN Comtrade unavailable: {error.message}</Unavailable>;
+  const fmt = (v: number) => `$${compact(v)}`;
+  const rows = (data.partners as any[]).filter((p) => p.entity).slice(0, 12);
+  return (
+    <div>
+      <div className="row wrap" style={{ gap: 6, marginBottom: 8 }}>
+        <Link className="btn sm" to="/" onClick={() => setMap({ fill: `tradewith:${iso3}:total` })}>Map all partners</Link>
+        <Link className="btn sm" to="/" onClick={() => setMap({ fill: `tradewith:${iso3}:balance` })}>Map trade balances</Link>
+        <Link className="btn sm" to={`/trade?a=${iso3}`}>Trade explorer →</Link>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="data">
+          <thead><tr><th>Partner, {data.year}</th><th className="num">Exports</th><th className="num">Imports</th><th className="num">Balance</th><th className="num">Share</th><th></th></tr></thead>
+          <tbody>{rows.map((p) => (
+            <tr key={p.ccn3}><td><Link to={`/entity/${encodeURIComponent(p.entity.id)}`}>{p.entity.flag} {p.entity.name}</Link></td><td className="num">{fmt(p.exports)}</td><td className="num">{fmt(p.imports)}</td>
+              <td className={`num ${p.exports >= p.imports ? 'good' : 'bad'}`}>{p.exports >= p.imports ? '+' : '−'}{fmt(Math.abs(p.exports - p.imports))}</td><td className="num">{p.share?.toFixed(1)}%</td>
+              <td><Link className="small" to={`/trade?a=${iso3}&b=${p.iso3}`} title="Both sides’ reports, products, tariffs and sanctions">⇄ pair</Link></td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <div style={{ marginTop: 8 }}><SourceRef id="un-comtrade" /> <span className="tiny muted">· as reported by {iso3} · retrieved {ago(data.fetchedAt)}</span></div>
+    </div>
   );
 }
 

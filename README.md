@@ -70,20 +70,46 @@ Optional settings (environment variables): `CONTACT_EMAIL` (sent to SEC/Wikipedi
 which ask API users for one), `ALLOW_SIGNUP=0`, `HOST`, `PORT`, `TERMINAL_VAULT`. The
 server listens on this computer only unless you change `HOST` — see [SECURITY.md](SECURITY.md).
 
+Optional free API keys that add sources (everything works without them):
+`FRED_API_KEY` (official dates for every US release, not only BLS ones), `EIA_API_KEY`
+(weekly Strategic Petroleum Reserve levels straight from the EIA), `AGSI_API_KEY` (European
+gas storage), `CENSUS_API_KEY` (higher rate limit for US duty data). Size of the web:
+`WIKIDATA_COMPANY_MIN_SITELINKS` (default 25 — lower loads more companies) and
+`TRADE_WEB_COUNTRIES` (default 40 largest economies). Alert webhooks go to
+Slack, Discord and ntfy by default; add hosts with `TERMINAL_WEBHOOK_HOSTS=host1,host2`.
+
 Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:live` ·
 `npm run check:news` (news parsing, tagging and signals, offline) · `npm run check:data`
 (consistency audit of the built-in dataset, offline; fails on errors) · `npm run check:parsers`
-(rates, election, prediction-market and mayor parsers on fixtures, offline).
+(rates, election, prediction-market and mayor parsers on fixtures, offline) ·
+`npm run check:econ` (alerts, calendar, sanctions, tariffs, budgets, reserves and trade
+explorer on fixtures, offline) · `npm run check:web` (the knowledge web: Wikidata loaders,
+corroboration and disputes, trade/sanctions/news links, weights, catalog, connections; offline) · `npm run check:quality` (the network gate against local
+HTTP servers: limits, gaps, Retry-After, circuit breaker, readable errors; and the World Bank vs IMF cross-checks; offline).
 
 ## What's in it
 
+- **The knowledge web**: everything is one connected graph — countries, every international
+  organization countries belong to (discovered from Wikidata, with join and leave dates),
+  central banks and governors, listed companies with their executives, parents, industries
+  and live quotes, capitals and big cities, people, parties, commodities and events — joined
+  by links that carry data: trade between the largest economies (UN Comtrade, both countries'
+  reports), sanctions programmes from imposer to target, and who is in trusted news together
+  this week. Every profile has a **Connections** card (ranked by what each link carries, ✓ when
+  two sources agree, ⚠ when they disagree), **Web** (`/web`) draws the network around anything,
+  and the map layer **Where something is connected** shades the world by how each country
+  relates to it. Little is hard-coded: organizations, companies, cities and indicators come
+  from the sources' own data, and importance weights are computed from GDP shares.
+- **Any indicator**: search ~1,700 World Bank and IMF series from the map's layer search or a
+  country's **Explore any indicator** card — chart it, or map every country.
 - **Map** (MapLibre GL): 241 country shapes → 56 US states/territories (zoom ≥ 3) → 3,231
   US counties (zoom ≥ 5) → curated cities. Hover previews, click to select, breadcrumbs,
   fly-to, returns to your last position.
 - **Map sidebar**: tabs for Layers / Places / Saved; a card for the active layer with its
-  options; layer search ("inflation", "oil", "war"); nine themed groups (politics,
-  conflict, economy, public finances, IMF forecasts, trade, markets & rates, portfolio,
-  historical); a color preview on every layer.
+  options; layer search ("inflation", "oil", "war"); eleven themed groups (politics,
+  conflict, economy, public finances, IMF forecasts, trade, sanctions & tariffs, reserves &
+  stocks, markets & rates, portfolio, historical); a color preview on every layer. Any layer
+  can be linked to: `/?fill=sanctions:ALL`.
 - **Colors mean something**: better/worse layers share one scale — green = better, red =
   worse, cream = little change, gray = no data. Size-only layers (population, GDP, trade
   flows) use one themed hue (energy amber, metals steel, farm goods olive…). Conflicts use
@@ -127,10 +153,14 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
   (e.g. United States, Israel & allies vs Iran & the Axis of Resistance; Russia vs Ukraine),
   each country's involvement on its profile (which side, with whom, against whom), armed-group
   profiles, and two map views: *who is fighting* (by deadliest war) and *sides in one war*.
-- **Trusted newsroom** (refreshed every 30 min): headlines from wire services (Reuters, AP,
-  Bloomberg, FT, WSJ via headline search), public broadcasters (BBC, NPR, DW, France 24, CBC,
-  ABC), major papers (NYT, Guardian, CNBC, Al Jazeera) and official sources (Fed, ECB, Bank of
-  England, IMF, UN, SEC, WTO). The same story from several outlets is shown once with every
+- **Trusted newsroom** (refreshed every 30 min): headlines from wire services (Reuters, AP
+  via headline search), the official RSS feeds of the WSJ, FT, Bloomberg, The Economist,
+  Nikkei Asia, Washington Post, Politico, Axios, SCMP, The Hindu, Straits Times and others,
+  public broadcasters (BBC, NPR, DW, France 24, CBC, ABC), major papers (NYT, Guardian, CNBC,
+  Al Jazeera) and official sources (White House, EU Council, NATO, Fed, ECB, Bank of England,
+  Bank of Japan, IMF, UN, SEC, WTO). **News subscriptions** (Settings): mark the outlets you
+  pay for and their stories open on the publisher's site, where you are signed in; the
+  terminal never asks for publisher passwords and never downloads article text. The same story from several outlets is shown once with every
   outlet that carried it ("✓ 3 trusted outlets"); every headline is labelled with its
   outlet's tier (official, wire, public broadcaster, major, specialist, state media, unrated)
   and linked to the countries, companies, people, organisations and commodities it names.
@@ -161,6 +191,49 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
   conflicting values, duplicate people, past events still "scheduled", competing
   officeholders, news that contradicts a record). Every profile has a **Data quality** card
   with the same, for that entity. Live facts show when they were retrieved.
+- **Alerts** (`/alerts`, the bell in the top bar): a "what changed" inbox. Every live loader
+  records changes — corroborated news, new leaders, election results, conflicts, price, FX
+  and yield moves, policy-rate decisions, data releases, new sanctions designations, US tariff
+  actions and duty jumps. Rules watch entities, watchlists, the entities in your notes, your
+  positions, or places picked on the map (and everything inside them), with a minimum
+  importance (1–10) and move thresholds; alerts arrive in the inbox, as browser
+  notifications or by webhook (Slack, Discord, ntfy). "Alert me" on every profile and map
+  preview; **My alerts** map layer; add any alert to today's note or a chosen note; notes show
+  what changed for the entities they mention.
+- **Economic & IGO calendar** (`/calendar`, and on every country and organisation profile):
+  data releases (US from the BLS/FRED calendars; euro area, Germany, UK, Japan, China, Canada
+  and India), central-bank decisions (Fed, ECB, Bank of England, Bank of Japan, Bank of
+  Canada, PBoC loan prime rate), summits, assemblies and votes (UN, European Parliament
+  plenaries, European Council, G20, APEC, ASEAN, OPEC+, COP), budget days and elections —
+  global or for one country/organisation. Each event is graded **1–10** (what it is + how much
+  that economy matters + context; hover for the reasons) and gets its **result** after
+  release (FRED, Eurostat, BIS). Dates are labelled: official calendar, published schedule,
+  official rule, or "≈ usual timing" when the exact date is not out yet.
+- **Sanctions & tariffs**: the US (OFAC), EU, UK and UN consolidated lists on the map (all
+  or one list) and on profiles — country programmes, listings connected to the country,
+  designations in the last 120 days; the regimes the EU, UN, US and UK impose; a "same name
+  as a sanctions listing" notice on people and companies (name match only, with links to
+  the official search); alerts on new designations. US tariffs: the rate actually charged on
+  each country's goods (Census duties ÷ imports, monthly, and its change over a year),
+  Federal Register tariff actions naming each country, and the tariffs every country
+  applies itself (World Bank).
+- **Government budgets** on country profiles: fiscal year, IMF general-government revenue,
+  spending, overall and primary balance, net interest and debt (with projections marked);
+  spending by function for EU and EFTA members (Eurostat COFOG); central-government revenue,
+  tax, interest burden, defence, health and education spending (World Bank). United States,
+  live: debt to the penny, monthly receipts, outlays and deficit, interest on the debt and the
+  average rate it pays. Map layers for budget balance, revenue, spending and interest burden.
+- **Reserves & stocks**: crude-oil stocks and days of refinery cover by country (JODI), the
+  US Strategic Petroleum Reserve weekly, how each major country holds strategic oil (and its
+  EU/IEA obligations), wheat, corn and rice stocks and stocks-to-use (USDA), European gas
+  storage (AGSI+, free key), FX and gold reserves and months of import cover. Commodity
+  profiles list who holds the stocks.
+- **Trade explorer** (`/trade`): one country's trade with every partner (table and map
+  layer: total, exports, imports, share, balance), or one pair A ↔ B — six years of trade as
+  **each side** reports it (the mirror check: A's exports vs B's imports), what they trade by
+  product, the US tariff between them, sanctions programmes either imposes on the other and
+  shared memberships. From the map: click a country → "Trade partners", then click another →
+  "Trade with …".
 - **Markets page** (commodities, currencies, rates & yield curves) and **Conflicts page**.
 - **Curated dataset** (`server/data/curated.ts`): 10 deeply curated countries, 61 with
   government type, 12 IGOs, 18 parties, 57 people, ~115 companies across the US, Europe,
@@ -257,8 +330,19 @@ drawer and bottom sheet) through tablets and laptops to 4K monitors.
   occasionally be incomplete or include a heading as a participant. Long-running conflicts list
   their whole history. Non-state groups are profiles, not map shapes. The first start-up takes
   1–3 minutes to read the wars (Wikipedia rate limits); results are cached for 24 hours.
-- UN Comtrade's free API is rate-limited: a product's first load takes ~10 s, then it is
-  cached for a week. Recent years are incomplete until countries report.
+- UN Comtrade's free API is rate-limited: a product's or a pair's first load takes ~10 s,
+  then it is cached for a week. Recent years are incomplete until countries report, and two
+  countries' reports of the same trade often differ (the trade page shows both).
+- Sanctions matches on people and companies are by name only and say so; they are not
+  identity checks. Listings are tied to countries by nationality and address, which is a
+  connection, not a measure of how much trade is restricted.
+- Bilateral tariff rates are only shown where the US is one side (Census duties); for other
+  pairs the app shows each country's average applied tariff (World Bank, a year or more
+  behind).
+- Oil stocks cover the ~60 countries that report them to JODI (not China); strategic and
+  commercial stocks are not separated there. Grain stocks are USDA projections, revised
+  monthly. Central-bank meeting dates are entered by hand from official schedules and the
+  Data page warns 90 days before a schedule runs out.
 - Auth is local email/password (scrypt, httpOnly cookie). For cloud deployment move to
   PostgreSQL (`db/postgres-schema.sql`) and an identity provider.
 - Windows doesn't render flag emoji, so flags show as two-letter codes there.

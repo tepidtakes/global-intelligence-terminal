@@ -27,7 +27,26 @@ export const WB_INDICATORS: Record<string, { label: string; unit: string; short:
   'PA.NUS.FCRF': { label: 'Official exchange rate (LCU per US$, period avg.)', unit: 'LCU per USD', short: 'FX rate' },
   'ST.INT.ARVL': { label: 'International tourism, number of arrivals', unit: 'arrivals', short: 'Tourist arrivals' },
   'ST.INT.RCPT.CD': { label: 'International tourism receipts (current US$)', unit: 'USD', short: 'Tourism receipts' },
+  // Tariffs each country applies (TRAINS via WITS, compiled by the World Bank)
+  'TM.TAX.MRCH.WM.AR.ZS': { label: 'Tariff rate, applied, weighted mean, all products (%)', unit: '%', short: 'Applied tariff (trade-weighted)' },
+  'TM.TAX.MRCH.SM.AR.ZS': { label: 'Tariff rate, applied, simple mean, all products (%)', unit: '%', short: 'Applied tariff (simple mean)' },
+  'TM.TAX.MRCH.WM.FN.ZS': { label: 'Tariff rate, most favoured nation, weighted mean, all products (%)', unit: '%', short: 'MFN tariff (trade-weighted)' },
+  // Reserves (IMF International Financial Statistics, via the World Bank)
+  'FI.RES.TOTL.CD': { label: 'Total reserves, including gold (current US$)', unit: 'USD', short: 'Reserves incl. gold' },
+  'FI.RES.XGLD.CD': { label: 'Total reserves, excluding gold (current US$)', unit: 'USD', short: 'Reserves excl. gold' },
+  'FI.RES.TOTL.MO': { label: 'Total reserves in months of imports', unit: 'months', short: 'Reserves (months of imports)' },
+  // Central-government budgets (IMF Government Finance Statistics, via the World Bank)
+  'GC.REV.XGRT.GD.ZS': { label: 'Central government revenue, excluding grants (% of GDP)', unit: '% of GDP', short: 'Revenue' },
+  'GC.TAX.TOTL.GD.ZS': { label: 'Tax revenue (% of GDP)', unit: '% of GDP', short: 'Tax revenue' },
+  'GC.XPN.TOTL.GD.ZS': { label: 'Central government expense (% of GDP)', unit: '% of GDP', short: 'Expense' },
+  'GC.XPN.INTP.RV.ZS': { label: 'Interest payments (% of revenue)', unit: '% of revenue', short: 'Interest / revenue' },
+  'MS.MIL.XPND.GD.ZS': { label: 'Military expenditure (% of GDP, SIPRI)', unit: '% of GDP', short: 'Military spending' },
+  'SE.XPD.TOTL.GD.ZS': { label: 'Government expenditure on education (% of GDP)', unit: '% of GDP', short: 'Education spending' },
+  'SH.XPD.GHED.GD.ZS': { label: 'Government health expenditure (% of GDP)', unit: '% of GDP', short: 'Health spending' },
 };
+export const TARIFF_INDICATORS = ['TM.TAX.MRCH.WM.AR.ZS', 'TM.TAX.MRCH.SM.AR.ZS', 'TM.TAX.MRCH.WM.FN.ZS'];
+export const RESERVE_INDICATORS = ['FI.RES.TOTL.CD', 'FI.RES.XGLD.CD', 'FI.RES.TOTL.MO'];
+export const BUDGET_INDICATORS = ['GC.REV.XGRT.GD.ZS', 'GC.TAX.TOTL.GD.ZS', 'GC.XPN.TOTL.GD.ZS', 'GC.XPN.INTP.RV.ZS', 'MS.MIL.XPND.GD.ZS', 'SE.XPD.TOTL.GD.ZS', 'SH.XPD.GHED.GD.ZS'];
 
 export const PROFILE_INDICATORS = [
   'SP.POP.TOTL', 'NY.GDP.MKTP.CD', 'NY.GDP.MKTP.PP.CD', 'NY.GDP.PCAP.CD', 'NY.GDP.MKTP.KD.ZG', 'FP.CPI.TOTL.ZG',
@@ -38,8 +57,25 @@ export const PROFILE_INDICATORS = [
 const WB = 'https://api.worldbank.org/v2';
 
 /** One indicator for every country (map layers). year undefined = most recent non-empty value per country. */
+/** Unit of a World Bank indicator from its name: "GDP (current US$)" → USD, "(% of GDP)" → % of GDP. */
+export function unitFromName(name: string) {
+  const u = /\(([^()]*)\)\s*$/.exec(name)?.[1] || '';
+  if (/US\$/.test(u)) return 'USD';
+  if (/^% of /.test(u)) return u;
+  if (/%/.test(u)) return '%';
+  if (/^(per |years?$|days?$|months?$|kg|metric tons|hectares|km|tonnes)/i.test(u)) return u;
+  return u || '';
+}
+const WB_CODE = /^[A-Za-z0-9._]{3,48}$/;
+/** Label and unit for any World Bank indicator: the hand-labelled ones, else from the data's own name. */
+export function wbMeta(code: string, name?: string) {
+  if (WB_INDICATORS[code]) return WB_INDICATORS[code];
+  const label = name || code;
+  return { label, unit: unitFromName(label), short: label.replace(/\s*\([^)]*\)\s*$/, '') };
+}
+
 export async function wbIndicatorAll(code: string, year?: string) {
-  if (!WB_INDICATORS[code]) throw new Error('Unknown indicator');
+  if (!WB_CODE.test(code)) throw new Error('Unknown indicator');
   const q = year ? `date=${encodeURIComponent(year)}` : 'mrnev=1';
   return cached(`wb:all:${code}:${year || 'latest'}`, 86400, async () => {
     const json = await fetchJson(`${WB}/country/all/indicator/${code}?format=json&per_page=1000&${q}`);
@@ -49,7 +85,8 @@ export async function wbIndicatorAll(code: string, year?: string) {
       if (r.value == null || !r.countryiso3code) continue;
       values[r.countryiso3code] = { value: r.value, period: r.date };
     }
-    return { code, ...WB_INDICATORS[code], values, lastUpdated: json?.[0]?.lastupdated as string | undefined };
+    if (!rows.length && !WB_INDICATORS[code]) throw new Error(`The World Bank has no data for indicator ${code}`);
+    return { code, ...wbMeta(code, rows[0]?.indicator?.value), values, lastUpdated: json?.[0]?.lastupdated as string | undefined };
   });
 }
 
@@ -69,7 +106,8 @@ export async function wbCountrySeries(iso3: string, codes = PROFILE_INDICATORS) 
           .filter((r) => r.indicator?.id === code && r.value != null)
           .map((r) => ({ period: r.date, value: r.value }))
           .sort((a, b) => a.period.localeCompare(b.period));
-        out.push({ code, label: WB_INDICATORS[code].label, unit: WB_INDICATORS[code].unit, series, latest: series[series.length - 1], sourceId: 'world-bank-wdi' });
+        const meta = wbMeta(code, rows.find((r) => r.indicator?.id === code)?.indicator?.value);
+        out.push({ code, label: meta.label, unit: meta.unit, series, latest: series[series.length - 1], sourceId: 'world-bank-wdi' });
       }
     }
     return out;
@@ -80,10 +118,10 @@ export async function wbCountrySeries(iso3: string, codes = PROFILE_INDICATORS) 
 export async function wbCountryMeta() {
   return cached('wb:countrymeta', 7 * 86400, async () => {
     const json = await fetchJson(`${WB}/country?format=json&per_page=400`);
-    const meta: Record<string, { incomeLevel: string; region: string; lendingType: string; capital: string }> = {};
+    const meta: Record<string, { incomeLevel: string; region: string; lendingType: string; capital: string; name?: string }> = {};
     for (const c of json?.[1] || []) {
       if (c.region?.value === 'Aggregates') continue;
-      meta[c.id] = { incomeLevel: c.incomeLevel?.value, region: c.region?.value?.trim(), lendingType: c.lendingType?.value, capital: c.capitalCity };
+      meta[c.id] = { incomeLevel: c.incomeLevel?.value, region: c.region?.value?.trim(), lendingType: c.lendingType?.value, capital: c.capitalCity, name: c.name };
     }
     return meta;
   });
@@ -117,6 +155,9 @@ export const HS_CHAPTERS: Record<string, string> = {
 // Comtrade uses a few reporter codes that differ from ISO 3166 numeric.
 const ISO_TO_COMTRADE: Record<string, string> = { '840': '842', '250': '251', '356': '699', '756': '757', '578': '579' };
 const COMTRADE_TO_ISO: Record<string, string> = Object.fromEntries(Object.entries(ISO_TO_COMTRADE).map(([a, b]) => [b, a]));
+/** UN Comtrade uses its own codes for a few countries (US 842, France 251, India 699, Switzerland 757, Norway 579). */
+export const toComtrade = (ccn3: string) => ISO_TO_COMTRADE[ccn3] || String(Number(ccn3));
+export const fromComtrade = (code: string | number) => (COMTRADE_TO_ISO[String(code)] || String(code)).padStart(3, '0');
 
 export const COMTRADE_AREAS: Record<string, string> = {
   '490': 'Other Asia, n.e.s.', '568': 'Other Europe, n.e.s.', '577': 'Other Africa, n.e.s.', '637': 'North & Central America, n.e.s.',
@@ -125,7 +166,7 @@ export const COMTRADE_AREAS: Record<string, string> = {
 
 // The public preview API allows roughly one request per second; back off on 429.
 let ctNext = 0;
-async function ctFetch(url: string) {
+export async function ctFetch(url: string) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const wait = ctNext - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -222,7 +263,7 @@ export async function usTreasuryCurve() {
     const yearAgo = prevYear.concat(cur).find((r) => r.date <= target);
     const monthTarget = new Date(Date.parse(latest.date) - 30 * 86400_000).toISOString().slice(0, 10);
     const monthAgo = cur.concat(prevYear).find((r) => r.date <= monthTarget);
-    return { latest, monthAgo, yearAgo, sourceId: 'us-treasury' };
+    return { latest, previous: cur[1] || prevYear[0], monthAgo, yearAgo, sourceId: 'us-treasury' };
   });
 }
 

@@ -1,0 +1,24 @@
+{
+ "last_page": 1,
+ "total": 1,
+ "dataset": "Storage",
+ "gas_day": "2026-11-03",
+ "data": [
+  {
+   "name": "Germany",
+   "code": "DE",
+   "url": "DE",
+   "gasDayStart": "2026-11-03",
+   "gasInStorage": "229.4545",
+   "consumption": "",
+   "injection": "120.1",
+   "withdrawal": "45.2",
+   "netWithdrawal": "-74.9",
+   "workingGasVolume": "251.3123",
+   "status": "C",
+   "trend": "0.12",
+   "full": "91.3",
+   "info": []
+  }
+ ]
+}

@@ -5,10 +5,29 @@ import { useApp, useAuth } from '../state';
 import { Card, EntityChip, EntityPicker, Loading, Modal, localToday } from '../components/common';
 import { fmtDate } from '../format';
 import type { Catalyst, EntityStub } from '../../shared/types';
+import { EconCalendarView } from './EconCalendar';
 
 const CATS = ['election', 'central-bank', 'summit', 'policy', 'corporate', 'leadership'];
 
+/** Calendar: the economic & political calendar (default) and the events / catalysts view. */
 export function CalendarPage() {
+  const [sp, setSp] = useSearchParams();
+  const mine = sp.get('view') === 'mine' || !!sp.get('track') || !!sp.get('catalyst') || !!sp.get('entity');
+  return (
+    <div className="page wide">
+      <div className="row wrap" style={{ alignItems: 'baseline', gap: 12, marginBottom: 6 }}>
+        <h1>Calendar</h1>
+        <div className="seg" role="tablist">
+          <button role="tab" aria-selected={!mine} className={!mine ? 'on' : ''} onClick={() => setSp({})}>Economic & political</button>
+          <button role="tab" aria-selected={mine} className={mine ? 'on' : ''} onClick={() => setSp({ view: 'mine' })}>Events & my catalysts</button>
+        </div>
+      </div>
+      {mine ? <EventsAndCatalysts /> : <EconCalendarView />}
+    </div>
+  );
+}
+
+function EventsAndCatalysts() {
   const [sp, setSp] = useSearchParams();
   const { user } = useAuth();
   const [cat, setCat] = useState('');
@@ -37,8 +56,8 @@ export function CalendarPage() {
   }, [list]);
 
   return (
-    <div className="page">
-      <div className="row wrap"><h1>Events & catalysts</h1><div className="spacer" />{user && <button className="btn primary sm" onClick={() => setEditing({ title: '', status: 'pending', entityIds: [] })}>＋ New catalyst forecast</button>}</div>
+    <div className="stack" style={{ gap: 16 }}>
+      <div className="row wrap"><span className="small muted">Scheduled events in the knowledge graph, and your own catalyst forecasts.</span><div className="spacer" />{user && <button className="btn primary sm" onClick={() => setEditing({ title: '', status: 'pending', entityIds: [] })}>＋ New catalyst forecast</button>}</div>
       <div className="row wrap">
         <div className="seg"><button className={!cat ? 'on' : ''} onClick={() => setCat('')}>all</button>{CATS.map((c) => <button key={c} className={cat === c ? 'on' : ''} onClick={() => setCat(c)}>{c}</button>)}</div>
         <label className="layerItem"><input type="checkbox" checked={showPast} onChange={(e) => setShowPast(e.target.checked)} /> Include past events</label>

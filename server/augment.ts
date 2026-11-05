@@ -14,6 +14,7 @@ import type { Entity, Fact, Relationship } from '../shared/types.js';
 import { USER_AGENT } from './config.js';
 import { loadMayors } from './localPolitics.js';
 import { loadLocalElections, refreshElectionDetails } from './elections.js';
+import { emitNew, type Change } from './changes.js';
 
 type NewRel = Omit<Relationship, 'id' | 'origin'>;
 /** Each background loader's last run. `fetchedAt` is when its source data was downloaded; `stale`
@@ -192,6 +193,18 @@ async function loadLeaders(): Promise<LoadResult> {
   }
   for (const e of entities.values()) if ((e.type === 'country' || e.type === 'state') && (e.attrs?.leaderNotes || notes[e.id])) e.attrs = { ...(e.attrs || {}), leaderNotes: notes[e.id] || [] };
   setLiveRels('wikidata-leaders', rels);
+  // Change feed: a new current officeholder anywhere (first run records the baseline).
+  const holderItems: Change[] = [];
+  const addHolders = (placeId: string, type: string, h: { best: Holder }, role: string, importance: number) => {
+    const place = getEntity(placeId); if (!place) return;
+    const pid = findPerson([h.best.name, ...(d.aliases[h.best.qid] || [])]);
+    holderItems.push({ key: `holder:${placeId}:${type}:${h.best.qid}`, kind: 'leader', entityIds: [placeId, ...(pid ? [pid] : [])], title: `${place.name}: ${h.best.name} is now ${lcRole(role)}${h.best.start ? ` (since ${fmtDay(h.best.start)})` : ''}`,
+      detail: 'Per Wikidata (community-maintained) — verify with an official source.', url: `https://www.wikidata.org/wiki/${h.best.qid}`, sourceId: 'wikidata', quality: 'community', importance, at: h.best.start ? `${h.best.start}T00:00:00Z` : new Date().toISOString() });
+  };
+  for (const [iso, h] of hos) addHolders(`country:${iso}`, 'hos', h, d.offices[iso]?.hos || 'Head of state', 7);
+  for (const [iso, h] of hog) addHolders(`country:${iso}`, 'hog', h, d.offices[iso]?.hog || 'Head of government', 8);
+  for (const [code, h] of gov) addHolders(`state:${code}`, 'gov', h, 'Governor', 5);
+  emitNew('leaders', holderItems);
   setLiveRels('wikidata-parties', partyRels);
   return { detail: `${added} leaders added from Wikidata, ${matched} matched curated records, ${superseded} curated terms closed`, fetchedAt: r.fetchedAt, stale: r.stale };
 }
@@ -233,6 +246,12 @@ async function loadConflicts(): Promise<LoadResult> {
   }
   for (const e of entities.values()) if (e.id.startsWith('event:conflict-') && e.attrs?.kind !== 'theatre' && e.attrs?.status === 'ongoing' && !seen.has(e.id)) e.attrs = { ...e.attrs, status: 'no longer listed' };
   setLiveRels('wp-conflicts', rels);
+  emitNew('conflicts', r.data.rows.map((c): Change => ({
+    key: `conflict:${c.slug}:${c.intensity}`, kind: 'conflict', entityIds: [`event:conflict-${c.slug}`, ...c.locations.map((l) => l.id).filter(Boolean) as string[]],
+    title: `${c.name}: now listed as ${INTENSITY[c.intensity].label.toLowerCase()} (${INTENSITY[c.intensity].deaths})`, detail: 'Wikipedia’s List of ongoing armed conflicts (citing ACLED, UCDP and others).',
+    url: c.article ? `https://en.wikipedia.org/wiki/${encodeURIComponent(c.article.replace(/ /g, '_'))}` : r.data.url, sourceId: 'wikipedia-conflicts', quality: 'community',
+    importance: INTENSITY[c.intensity].rank + 3, at: new Date().toISOString(),
+  })));
   return { detail: `${seen.size} conflicts`, fetchedAt: r.fetchedAt, stale: r.stale };
 }
 
@@ -395,7 +414,10 @@ export function normalizeEventStatus() {
 
 // ───────────────────────── Orchestration ─────────────────────────
 let running: Promise<void> | null = null;
-export function refreshLiveData() {
+let retries = 0;
+let retryTimer: NodeJS.Timeout | undefined;
+/** Load every live source, or only the named ones (retries of sources that failed). */
+export function refreshLiveData(only?: Set<string>) {
   if (running) return running;
   running = (async () => {
     const details = async (): Promise<LoadResult> => ({ detail: await refreshElectionDetails(), fetchedAt: new Date().toISOString(), stale: false });
@@ -405,6 +427,7 @@ export function refreshLiveData() {
       ['conflicts', 'wikipedia-conflicts', loadConflicts], ['elections', 'wikipedia-elections', loadElections], ['local-elections', 'wikipedia-election-results', loadLocalElections], ['election-results', 'wikipedia-election-results', details],
       ['war-sides', 'wikipedia-conflicts', loadWarSides]];
     for (const [name, sourceId, fn] of steps) {
+      if (only && !only.has(name)) continue;
       retrieved = '';
       try { const r = await fn(); liveStatus[name] = { ok: true, at: new Date().toISOString(), ...r, sourceId }; }
       catch (e: any) { liveStatus[name] = { ok: false, at: new Date().toISOString(), detail: e.message, fetchedAt: liveStatus[name]?.fetchedAt, sourceId }; console.warn(`[live] ${name} failed: ${e.message}`); }
@@ -413,13 +436,20 @@ export function refreshLiveData() {
     normalizeEventStatus();
     console.log(`[live] ${Object.entries(liveStatus).map(([k, v]) => `${k}: ${v.ok ? v.detail + (v.stale ? ' (STALE copy)' : '') : 'FAILED'}`).join(' · ')}`);
     for (const fn of listeners) { try { fn(); } catch (e: any) { console.warn('[live] listener failed:', e.message); } }
-    // A source that failed (network blip, rate limit) is tried again in 5 minutes, not 12 hours.
-    if (Object.values(liveStatus).some((s) => !s.ok)) setTimeout(() => { void refreshLiveData(); }, 5 * 60_000).unref();
+    // Sources that failed (network blip, rate limit, outage) are tried again on their own, after
+    // 5, 10, 20, 40, then every 60 minutes, instead of waiting for the 12-hour refresh.
+    const failed = new Set(Object.entries(liveStatus).filter(([, s]) => !s.ok).map(([k]) => k));
+    if (failed.has('conflicts')) failed.add('war-sides'); // sides attach to the conflict rows
+    clearTimeout(retryTimer);
+    if (failed.size) {
+      const wait = Math.min(60, 5 * 2 ** retries++) * 60_000;
+      retryTimer = setTimeout(() => { void refreshLiveData(failed); }, wait).unref();
+    } else retries = 0;
   })().finally(() => { running = null; });
   return running;
 }
 export function startLiveData() {
   normalizeEventStatus();
   setTimeout(() => { void refreshLiveData(); }, 300);
-  setInterval(() => { void refreshLiveData(); }, 12 * 3600_000).unref();
+  setInterval(() => { retries = 0; void refreshLiveData(); }, 12 * 3600_000).unref();
 }

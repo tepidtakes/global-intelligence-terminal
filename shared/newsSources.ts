@@ -18,7 +18,7 @@ export const TIER_INFO: Record<PublisherTier, { label: string; rank: number; hel
 /** Headlines from tiers at or above this rank count as "trusted" (filters, corroboration, signals). */
 export const TRUSTED_RANK = 3;
 
-export interface Publisher { id: string; name: string; tier: PublisherTier; domains: string[]; country?: string; note?: string; }
+export interface Publisher { id: string; name: string; tier: PublisherTier; domains: string[]; country?: string; note?: string; paywalled?: boolean; }
 
 const P = (id: string, name: string, tier: PublisherTier, domains: string[], country?: string, note?: string): Publisher => ({ id, name, tier, domains, country, note });
 
@@ -123,6 +123,12 @@ export const PUBLISHERS: Publisher[] = [
   P('anadolu', 'Anadolu Agency', 'state-media', ['aa.com.tr'], 'TUR'),
   P('trt', 'TRT World', 'state-media', ['trtworld.com'], 'TUR'),
 ];
+
+// Outlets that need a subscription for full articles. You can mark the ones you subscribe to in
+// Settings; stories they carried then get a direct link that opens with your own login.
+const PAYWALLED = new Set(['wsj', 'ft', 'economist', 'bloomberg', 'nikkei', 'wapo', 'nyt', 'barrons', 'times-uk', 'telegraph', 'handelsblatt', 'lemonde', 'spiegel', 'scmp', 'japantimes', 'straitstimes', 'hindu', 'politico', 'theinformation', 'globeandmail', 'smh', 'latimes', 'marketwatch', 'foreignaffairs', 'foreignpolicy', 'haaretz', 'caixin', 'spglobal', 'argus']);
+for (const p of PUBLISHERS) if (PAYWALLED.has(p.id)) p.paywalled = true;
+export const SUBSCRIPTION_OUTLETS = PUBLISHERS.filter((p) => p.paywalled);
 
 const byDomain = new Map<string, Publisher>();
 for (const p of PUBLISHERS) for (const d of p.domains) byDomain.set(d, p);

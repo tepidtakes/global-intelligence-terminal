@@ -3,10 +3,13 @@ import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth, useApp } from '../state';
 import { GlobalSearch } from './GlobalSearch';
 import { ErrorBoundary } from './ErrorBoundary';
+import { AlertBell } from './alertBits';
 
 const NAV = [
   { to: '/', label: 'Map', icon: '◎', end: true },
+  { to: '/web', label: 'Web', icon: '❖' },
   { to: '/markets', label: 'Markets', icon: '◫' },
+  { to: '/trade', label: 'Trade', icon: '⇆' },
   { to: '/conflicts', label: 'Conflicts', icon: '⚔' },
   { to: '/news', label: 'News', icon: '▦' },
   { to: '/elections', label: 'Elections', icon: '☑' },
@@ -41,6 +44,7 @@ export function Shell() {
         <GlobalSearch />
         <nav id="mainnav" className={`navLinks${menu ? ' open' : ''}`} aria-label="Main">
           {NAV.map((n) => link(n.to, n.label, n.icon, undefined, n.end))}
+          {user && link('/alerts', 'Alerts', '🔔', 'menuOnly')}
           {link('/data', 'Data', '◇', 'menuOnly', false, 'Data sources, freshness and consistency audit')}
           {link('/settings', 'Settings', '⚙', 'menuOnly')}
         </nav>
@@ -48,6 +52,7 @@ export function Shell() {
         <button className="btn ghost sm" onClick={() => setTheme(nextTheme)} title={`Theme: ${theme} (click for ${nextTheme})`} aria-label="Toggle theme">
           {theme === 'dark' ? '☾' : theme === 'light' ? '☀' : '◐'}
         </button>
+        <AlertBell />
         {link('/data', 'Data', '◇', 'barOnly', false, 'Data sources, freshness and consistency audit')}
         {link('/settings', 'Settings', '⚙', 'barOnly')}
         {user === null && <Link to="/login" className="btn primary sm signIn" style={{ marginLeft: 6 }}>Sign in</Link>}

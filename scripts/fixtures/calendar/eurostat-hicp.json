@@ -1,0 +1,4 @@
+{"version":"2.0","class":"dataset","label":"HICP - annual rate of change","source":"ESTAT","updated":"2026-11-03T11:00:00+0100",
+ "value":{"0":2.2,"1":2.1,"2":2.0,"3":2.3},"id":["freq","unit","coicop","geo","time"],"size":[1,1,1,1,4],
+ "dimension":{"freq":{"category":{"index":{"M":0}}},"unit":{"category":{"index":{"RCH_A":0}}},"coicop":{"category":{"index":{"CP00":0}}},"geo":{"category":{"index":{"EA":0}}},
+ "time":{"category":{"index":{"2026-07":0,"2026-08":1,"2026-09":2,"2026-10":3}}}}}

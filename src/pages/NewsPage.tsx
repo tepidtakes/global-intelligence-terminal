@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi } from '../api';
 import { useApp } from '../state';
 import { Card, Loading, SourceRef, Unavailable, useDebounced } from '../components/common';
-import { NewsRow, SignalItem, TierBadge, type NewsItemView, type SignalView } from '../components/newsBits';
+import { NewsRow, SignalItem, TierBadge, useSubscriptions, subscribedVersion, type NewsItemView, type SignalView } from '../components/newsBits';
 import { ago } from '../format';
 
 const TOPICS = [['all', 'All'], ['world', 'World'], ['business', 'Business'], ['official', 'Official']];
@@ -16,6 +16,8 @@ export function NewsPage() {
   const [type, setType] = useState('');
   const [trusted, setTrusted] = useState(true);
   const [corroborated, setCorroborated] = useState(false);
+  const [mySubs, setMySubs] = useState(false);
+  const subs = useSubscriptions();
   const [q, setQ] = useState('');
   const dq = useDebounced(q, 300);
   const [params, setParams] = useSearchParams();
@@ -45,13 +47,14 @@ export function NewsPage() {
             <div className="seg" role="group" aria-label="Mentions">{TYPES.map(([k, l]) => <button key={k} className={type === k ? 'on' : ''} onClick={() => setType(k)}>{l}</button>)}</div>
             <label className="small"><input type="checkbox" checked={trusted} onChange={(e) => setTrusted(e.target.checked)} /> Trusted outlets only</label>
             <label className="small"><input type="checkbox" checked={corroborated} onChange={(e) => setCorroborated(e.target.checked)} /> Corroborated (2+ outlets)</label>
+            {subs.size > 0 && <label className="small" title="Stories carried by an outlet you marked in Settings → News subscriptions"><input type="checkbox" checked={mySubs} onChange={(e) => setMySubs(e.target.checked)} /> In my subscriptions</label>}
             <input type="search" placeholder="Filter headlines…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Filter headlines" />
             {entity && <span className="chip">Mentioning {ent.data?.entity?.name || entity} <span className="x" role="button" aria-label="Clear entity filter" onClick={() => setParams({})}>×</span></span>}
           </div>
           <Card title={`Stories${data ? ` (${data.stories.length})` : ''}`}>
             {loading && !data ? <Loading lines={8} /> : error ? <Unavailable>{error.message}</Unavailable> : !st?.lastRun ? <Unavailable>Feeds are loading for the first time — this takes under a minute.</Unavailable>
               : !data!.stories.length ? <Unavailable>{feedsOk ? 'No stories match these filters.' : 'No feed could be reached on the last refresh. The terminal keeps trying every 30 minutes; see Feed status for the errors.'}</Unavailable>
-              : <div>{data!.stories.map((a) => <NewsRow key={a.id} a={a} showTags showSummary />)}</div>}
+              : <div>{data!.stories.filter((a) => !mySubs || subscribedVersion(a, subs)).map((a) => <NewsRow key={a.id} a={a} showTags showSummary />)}</div>}
           </Card>
           <SourceRef id="trusted-news" />
         </div>

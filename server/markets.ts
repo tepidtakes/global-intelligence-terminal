@@ -9,6 +9,7 @@
 //   Forecasts ................ IMF World Economic Outlook (DataMapper); FOMC Summary of
 //                              Economic Projections (via FRED); fed funds futures (CBOT, delayed)
 //   Analyst consensus ........ Yahoo Finance quoteSummary (broker estimates, delayed)
+import { netFetch } from './net.js';
 import { cached, fetchJson, fetchText } from './cache.js';
 import { entities, getEntity } from './graph.js';
 import { usTreasuryCurve, minorUnitFactor } from './providers.js';
@@ -197,7 +198,7 @@ export async function policyRateHistory(iso3: string) {
 // ───────────────────────── 10-year government bond yields (OECD via FRED) ─────────────────────────
 const OECD_10Y = ['AU', 'AT', 'BE', 'CA', 'CL', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IS', 'IE', 'IL', 'IT', 'JP', 'KR', 'LV', 'LT', 'LU', 'MX', 'NL', 'NZ', 'NO', 'PL', 'PT', 'SK', 'SI', 'ES', 'SE', 'CH', 'GB', 'US', 'ZA', 'CR', 'CO', 'TR', 'IN', 'BR', 'CN', 'ID'];
 
-async function fredSeries(id: string, since = '2015-01-01') {
+export async function fredSeries(id: string, since = '2015-01-01') {
   return cached(`fred:${id}:${since}`, 24 * 3600, async () => {
     const rows = parseCsv(await fetchText(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=${since}`, {}, 20000));
     return rows.slice(1).map((r) => ({ t: r[0], v: parseFloat(r[1]) })).filter((p) => Number.isFinite(p.v));
@@ -314,14 +315,14 @@ export async function tenYearHistory(iso3: string) {
 // ───────────────────────── Yield curves ─────────────────────────
 export interface CurvePoint { label: string; years: number; value: number; }
 export interface Curve { date: string; points: CurvePoint[]; }
-export interface CurveResult { name: string; latest: Curve; monthAgo?: Curve; yearAgo?: Curve; sourceId: string; note?: string; fetchedAt?: string; stale?: boolean; }
+export interface CurveResult { name: string; latest: Curve; previous?: Curve; monthAgo?: Curve; yearAgo?: Curve; sourceId: string; note?: string; fetchedAt?: string; stale?: boolean; }
 
 function withComparisons(rows: Curve[], name: string, sourceId: string, note?: string): CurveResult {
   const sorted = rows.filter((r) => r.points.length >= 2).sort((a, b) => b.date.localeCompare(a.date));
   if (!sorted.length) throw new Error('No curve data');
   const latest = sorted[0];
   const find = (days: number) => sorted.find((r) => r.date <= daysAgo(days, new Date(latest.date)));
-  return { name, latest, monthAgo: find(30), yearAgo: find(365), sourceId, note };
+  return { name, latest, previous: sorted[1], monthAgo: find(30), yearAgo: find(365), sourceId, note };
 }
 
 async function canadaCurve() {
@@ -439,7 +440,7 @@ export const IMF_INDICATORS: Record<string, { label: string; unit: string; short
 const IMF_ISO: Record<string, string> = { UVK: 'UNK', WBG: 'PSE' };
 
 export async function imfIndicator(code: string) {
-  if (!IMF_INDICATORS[code]) throw new Error('Unknown IMF indicator');
+  if (!/^[A-Za-z0-9_]{2,40}$/.test(code)) throw new Error('Unknown IMF indicator');
   return cached(`imf:${code}`, 24 * 3600, async () => {
     const json = await fetchJson(`https://www.imf.org/external/datamapper/api/v1/${code}`, {}, 40000);
     const vals = json?.values?.[code] || {};
@@ -508,9 +509,9 @@ export async function fedOutlook() {
 let crumb: { cookie: string; crumb: string; at: number } | null = null;
 async function yahooSession(force = false) {
   if (crumb && !force && Date.now() - crumb.at < 6 * 3600_000) return crumb;
-  const r1 = await fetch('https://fc.yahoo.com', { headers: BROWSER_UA, redirect: 'manual', signal: AbortSignal.timeout(15000) }).catch(() => null);
+  const r1 = await netFetch('https://fc.yahoo.com', { headers: BROWSER_UA, redirect: 'manual', timeoutMs: 15000 }).catch(() => null);
   const cookie = (r1?.headers.getSetCookie?.() || []).map((c) => c.split(';')[0]).join('; ');
-  const r2 = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', { headers: { ...BROWSER_UA, cookie }, signal: AbortSignal.timeout(15000) });
+  const r2 = await netFetch('https://query1.finance.yahoo.com/v1/test/getcrumb', { headers: { ...BROWSER_UA, cookie }, timeoutMs: 15000 });
   const c = (await r2.text()).trim();
   if (!r2.ok || !c || c.length > 40 || /</.test(c)) throw new Error('Could not open a Yahoo Finance session');
   crumb = { cookie, crumb: c, at: Date.now() };
@@ -523,7 +524,7 @@ export async function analystConsensus(symbol: string) {
     let json: any;
     for (let attempt = 0; attempt < 2; attempt++) {
       const s = await yahooSession(attempt > 0);
-      const res = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData,earningsTrend,recommendationTrend,price&crumb=${encodeURIComponent(s.crumb)}`, { headers: { ...BROWSER_UA, cookie: s.cookie }, signal: AbortSignal.timeout(20000) });
+      const res = await netFetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData,earningsTrend,recommendationTrend,price&crumb=${encodeURIComponent(s.crumb)}`, { headers: { ...BROWSER_UA, cookie: s.cookie }, timeoutMs: 20000 });
       json = await res.json().catch(() => null);
       if (res.status !== 401) break;
     }

@@ -1,0 +1,1881 @@
+{
+"countries": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q30"
+},
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "350"
+},
+"name": {
+"type": "literal",
+"value": "United States",
+"xml:lang": "en"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q30"
+},
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "350"
+},
+"name": {
+"type": "literal",
+"value": "USA",
+"xml:lang": "en"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q30"
+},
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "350"
+},
+"name": {
+"type": "literal",
+"value": "\u00c9tats-Unis",
+"xml:lang": "fr"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q30"
+},
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "350"
+},
+"name": {
+"type": "literal",
+"value": "Estados Unidos",
+"xml:lang": "es"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q30"
+},
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "350"
+},
+"name": {
+"type": "literal",
+"value": "Vereinigte Staaten",
+"xml:lang": "de"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q183"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "340"
+},
+"name": {
+"type": "literal",
+"value": "Germany",
+"xml:lang": "en"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q183"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "340"
+},
+"name": {
+"type": "literal",
+"value": "Allemagne",
+"xml:lang": "fr"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q183"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "340"
+},
+"name": {
+"type": "literal",
+"value": "Alemania",
+"xml:lang": "es"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q183"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "340"
+},
+"name": {
+"type": "literal",
+"value": "Deutschland",
+"xml:lang": "de"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q183"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "340"
+},
+"name": {
+"type": "literal",
+"value": "\u0413\u0435\u0440\u043c\u0430\u043d\u0438\u044f",
+"xml:lang": "ru"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q55"
+},
+"iso3": {
+"type": "literal",
+"value": "NLD"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "300"
+},
+"name": {
+"type": "literal",
+"value": "Netherlands",
+"xml:lang": "en"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q55"
+},
+"iso3": {
+"type": "literal",
+"value": "NLD"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "300"
+},
+"name": {
+"type": "literal",
+"value": "Pays-Bas",
+"xml:lang": "fr"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q55"
+},
+"iso3": {
+"type": "literal",
+"value": "NLD"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "300"
+},
+"name": {
+"type": "literal",
+"value": "Niederlande",
+"xml:lang": "de"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q29999"
+},
+"iso3": {
+"type": "literal",
+"value": "NLD"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "60"
+},
+"name": {
+"type": "literal",
+"value": "Kingdom of the Netherlands",
+"xml:lang": "en"
+}
+},
+{
+"c": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q29999"
+},
+"iso3": {
+"type": "literal",
+"value": "NLD"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "60"
+},
+"name": {
+"type": "literal",
+"value": "Koninkrijk der Nederlanden",
+"xml:lang": "nl"
+}
+}
+]
+}
+},
+"countryDetails": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"currencyCode": {
+"type": "literal",
+"value": "USD"
+},
+"govLabel": {
+"type": "literal",
+"value": "federal republic",
+"xml:lang": "en"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"govLabel": {
+"type": "literal",
+"value": "presidential system",
+"xml:lang": "en"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"currencyCode": {
+"type": "literal",
+"value": "EUR"
+},
+"govLabel": {
+"type": "literal",
+"value": "federal parliamentary republic",
+"xml:lang": "en"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "SWZ"
+},
+"currencyCode": {
+"type": "literal",
+"value": "SZL"
+},
+"govLabel": {
+"type": "literal",
+"value": "absolute monarchy",
+"xml:lang": "en"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "VNM"
+},
+"govLabel": {
+"type": "literal",
+"value": "one-party state",
+"xml:lang": "en"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "VNM"
+},
+"govLabel": {
+"type": "literal",
+"value": "socialist state",
+"xml:lang": "en"
+}
+}
+]
+}
+},
+"memberships": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q7184"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1949-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "FRA"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q7184"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1949-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "GBR"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q7184"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1949-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "CAN"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q7184"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1949-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q7184"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1955-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "FIN"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q7184"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "2023-04-04T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "SWE"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q7184"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "2024-03-07T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q458"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1958-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "FRA"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q458"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1958-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "ITA"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q458"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1958-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "GBR"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q458"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1973-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q41550"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1961-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q41550"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1961-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "FRA"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q41550"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1961-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "GBR"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q41550"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1961-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "JPN"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q41550"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1964-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q826700"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1974-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q826700"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1974-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "FRA"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q826700"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1974-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "GBR"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q826700"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1974-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "JPN"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q826700"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1974-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "VEN"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q1065"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1945-01-01T00:00:00Z"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "BOL"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q999001"
+}
+},
+{
+"iso3": {
+"type": "literal",
+"value": "PER"
+},
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q999001"
+}
+}
+]
+}
+},
+"orgs": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q7184"
+},
+"label": {
+"type": "literal",
+"value": "NATO",
+"xml:lang": "en"
+},
+"desc": {
+"type": "literal",
+"value": "intergovernmental military alliance",
+"xml:lang": "en"
+},
+"inception": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1949-04-04T00:00:00Z"
+},
+"hq": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q239"
+},
+"hqLabel": {
+"type": "literal",
+"value": "Brussels",
+"xml:lang": "en"
+},
+"website": {
+"type": "literal",
+"value": "https://www.nato.int"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "170"
+},
+"aliases": {
+"type": "literal",
+"value": "North Atlantic Treaty Organization|OTAN|Atlantic Alliance"
+}
+},
+{
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q458"
+},
+"label": {
+"type": "literal",
+"value": "European Union",
+"xml:lang": "en"
+},
+"desc": {
+"type": "literal",
+"value": "political and economic union of 27 European states",
+"xml:lang": "en"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "300"
+},
+"aliases": {
+"type": "literal",
+"value": "EU"
+}
+},
+{
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q41550"
+},
+"label": {
+"type": "literal",
+"value": "Organisation for Economic Co-operation and Development",
+"xml:lang": "en"
+},
+"desc": {
+"type": "literal",
+"value": "intergovernmental economic organization",
+"xml:lang": "en"
+},
+"short": {
+"type": "literal",
+"value": "OECD",
+"xml:lang": "en"
+},
+"inception": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1961-09-30T00:00:00Z"
+},
+"hq": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q90"
+},
+"hqLabel": {
+"type": "literal",
+"value": "Paris",
+"xml:lang": "en"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "150"
+},
+"aliases": {
+"type": "literal",
+"value": "OECD|Organization for Economic Cooperation and Development"
+}
+},
+{
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q826700"
+},
+"label": {
+"type": "literal",
+"value": "International Energy Agency",
+"xml:lang": "en"
+},
+"desc": {
+"type": "literal",
+"value": "Paris-based autonomous intergovernmental organisation",
+"xml:lang": "en"
+},
+"short": {
+"type": "literal",
+"value": "IEA",
+"xml:lang": "en"
+},
+"inception": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1974-01-01T00:00:00Z"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "60"
+},
+"aliases": {
+"type": "literal",
+"value": "IEA"
+}
+},
+{
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q1065"
+},
+"label": {
+"type": "literal",
+"value": "United Nations",
+"xml:lang": "en"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "330"
+},
+"aliases": {
+"type": "literal",
+"value": "UN|U.N."
+}
+}
+]
+}
+},
+"orgLeaders": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q7184"
+},
+"person": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900001"
+},
+"name": {
+"type": "literal",
+"value": "Mark Rutte",
+"xml:lang": "en"
+},
+"role": {
+"type": "literal",
+"value": "Secretary-General"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "2024-10-01T00:00:00Z"
+}
+},
+{
+"org": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q41550"
+},
+"person": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900002"
+},
+"name": {
+"type": "literal",
+"value": "Mathias Cormann",
+"xml:lang": "en"
+},
+"role": {
+"type": "literal",
+"value": "Secretary-General"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "2021-06-01T00:00:00Z"
+}
+}
+]
+}
+},
+"banks": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"bank": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q53536"
+},
+"label": {
+"type": "literal",
+"value": "Federal Reserve System",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "80"
+},
+"website": {
+"type": "literal",
+"value": "https://www.federalreserve.gov"
+},
+"inception": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1913-12-23T00:00:00Z"
+},
+"desc": {
+"type": "literal",
+"value": "central banking system of the United States",
+"xml:lang": "en"
+}
+},
+{
+"bank": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q1048106"
+},
+"label": {
+"type": "literal",
+"value": "Federal Reserve Bank of New York",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "20"
+}
+},
+{
+"bank": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q8901"
+},
+"label": {
+"type": "literal",
+"value": "European Central Bank",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"jurLabel": {
+"type": "literal",
+"value": "eurozone",
+"xml:lang": "en"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "110"
+}
+},
+{
+"bank": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q153407"
+},
+"label": {
+"type": "literal",
+"value": "Deutsche Bundesbank",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "50"
+}
+},
+{
+"bank": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q160218"
+},
+"label": {
+"type": "literal",
+"value": "Bank of England",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "GBR"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "70"
+}
+}
+]
+}
+},
+"bankHeads": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"bank": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q8901"
+},
+"person": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900003"
+},
+"name": {
+"type": "literal",
+"value": "Christine Lagarde",
+"xml:lang": "en"
+},
+"role": {
+"type": "literal",
+"value": "Governor"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "2019-11-01T00:00:00Z"
+}
+},
+{
+"bank": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q160218"
+},
+"person": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900004"
+},
+"name": {
+"type": "literal",
+"value": "Andrew Bailey",
+"xml:lang": "en"
+},
+"role": {
+"type": "literal",
+"value": "Governor"
+},
+"start": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "2020-03-16T00:00:00Z"
+}
+}
+]
+}
+},
+"capitals": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"city": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q61"
+},
+"label": {
+"type": "literal",
+"value": "Washington, D.C.",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"capitalOf": {
+"type": "literal",
+"value": "USA"
+},
+"pop": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "689545"
+},
+"coord": {
+"type": "literal",
+"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+"value": "Point(-77.0366 38.895)"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "250"
+}
+},
+{
+"city": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q64"
+},
+"label": {
+"type": "literal",
+"value": "Berlin",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"capitalOf": {
+"type": "literal",
+"value": "DEU"
+},
+"pop": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "3755251"
+},
+"coord": {
+"type": "literal",
+"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+"value": "Point(13.383333 52.516667)"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "300"
+}
+},
+{
+"city": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q90"
+},
+"label": {
+"type": "literal",
+"value": "Paris",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "FRA"
+},
+"capitalOf": {
+"type": "literal",
+"value": "FRA"
+},
+"pop": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "2102650"
+},
+"coord": {
+"type": "literal",
+"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+"value": "Point(2.351388 48.856944)"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "320"
+}
+},
+{
+"city": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q239"
+},
+"label": {
+"type": "literal",
+"value": "Brussels",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "BEL"
+},
+"capitalOf": {
+"type": "literal",
+"value": "BEL"
+},
+"pop": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "1222637"
+},
+"coord": {
+"type": "literal",
+"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+"value": "Point(4.3525 50.846667)"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "200"
+}
+}
+]
+}
+},
+"bigCities": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"city": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q8673"
+},
+"label": {
+"type": "literal",
+"value": "Lagos",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "NGA"
+},
+"pop": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "15388000"
+},
+"coord": {
+"type": "literal",
+"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+"value": "Point(3.3958 6.455)"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "150"
+}
+},
+{
+"city": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q1726"
+},
+"label": {
+"type": "literal",
+"value": "Munich",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"pop": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "1512491"
+},
+"coord": {
+"type": "literal",
+"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+"value": "Point(11.575 48.1375)"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "250"
+}
+},
+{
+"city": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q1726"
+},
+"label": {
+"type": "literal",
+"value": "Munich",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"pop": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "1488202"
+},
+"coord": {
+"type": "literal",
+"datatype": "http://www.opengis.net/ont/geosparql#wktLiteral",
+"value": "Point(11.575 48.1375)"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "250"
+}
+}
+]
+}
+},
+"companies": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q312"
+},
+"label": {
+"type": "literal",
+"value": "Apple Inc.",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "USA"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "120"
+},
+"ticker": {
+"type": "literal",
+"value": "AAPL"
+},
+"mic": {
+"type": "literal",
+"value": "XNAS"
+},
+"exLabel": {
+"type": "literal",
+"value": "Nasdaq",
+"xml:lang": "en"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q81230"
+},
+"label": {
+"type": "literal",
+"value": "Siemens",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "60"
+},
+"ticker": {
+"type": "literal",
+"value": "SIE"
+},
+"mic": {
+"type": "literal",
+"value": "XETR"
+},
+"exLabel": {
+"type": "literal",
+"value": "Xetra",
+"xml:lang": "en"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q81230"
+},
+"label": {
+"type": "literal",
+"value": "Siemens",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "DEU"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "60"
+},
+"ticker": {
+"type": "literal",
+"value": "SIEGY"
+},
+"mic": {
+"type": "literal",
+"value": "XNAS"
+},
+"exLabel": {
+"type": "literal",
+"value": "Nasdaq",
+"xml:lang": "en"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q53268"
+},
+"label": {
+"type": "literal",
+"value": "Toyota",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "JPN"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "90"
+},
+"ticker": {
+"type": "literal",
+"value": "7203"
+},
+"mic": {
+"type": "literal",
+"value": "XTKS"
+},
+"exLabel": {
+"type": "literal",
+"value": "Tokyo Stock Exchange",
+"xml:lang": "en"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q53268"
+},
+"label": {
+"type": "literal",
+"value": "Toyota",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "JPN"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "90"
+},
+"ticker": {
+"type": "literal",
+"value": "TM"
+},
+"mic": {
+"type": "literal",
+"value": "XNYS"
+},
+"exLabel": {
+"type": "literal",
+"value": "New York Stock Exchange",
+"xml:lang": "en"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q190464"
+},
+"label": {
+"type": "literal",
+"value": "HSBC",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "GBR"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "70"
+},
+"ticker": {
+"type": "literal",
+"value": "HSBA"
+},
+"mic": {
+"type": "literal",
+"value": "XLON"
+},
+"exLabel": {
+"type": "literal",
+"value": "London Stock Exchange",
+"xml:lang": "en"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q190464"
+},
+"label": {
+"type": "literal",
+"value": "HSBC",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "GBR"
+},
+"sl": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "70"
+},
+"ticker": {
+"type": "literal",
+"value": "5"
+},
+"mic": {
+"type": "literal",
+"value": "XHKG"
+},
+"exLabel": {
+"type": "literal",
+"value": "Hong Kong Stock Exchange",
+"xml:lang": "en"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900100"
+},
+"label": {
+"type": "literal",
+"value": "Example Robotics AB",
+"xml:lang": "en"
+},
+"iso3": {
+"type": "literal",
+"value": "SWE"
+},
+"sl": {
+"type": "literal",
+"value": "26"
+},
+"ticker": {
+"type": "literal",
+"value": "NEXR"
+},
+"mic": {
+"type": "literal",
+"value": "XSTO"
+},
+"exLabel": {
+"type": "literal",
+"value": "Nasdaq Stockholm",
+"xml:lang": "en"
+}
+}
+]
+}
+},
+"companyDetails": {
+"head": {
+"vars": []
+},
+"results": {
+"bindings": [
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q312"
+},
+"desc": {
+"type": "literal",
+"value": "American multinational technology company",
+"xml:lang": "en"
+},
+"founded": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1976-04-01T00:00:00Z"
+},
+"employees": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "164000"
+},
+"ceo": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900005"
+},
+"ceoLabel": {
+"type": "literal",
+"value": "John Ternus",
+"xml:lang": "en"
+},
+"industry": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900010"
+},
+"industryLabel": {
+"type": "literal",
+"value": "consumer electronics",
+"xml:lang": "en"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q81230"
+},
+"desc": {
+"type": "literal",
+"value": "German multinational technology conglomerate",
+"xml:lang": "en"
+},
+"founded": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+"value": "1847-10-12T00:00:00Z"
+},
+"employees": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "320000"
+},
+"hq": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q1726"
+},
+"hqLabel": {
+"type": "literal",
+"value": "Munich",
+"xml:lang": "en"
+},
+"hqIso": {
+"type": "literal",
+"value": "DEU"
+},
+"ceo": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900006"
+},
+"ceoLabel": {
+"type": "literal",
+"value": "Roland Busch",
+"xml:lang": "en"
+},
+"industry": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900011"
+},
+"industryLabel": {
+"type": "literal",
+"value": "industrial manufacturing",
+"xml:lang": "en"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q53268"
+},
+"desc": {
+"type": "literal",
+"value": "Japanese multinational automotive manufacturer",
+"xml:lang": "en"
+},
+"employees": {
+"type": "literal",
+"datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+"value": "380000"
+},
+"industry": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900012"
+},
+"industryLabel": {
+"type": "literal",
+"value": "automotive industry",
+"xml:lang": "en"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q190464"
+},
+"desc": {
+"type": "literal",
+"value": "British universal bank and financial services group",
+"xml:lang": "en"
+},
+"parent": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q999999"
+},
+"industry": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900013"
+},
+"industryLabel": {
+"type": "literal",
+"value": "banking",
+"xml:lang": "en"
+},
+"website": {
+"type": "literal",
+"value": "https://www.hsbc.com"
+}
+},
+{
+"co": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900100"
+},
+"desc": {
+"type": "literal",
+"value": "fictitious robotics company used in tests",
+"xml:lang": "en"
+},
+"hq": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q64"
+},
+"hqLabel": {
+"type": "literal",
+"value": "Berlin",
+"xml:lang": "en"
+},
+"hqIso": {
+"type": "literal",
+"value": "DEU"
+},
+"ceo": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q900020"
+},
+"ceoLabel": {
+"type": "literal",
+"value": "Erika Example",
+"xml:lang": "en"
+},
+"parent": {
+"type": "uri",
+"value": "http://www.wikidata.org/entity/Q999999"
+}
+}
+]
+}
+}
+}

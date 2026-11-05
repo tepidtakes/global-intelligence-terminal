@@ -1,6 +1,64 @@
 # Global Intelligence Terminal — Architecture
 
-Status: Phase I (working MVP). Last revised 2026-11-03.
+Status: Phase I (working MVP). Last revised 2026-11-05.
+
+## 0. The knowledge web — the core idea
+
+Everything in the terminal is one connected graph: **entities** (countries, organizations,
+institutions, companies, people, parties, cities, commodities, events) joined by **links**
+(member of, leads, central bank of, headquartered in, owns, trades with, sanctions, in the news
+with…). Pages, map layers, alerts and the calendar are views of that graph, not separate
+datasets. Three rules keep it current and trustworthy:
+
+1. **As little as possible is written in code.** Structure comes from live sources through
+   *connectors*; hand-entered data is a thin, dated overlay that the live data checks.
+2. **Every link says where it came from.** A link carries its source, retrieval time, and —
+   where it has one — a size (trade value, stories in common, listings) and a period.
+3. **Sources are compared, not overwritten.** When a live source reports a link that already
+   exists, the link is marked *confirmed by a second source* (✓); when it disagrees (e.g. says
+   a membership is still current), the link is marked *disputed* (⚠) and listed in the audit.
+
+```
+ connectors (server/web/connectors.ts) ──► graph (server/graph.ts) ──► views
+   Wikidata: countries, organizations,       entities + links            profiles: Connections card
+     memberships, central banks, cities,      with value/period/data,     /web: network view
+     companies, executives                    sources, ✓ / ⚠             map: "where it is connected"
+   UN Comtrade: trade web                    identity by Wikidata id      calendar importance
+   OFAC/EU/UK/UN: sanctions web              (attrs.wikidata), names in   alerts (change feed)
+   Trusted news: co-mentions (30 min)        11 languages for matching    search (notability-ranked)
+   World Bank/IMF: catalogs, GDP weights
+```
+
+**Identity.** Records from different sources are joined by Wikidata id first, then by
+exact name, ticker or country code. Live leaders, mayors, organizations, central banks,
+cities and companies all carry `attrs.wikidata`, so a company's chief executive, the city of
+its head office and the organization it belongs to are the same nodes everywhere.
+
+**Discovery instead of lists.** Organizations are not listed in code: every organization
+that three or more countries belong to (per Wikidata) becomes a node with its members, join
+and leave dates, seat and leader. Companies are every listed company known in 25+ Wikipedia
+languages (configurable), with tickers mapped to live quotes. Which economies' trade is
+loaded is decided by GDP. Indicators come from the providers' own catalogs (~1,700 series).
+
+**Computed weights.** How much an economy matters (calendar importance, node size) is its
+share of world GDP (IMF WEO; World Bank as fallback); an organization's is its members'
+combined share — replacing a hand-set table.
+
+| Module | What it does |
+|---|---|
+| `server/graph.ts` | Entities, links (with data, sources, ✓/⚠), Wikidata-id index, member sets, search |
+| `server/web/connectors.ts` | Connector registry: schedules, isolation of failures, status for the Data page |
+| `server/web/wikidata.ts` | Countries, organizations + memberships, central banks + governors, cities, companies + executives |
+| `server/web/links.ts` | Trade web (Comtrade), sanctions web, news co-mentions, World Bank country names |
+| `server/web/weights.ts` | GDP shares → economy and organization weights |
+| `server/web/catalog.ts` | World Bank and IMF indicator catalogs, search |
+| `server/web/connections.ts` | Connections of an entity (grouped, ranked), neighborhood network, map layer, statistics |
+
+**Still entered by hand, and why.** Facts no open source publishes in machine-readable form
+(central-bank meeting dates, summit dates, editorial trust tiers for news outlets, which end
+of a featured map layer is "better"), vendor conventions (Yahoo Finance symbol suffixes), and
+the June 2026 verified overlay in `server/data/curated.ts`. Each is dated, and the audit warns
+when live data disagrees with it or a schedule runs out.
 
 ## 1. Shape of the system
 
@@ -32,6 +90,32 @@ Browser (React + MapLibre)                     Node server (Express, one process
   a thin module (`server/db.ts`); `db/postgres-schema.sql` is the production target with
   PostGIS geometry and the same tables. Geometry today ships as static TopoJSON
   (`world-atlas`, `us-atlas`), which MapLibre renders client-side.
+
+### Change feed, calendars and economic-security modules
+
+```
+ live loaders ──► recordChange / emitNew (server/changes.ts, SQLite change_feed)
+ (news, leaders,        │  first run of each producer = silent baseline
+  elections, markets,   ▼
+  calendar, sanctions,  onChange ──► alert rules (server/alerts.ts) ──► inbox · browser
+  tariffs, budgets)                    entities, watchlists, notes,      notifications ·
+                                       positions, places (+inside)       webhooks (outbox)
+```
+
+| Module | What it does |
+|---|---|
+| `server/changes.ts` | One feed of "what changed", with importance 1–10, sources and entities; `emitNew` turns snapshots into changes after a silent first run |
+| `server/alerts.ts` | Alert rules, matching, inbox, webhook outbox (allow-listed hosts), map counts, "add to note" |
+| `server/marketWatch.ts` | Price, FX and 10-year-yield moves past fixed buckets; BIS policy-rate changes |
+| `server/econCalendar.ts` | Release, central-bank, IGO, budget and election events; importance grading; results from FRED, Eurostat, BIS; schedule-expiry audit |
+| `server/sanctions.ts` | OFAC, UN, EU and UK lists → country aggregates, regimes, name matching, map tiers, new-designation changes |
+| `server/tariffs.ts` | Federal Register tariff actions; Census duties by country (effective rate, change); tariff changes |
+| `server/budgets.ts` | Fiscal years; IMF general-government table (Fiscal Monitor codes found by label); Eurostat COFOG; US Treasury live figures |
+| `server/reserves.ts` | Zip/CSV streaming for JODI oil and USDA grain files; EIA SPR; AGSI+ gas; strategic-reserve notes |
+| `server/tradeExplorer.ts` | All partners of a country and one pair from UN Comtrade (both sides' reports), with tariffs, sanctions and shared memberships |
+
+Each module keeps its parsed data in the provider cache, exposes a status for the Data page,
+and is covered by `npm run check:econ` on sample files in `scripts/fixtures/`.
 
 ## 2. Core entity schema
 
@@ -266,6 +350,30 @@ Rules enforced in code: missing values render as "—  no data" never 0; every n
 its unit, period and source; quotes show their timestamp; nothing is fabricated — when a
 provider is down the UI says so. Users can file a correction from any fact
 (`data_reports` table).
+
+### Network gate
+
+Every outbound request (`fetchJson`/`fetchText` in `server/cache.ts`, Wikidata SPARQL, the JODI and USDA downloads, the Yahoo session) goes through `netFetch` in `server/net.ts`, which keeps one gate per host:
+
+- **Limits.** At most N requests in flight and a minimum gap between starts, however many loaders run at once: Wikidata 1 at a time, 400 ms apart; UN Comtrade 1, 1.2 s apart; the SEC 4, 110 ms apart; Google News 2, 300 ms apart; otherwise 6 and no gap. A freed slot goes straight to the next waiting request, so the limit is never exceeded.
+- **Retries.** 429, 502, 503, 504 and dropped connections are retried twice, honouring `Retry-After`, else with exponential backoff and jitter. A `Retry-After` over a minute is not waited out inside the request: the caller gets the answer and the host is skipped until then. Timeouts, refused connections and unknown host names are not retried.
+- **Circuit breaker.** After five failures in a row (5xx, timeouts, network errors; never 4xx) the host is skipped for a minute and requests fail at once, with the reason. Requests already waiting for a slot check again before they are sent. Then one trial request decides: success closes the breaker; failure skips the host for twice as long (up to 15 minutes).
+- **Health.** `hostHealth()` (state, load, requests, average latency, retries, skips, last error) is in `/api/provenance/status`, `/api/net/hosts` and the Data page's *Network* card.
+
+### Cross-source agreement
+
+The World Bank and the IMF publish the same headline figures. The `cross-source-checks` connector (`server/agreement.ts`, daily) compares, for every country, the World Bank's latest figure with the IMF's for the same year:
+
+| Figure | World Bank | IMF | Tolerance |
+|---|---|---|---|
+| GDP, current US$ | NY.GDP.MKTP.CD | NGDPD | 3% |
+| Real GDP growth | NY.GDP.MKTP.KD.ZG | NGDP_RPCH | 0.5 points |
+| Inflation, consumer prices | FP.CPI.TOTL.ZG | PCPIPCH | 0.5 points |
+| Unemployment | SL.UEM.TOTL.ZS | LUR | 1 point |
+| Current account, % of GDP | BN.CAB.XOKA.GD.ZS | BCA_NGDPD | 1 point |
+| Population | SP.POP.TOTL | LP | 2% |
+
+Levels are compared by their difference as a share of the mean of the two figures; rates by percentage points, or 5% of the figure when that is more (very high inflation). Within the tolerance the figures agree, up to three times it they differ, beyond that they conflict. The current year (IMF projections), figures older than six years and aggregates such as the world are skipped. Conflicts go to the consistency audit (category `source-figures-conflict`; unemployment as information only, since the World Bank uses ILO modelled estimates and the IMF national definitions), to the change feed once per country, figure and year, to the Data page's *Cross-source checks* card and to the *Cross-checked figures* card on country profiles. API: `/api/quality/agreement`, `/api/quality/agreement/:iso3`.
 
 ## 4. Major UI components
 

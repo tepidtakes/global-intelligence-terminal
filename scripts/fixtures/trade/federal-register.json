@@ -1,0 +1,102 @@
+{
+ "count": 6,
+ "description": "Documents matching tariff",
+ "total_pages": 1,
+ "next_page_url": null,
+ "results": [
+  {
+   "title": "Adjusting Imports of Steel Into the United States",
+   "type": "Presidential Document",
+   "subtype": "Proclamation",
+   "abstract": null,
+   "document_number": "2026-20001",
+   "html_url": "https://www.federalregister.gov/documents/2026/10/30/2026-20001/adjusting-imports-of-steel-into-the-united-states",
+   "publication_date": "2026-10-30",
+   "agencies": [
+    {
+     "raw_name": "Executive Office of the President",
+     "name": "Executive Office of the President",
+     "id": 538,
+     "slug": "executive-office-of-the-president"
+    }
+   ],
+   "effective_on": "2026-11-01"
+  },
+  {
+   "title": "Notice of Action in the Section 301 Investigation of China's Targeting of the Maritime, Logistics, and Shipbuilding Sectors",
+   "type": "Notice",
+   "abstract": "The U.S. Trade Representative has determined to modify the action, including additional duties on certain products of China.",
+   "document_number": "2026-20002",
+   "html_url": "https://www.federalregister.gov/documents/2026/10/28/2026-20002/section-301",
+   "publication_date": "2026-10-28",
+   "agencies": [
+    {
+     "raw_name": "Trade Representative, Office of United States",
+     "name": "Trade Representative, Office of United States",
+     "slug": "trade-representative-office-of-united-states"
+    }
+   ]
+  },
+  {
+   "title": "Certain Steel Nails From the Socialist Republic of Vietnam: Final Results of Antidumping Duty Administrative Review; 2024-2025",
+   "type": "Notice",
+   "abstract": "The Department of Commerce determines that certain steel nails from Vietnam were sold at less than normal value.",
+   "document_number": "2026-20003",
+   "html_url": "https://www.federalregister.gov/documents/2026/10/27/2026-20003/nails",
+   "publication_date": "2026-10-27",
+   "agencies": [
+    {
+     "name": "International Trade Administration",
+     "slug": "international-trade-administration"
+    },
+    {
+     "name": "Commerce Department",
+     "slug": "commerce-department"
+    }
+   ]
+  },
+  {
+   "title": "Further Modifying the Reciprocal Tariff Rates for Brazil",
+   "type": "Presidential Document",
+   "subtype": "Executive Order",
+   "abstract": null,
+   "document_number": "2026-20004",
+   "html_url": "https://www.federalregister.gov/documents/2026/10/20/2026-20004/brazil",
+   "publication_date": "2026-10-20",
+   "agencies": [
+    {
+     "name": "Executive Office of the President",
+     "slug": "executive-office-of-the-president"
+    }
+   ]
+  },
+  {
+   "title": "Guidance: Additional Duties on Imports From India",
+   "type": "Notice",
+   "abstract": "U.S. Customs and Border Protection provides guidance on the collection of additional duties on products of India.",
+   "document_number": "2026-20005",
+   "html_url": "https://www.federalregister.gov/documents/2026/10/15/2026-20005/india",
+   "publication_date": "2026-10-15",
+   "agencies": [
+    {
+     "name": "U.S. Customs and Border Protection",
+     "slug": "u-s-customs-and-border-protection"
+    }
+   ]
+  },
+  {
+   "title": "Agency Information Collection Activities: Declaration of Owner and Declaration of Consignee",
+   "type": "Notice",
+   "abstract": "The Department of Homeland Security will submit an information collection request.",
+   "document_number": "2026-20006",
+   "html_url": "https://www.federalregister.gov/documents/2026/10/10/2026-20006/collection",
+   "publication_date": "2026-10-10",
+   "agencies": [
+    {
+     "name": "U.S. Customs and Border Protection",
+     "slug": "u-s-customs-and-border-protection"
+    }
+   ]
+  }
+ ]
+}

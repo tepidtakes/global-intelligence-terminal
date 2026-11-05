@@ -197,6 +197,8 @@ export function connectionPath(a: string, b: string, maxDepth = 3): RelView[][] 
     for (const rv of relationshipsFor(id)) {
       if (rv.rel.type === 'in_region' || (rv.rel.type === 'member_of' && rv.rel.to === 'igo:un')) continue; // too generic
       const next = rv.other.id;
+      // Trade and news links connect almost everything: use them only as the final step.
+      if ((rv.rel.type === 'trades_with' || rv.rel.type === 'mentioned_with') && next !== b) continue;
       const p = [...path, rv];
       if (next === b) { results.push(p); continue; }
       const d = seenDepth.get(next);
@@ -214,12 +216,15 @@ const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g
 interface IndexRow { id: string; terms: string[]; words: string[]; boost: number; }
 const index: IndexRow[] = [];
 const indexPos = new Map<string, number>();
-const TYPE_BOOST: Record<string, number> = { country: 12, igo: 12, company: 10, commodity: 10, person: 9, party: 8, city: 7, state: 6, event: 6, group: 6, industry: 5, region: 4, county: -6 };
+const TYPE_BOOST: Record<string, number> = { country: 12, igo: 12, company: 10, commodity: 10, institution: 9, person: 9, party: 8, city: 7, state: 6, event: 6, group: 6, industry: 5, region: 4, county: -6 };
 function indexEntity(e: Entity) {
-  const terms = [e.name, ...(e.aliases || [])].map(norm).filter(Boolean);
+  // Names in other languages (from Wikidata) are searchable but not shown as aliases.
+  const terms = [...new Set([e.name, ...(e.aliases || []), ...(e.attrs?.altNames || [])].map(norm).filter(Boolean))];
   const words = [...new Set(terms.flatMap((t) => t.split(' ')))];
+  // Notability (Wikipedia language editions linked from Wikidata) ranks the many auto-loaded entities.
+  const notability = e.attrs?.sitelinks ? Math.min(8, Math.log2(Number(e.attrs.sitelinks) + 1)) : 0;
   const boost = (TYPE_BOOST[e.type] || 0) + (e.depth === 'curated' ? 10 : 0) + (e.type === 'country' && !e.attrs?.independent ? -6 : 0)
-    + (e.type === 'event' && e.attrs?.status === 'ongoing' ? 4 : 0);
+    + (e.type === 'event' && e.attrs?.status === 'ongoing' ? 4 : 0) + notability;
   const row = { id: e.id, terms, words, boost };
   const at = indexPos.get(e.id);
   if (at === undefined) { indexPos.set(e.id, index.length); index.push(row); } else index[at] = row;
@@ -241,18 +246,86 @@ export function upsertEntity(e: Entity) {
   return cur;
 }
 
+// Marks a live batch left on links from other sources (corroborations and disputes), so a
+// refresh can take them back before applying the new batch.
+const marks = new Map<string, { rel: Relationship; kind: 'also' | 'dispute'; sourceId: string; dispute?: { sourceId: string; detail: string } }[]>();
+const SYMMETRIC = new Set<RelType>(['borders', 'mentioned_with']);
+const sameLink = (a: Pick<Relationship, 'from' | 'to' | 'type'>, b: Pick<Relationship, 'from' | 'to' | 'type'>) =>
+  a.type === b.type && ((a.from === b.from && a.to === b.to) || (SYMMETRIC.has(a.type) && a.from === b.to && a.to === b.from));
+const ended = (r: Pick<Relationship, 'validTo'>) => !!r.validTo && r.validTo.slice(0, 10) <= new Date().toISOString().slice(0, 10);
+
+/** Replace one live source's batch of links. A link another source already records is not
+ *  duplicated: it is marked as corroborated ("✓ 2 sources"), or as disputed when the two
+ *  disagree on whether it is still current. Returns how many links were added. */
 export function setLiveRels(origin: string, rels: Omit<Relationship, 'id' | 'origin'>[]) {
   for (const map of [relsOut, relsIn]) for (const [k, list] of map) {
     const keep = list.filter((r) => r.origin !== origin);
     if (keep.length !== list.length) map.set(k, keep);
   }
+  for (const m of marks.get(origin) || []) {
+    if (m.kind === 'also' && m.rel.alsoIn) { const i = m.rel.alsoIn.indexOf(m.sourceId); if (i >= 0) m.rel.alsoIn.splice(i, 1); if (!m.rel.alsoIn.length) delete m.rel.alsoIn; }
+    if (m.kind === 'dispute' && m.rel.disputes) { m.rel.disputes = m.rel.disputes.filter((d) => d !== m.dispute); if (!m.rel.disputes.length) delete m.rel.disputes; }
+  }
+  const myMarks: NonNullable<ReturnType<typeof marks.get>> = [];
+  marks.set(origin, myMarks);
   let added = 0;
+  const batch: Relationship[] = [];
   for (const r of rels) {
     if (!entities.has(r.from) || !entities.has(r.to)) continue;
-    addRel({ ...r, origin }); added++;
+    // Same link twice in one batch (e.g. duplicate statements): keep the first.
+    if (batch.some((b) => sameLink(b, r) && (b.validFrom || '') === (r.validFrom || '') && (b.validTo || '') === (r.validTo || ''))) continue;
+    const others = [...(relsOut.get(r.from) || []), ...(SYMMETRIC.has(r.type) ? relsOut.get(r.to) || [] : [])].filter((x) => x.origin !== origin && sameLink(x, r));
+    const src = r.sourceId || origin;
+    const agree = others.find((x) => ended(x) === ended(r));
+    if (agree) {
+      if (agree.sourceId !== src && !(agree.alsoIn || []).includes(src)) { (agree.alsoIn ||= []).push(src); myMarks.push({ rel: agree, kind: 'also', sourceId: src }); }
+      continue;
+    }
+    const clash = others[0];
+    if (clash) {
+      const dispute = { sourceId: src, detail: ended(r) ? `${src} records this as ended${r.validTo ? ` (${r.validTo.slice(0, 10)})` : ''}` : `${src} lists this as current${r.validFrom ? ` (since ${r.validFrom.slice(0, 10)})` : ''}` };
+      (clash.disputes ||= []).push(dispute); myMarks.push({ rel: clash, kind: 'dispute', sourceId: src, dispute });
+      continue;
+    }
+    const rel = { ...r, origin } as Omit<Relationship, 'id'>;
+    addRel(rel); batch.push(relsOut.get(r.from)!.at(-1)!); added++;
   }
   return added;
 }
+
+// ───────────── Identity across sources ─────────────
+// Wikidata ids (attrs.wikidata) join records from every source; the index is rebuilt lazily.
+let qidMap: Map<string, string> | null = null;
+let qidSize = -1;
+export function entityByQid(qid?: string) {
+  if (!qid) return undefined;
+  if (!qidMap || qidSize !== entities.size) { qidMap = new Map(); for (const e of entities.values()) if (e.attrs?.wikidata) qidMap.set(String(e.attrs.wikidata), e.id); qidSize = entities.size; }
+  const hit = qidMap.get(qid);
+  if (hit) return hit;
+  // A record may have gained its Wikidata id after the index was built.
+  for (const e of entities.values()) if (e.attrs?.wikidata === qid) { qidMap.set(qid, e.id); return e.id; }
+  return undefined;
+}
+/** Relationships of one type that are current (no end date in the past). */
+export function currentRels(id: string, type: RelType, direction: 'out' | 'in') {
+  return relsOfType(id, type, direction).filter((r) => !ended(r));
+}
+/** Current members of an organization (country ids). */
+export function membersOf(orgId: string) {
+  return [...new Set(currentRels(orgId, 'member_of', 'in').map((r) => r.from).filter((id) => id.startsWith('country:')))];
+}
+/** An organization by its exact name or alias (e.g. "International Energy Agency"). */
+export function findOrg(name: string) {
+  const k = norm(name);
+  return listByType('igo').find((e) => [e.name, ...(e.aliases || [])].some((n) => norm(n) === k))?.id;
+}
+/** Current members of the organization with this name, or `fallback` when it is not loaded. */
+export function membersByName(name: string, fallback: string[]) {
+  const id = findOrg(name); const m = id ? membersOf(id) : [];
+  return m.length >= Math.min(3, fallback.length) ? m.map((x) => x.slice(8)) : fallback;
+}
+/** Is a country currently a member of an organization? */
+export const isMember = (countryId: string, orgId: string) => currentRels(countryId, 'member_of', 'out').some((r) => r.to === orgId);
 
 const countryNames = new Map<string, string>();
 for (const e of entities.values()) if (e.type === 'country') for (const n of [e.name, ...(e.aliases || [])]) { const k = norm(n); if (k.length > 2 && !countryNames.has(k)) countryNames.set(k, e.id); }
@@ -265,6 +338,12 @@ for (const [n, iso] of Object.entries({
   'federated states of micronesia': 'FSM', 'sao tome and principe': 'STP', 'north macedonia': 'MKD', 'myanmar': 'MMR', 'burma': 'MMR', 'taiwan': 'TWN', 'hong kong': 'HKG', 'macau': 'MAC',
   'philippines': 'PHL', 'the philippines': 'PHL', 'uae': 'ARE', 'united arab emirates': 'ARE', 'somaliland': 'SOM', 'artsakh': 'AZE', 'sahrawi arab democratic republic': 'ESH', 'sahrawi republic': 'ESH',
 } as Record<string, string>)) countryNames.set(n, `country:${iso}`);
+/** Teach the resolver more names for a country (Wikidata labels in other languages, World Bank names…). */
+export function addCountryNames(id: string, names: string[]) {
+  let n = 0;
+  for (const name of names) { const k = norm(name); if (k.length > 2 && !countryNames.has(k)) { countryNames.set(k, id); n++; } }
+  return n;
+}
 /** Resolve a country name as written in prose (Wikipedia tables, news) to its entity id. */
 export function countryIdByName(name: string) {
   const k = norm(name.replace(/^the\s+/i, ''));
@@ -355,3 +434,38 @@ export function listByType(type: string) {
 }
 
 console.log(`[graph] ${entities.size} entities, ${relSeq} relationships, ${sources.size} sources${danglingRels.length ? `, ${danglingRels.length} dangling curated relationships skipped (see /api/quality/report)` : ''}`);
+
+// ───────────── Geography of any entity ─────────────
+export const GEO_TYPES = new Set(['country', 'state', 'county', 'city', 'region']);
+/** Something changed in the graph (a live batch was applied): caches built from it can be dropped. */
+const graphListeners: (() => void)[] = [];
+export const onGraphChange = (fn: () => void) => { graphListeners.push(fn); };
+export function graphChanged() { for (const fn of graphListeners) { try { fn(); } catch { /* listener failure must not break loaders */ } } }
+/** Where on the map a non-geographic entity "lives" (company HQ, leader's country, event's place…). */
+export function geoAnchor(id: string, depth = 0): string | null {
+  const e = entities.get(id);
+  if (!e || depth > 4) return null;
+  if (GEO_TYPES.has(e.type)) return e.id;
+  const order: [RelType, 'out' | 'in'][] = [['central_bank_of', 'out'], ['headquartered_in', 'out'], ['head_of_government', 'out'], ['head_of_state', 'out'], ['holds_office', 'out'], ['leads', 'out'], ['party_in', 'out'], ['affects', 'out'], ['candidate_in', 'out']];
+  for (const [t, d] of order) {
+    for (const r of relsOfType(id, t, d)) {
+      const target = entities.get(d === 'out' ? r.to : r.from);
+      if (target && GEO_TYPES.has(target.type)) return target.id;
+      if (target && (target.type === 'party' || target.type === 'company' || target.type === 'event') && (t === 'leads' || t === 'candidate_in')) { const a = geoAnchor(target.id, depth + 1); if (a) return a; }
+    }
+  }
+  if (e.attrs?.hq) return e.attrs.hq;
+  if (e.parentId?.startsWith('country:')) return e.parentId;
+  return null;
+}
+/** The entity's place and every place containing it (city → state → country → region). */
+export function geoChain(id: string): string[] {
+  const out: string[] = [];
+  let cur = geoAnchor(id) ? entities.get(geoAnchor(id)!) : undefined;
+  while (cur && out.length < 6) { out.push(cur.id); cur = cur.parentId ? entities.get(cur.parentId) : undefined; }
+  return out;
+}
+/** The country an entity belongs to, if any. */
+export function countryOf(id: string): string | undefined {
+  return geoChain(id).find((x) => x.startsWith('country:'));
+}

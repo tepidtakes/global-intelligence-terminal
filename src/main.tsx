@@ -27,6 +27,9 @@ const ConflictsPage = page(() => import('./pages/ConflictsPage'), 'ConflictsPage
 const NewsPage = page(() => import('./pages/NewsPage'), 'NewsPage');
 const DataPage = page(() => import('./pages/DataPage'), 'DataPage');
 const ElectionsPage = page(() => import('./pages/ElectionsPage'), 'ElectionsPage');
+const AlertsPage = page(() => import('./pages/AlertsPage'), 'AlertsPage');
+const TradePage = page(() => import('./pages/TradePage'), 'TradePage');
+const WebPage = page(() => import('./pages/WebPage'), 'WebPage');
 
 // Once the first page is up, fetch the two most-visited pages in the background so moving
 // between the map and a profile never waits on a download.
@@ -56,6 +59,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/conflicts" element={<ConflictsPage />} />
             <Route path="/news" element={<NewsPage />} />
             <Route path="/elections" element={<ElectionsPage />} />
+            <Route path="/alerts" element={<AlertsPage />} />
+            <Route path="/trade" element={<TradePage />} />
+            <Route path="/web" element={<WebPage />} />
             <Route path="/data" element={<DataPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/login" element={<LoginPage />} />

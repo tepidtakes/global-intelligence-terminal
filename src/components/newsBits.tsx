@@ -1,7 +1,9 @@
 // Shared pieces for trusted news and provenance: outlet tier badges, headline rows, news
 // signals and the per-profile "Data quality" card.
 import { Link } from 'react-router-dom';
-import { TIER_INFO, type PublisherTier } from '../../shared/newsSources';
+import { TIER_INFO, publisherForName, publisherById, type PublisherTier } from '../../shared/newsSources';
+import { api, invalidate, useApi } from '../api';
+import { useAuth } from '../state';
 import { Quality } from './common';
 import { ago, fmtDate, TYPE_ICON } from '../format';
 import type { DataQuality } from '../../shared/types';
@@ -9,6 +11,27 @@ import type { DataQuality } from '../../shared/types';
 export function TierBadge({ tier }: { tier: PublisherTier }) {
   const t = TIER_INFO[tier] || TIER_INFO.unrated;
   return <span className={`tier ${tier}`} title={t.help}>{t.label}</span>;
+}
+
+// ───────── Subscriptions: outlets you pay for (no logins are ever stored) ─────────
+const SUBS_KEY = 'git.newsSubscriptions';
+const readLocal = (): string[] => { try { return JSON.parse(localStorage.getItem(SUBS_KEY) || '[]'); } catch { return []; } };
+export function useSubscriptions() {
+  const { user } = useAuth();
+  const prefs = useApi<any>(user ? '/prefs' : null, 300_000);
+  return new Set<string>(user ? (prefs.data?.subscriptions || []) : readLocal());
+}
+export async function saveSubscriptions(signedIn: boolean, ids: string[]) {
+  if (signedIn) { await api('/prefs', { method: 'PUT', body: { subscriptions: ids } }); invalidate('/prefs'); }
+  else { try { localStorage.setItem(SUBS_KEY, JSON.stringify(ids)); } catch { /* storage unavailable */ } invalidate('/prefs'); }
+}
+/** The version of a story from an outlet you subscribe to, if any carried it. */
+export function subscribedVersion(a: { publisher: string; url: string; alsoReportedBy?: { name: string; url: string }[] }, subs: Set<string>) {
+  for (const v of [{ name: a.publisher, url: a.url }, ...(a.alsoReportedBy || [])]) {
+    const p = publisherForName(v.name);
+    if (p && subs.has(p.id)) return { name: p.name, url: v.url, lead: v.url === a.url };
+  }
+  return null;
 }
 
 export interface NewsItemView {
@@ -20,6 +43,7 @@ export interface NewsItemView {
 /** One headline: outlet + tier, date, how many independent trusted outlets carried the story. */
 export function NewsRow({ a, showTags, showSummary }: { a: NewsItemView; showTags?: boolean; showSummary?: boolean }) {
   const others = a.alsoReportedBy || [];
+  const sub = subscribedVersion(a, useSubscriptions());
   return (
     <div className="newsRow">
       <a href={a.url} target="_blank" rel="noreferrer noopener" className="t">{a.title}</a>
@@ -30,6 +54,7 @@ export function NewsRow({ a, showTags, showSummary }: { a: NewsItemView; showTag
         {others.length > 0 && <> · also: {others.slice(0, 4).map((o, i) => <span key={o.name}>{i ? ', ' : ''}<a href={o.url} target="_blank" rel="noreferrer noopener">{o.name}</a></span>)}{others.length > 4 ? ` +${others.length - 4}` : ''}</>}
         {a.mention === 'summary' && <> · <span title="Named in the article summary, not the headline">mentioned</span></>}
       </div>
+      {sub && <div className="tiny subLink">{sub.lead ? <>📰 {sub.name} — one of your subscriptions</> : <a href={sub.url} target="_blank" rel="noreferrer noopener">📰 Read it on {sub.name} (your subscription) ↗</a>}</div>}
       {showTags && a.tags && a.tags.length > 0 && (
         <div className="tagRow">{a.tags.map((t) => <Link key={t.id} className="miniChip" to={`/entity/${encodeURIComponent(t.id)}`}><span aria-hidden>{t.flag || TYPE_ICON[t.type]}</span>{t.name}</Link>)}</div>
       )}

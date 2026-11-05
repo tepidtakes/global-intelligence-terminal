@@ -8,6 +8,8 @@
 // Info     — worth knowing: Wikidata ambiguity, terms closed automatically, ageing curated facts.
 import { entities, sources, allRels, danglingRels, normName, getEntity, relationshipsFor } from './graph.js';
 import { DATA_QUALITIES, type DataQuality, type Entity } from '../shared/types.js';
+import { scheduleWarnings, calendarSourceIds } from './econCalendar.js';
+import { SANCTIONS_SOURCE_IDS } from './sanctions.js';
 
 export type Severity = 'error' | 'warning' | 'info';
 export interface Issue { severity: Severity; category: string; message: string; entityId?: string; entityName?: string; relatedIds?: string[]; }
@@ -27,7 +29,10 @@ export const CATEGORY_LABEL: Record<string, string> = {
   'stale-curated': 'Curated facts older than 6 months',
   'leader-ambiguity': 'Live source lists competing officeholders',
   'election-result-conflict': 'Election result differs between sources',
+  'source-figures-conflict': 'World Bank and IMF figures disagree',
   'result-missing': 'Election held, result not recorded',
+  'schedule-ending': 'Hand-entered schedule runs out within 90 days',
+  'source-disagreement': 'Two sources disagree about a link',
 };
 
 // Offices legitimately held by more than one person at once.
@@ -41,6 +46,10 @@ const monthsAgo = (d: string) => {
 const today = () => new Date().toISOString().slice(0, 10);
 
 let memo: { at: number; issues: Issue[] } | null = null;
+
+// Checks other modules contribute (World Bank vs IMF figures), run with every audit.
+const extraChecks: (() => Issue[])[] = [];
+export function registerAuditCheck(check: () => Issue[]) { extraChecks.push(check); }
 
 export function audit(force = false): Issue[] {
   if (!force && memo && Date.now() - memo.at < 60_000) return memo.issues;
@@ -78,6 +87,7 @@ export function audit(force = false): Issue[] {
 
     // Live-source ambiguity notes (Wikidata lists two current holders, etc.).
     for (const n of e.attrs?.leaderNotes || []) if (/more than one current/i.test(n)) push({ severity: 'info', category: 'leader-ambiguity', entityId: e.id, message: n });
+      else if (e.type === 'company' && /^.+: Wikidata lists/.test(n)) push({ severity: 'warning', category: 'source-disagreement', entityId: e.id, message: n.replace(/^[^:]+: /, '') });
 
     // Trusted news reporting something the record does not show.
     for (const s of e.attrs?.newsSignals || []) if (s.entityId === e.id && s.status === 'differs-from-record' && s.strength !== 'single-source')
@@ -91,6 +101,7 @@ export function audit(force = false): Issue[] {
     if (r.sourceId && !sources.has(r.sourceId)) push({ severity: 'error', category: 'unknown-source', entityId: r.from, message: `Relationship ${r.type} → ${getEntity(r.to)?.name || r.to} cites unknown source “${r.sourceId}”.` });
     if (r.validFrom && r.validTo && r.validTo < r.validFrom) push({ severity: 'error', category: 'reversed-term', entityId: r.from, relatedIds: [r.to], message: `${r.type} → ${getEntity(r.to)?.name}: ends ${r.validTo}, before it starts (${r.validFrom}).` });
     if (!r.origin && r.validTo && /^Term end inferred from Wikidata/.test(r.note || '')) push({ severity: 'info', category: 'term-closed-by-live-data', entityId: r.from, relatedIds: [r.to], message: r.note! });
+    for (const d of r.disputes || []) push({ severity: 'warning', category: 'source-disagreement', entityId: r.from, relatedIds: [r.to], message: `${r.type.replace(/_/g, ' ')} → ${getEntity(r.to)?.name || r.to}: ${sources.get(r.sourceId || '')?.name?.split(' — ')[0] || r.sourceId || 'the record'} and ${d.detail}.` });
     if ((r.type === 'head_of_state' || r.type === 'head_of_government') && !r.validTo && !SHARED_OFFICE.has(r.to)) {
       const k = `${r.to}|${r.type}`;
       (holders.get(k) || holders.set(k, new Set()).get(k)!).add(r.from);
@@ -117,6 +128,11 @@ export function audit(force = false): Issue[] {
     if (old.length) push({ severity: 'info', category: 'stale-curated', entityId: e.id, message: `${old.length} curated fact${old.length > 1 ? 's' : ''} last verified ${old[0].asOf} (${monthsAgo(old[0].asOf!)} months ago).` });
   }
 
+  // Hand-entered calendars: every cited source must exist, and schedules must not run out unnoticed.
+  for (const id of [...calendarSourceIds(), ...SANCTIONS_SOURCE_IDS]) if (!sources.has(id)) push({ severity: 'error', category: 'unknown-source', message: `The calendar or sanctions data cites unknown source “${id}”.` });
+  for (const w of scheduleWarnings(90)) push({ severity: 'warning', category: 'schedule-ending', entityId: w.entityId, message: w.message });
+
+  for (const check of extraChecks) { try { for (const i of check()) push(i); } catch { /* one failing check must not stop the audit */ } }
   memo = { at: Date.now(), issues };
   return issues;
 }

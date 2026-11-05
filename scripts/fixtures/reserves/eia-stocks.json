@@ -1,0 +1,42 @@
+{
+ "response": {
+  "total": 4,
+  "dateFormat": "YYYY-MM-DD",
+  "frequency": "weekly",
+  "data": [
+   {
+    "period": "2026-10-30",
+    "duoarea": "NUS",
+    "series": "WCSSTUS1",
+    "series-description": "U.S. Ending Stocks of Crude Oil in SPR (Thousand Barrels)",
+    "value": 410500,
+    "units": "MBBL"
+   },
+   {
+    "period": "2026-10-23",
+    "duoarea": "NUS",
+    "series": "WCSSTUS1",
+    "value": "410100",
+    "units": "MBBL"
+   },
+   {
+    "period": "2025-10-31",
+    "duoarea": "NUS",
+    "series": "WCSSTUS1",
+    "value": 405000,
+    "units": "MBBL"
+   },
+   {
+    "period": "2026-10-30",
+    "duoarea": "NUS",
+    "series": "WCESTUS1",
+    "value": 421000,
+    "units": "MBBL"
+   }
+  ]
+ },
+ "request": {
+  "command": "/v2/petroleum/stoc/wstk/data/"
+ },
+ "apiVersion": "2.1.8"
+}
