@@ -30,6 +30,13 @@ import { startSanctions, sanctionsFor, listingsFor, regimesOf, sanctionsLayer, s
 import { startTariffs, tariffsFor, tariffLayer, tariffsStatus } from './tariffs.js';
 import { startBudgets, budgetFor } from './budgets.js';
 import { partnersView, tradePair, tradeWithLayer } from './tradeExplorer.js';
+// The knowledge web: connectors register themselves when their modules load.
+import { startConnectors, connectorsStatus, runConnector, connectorIds } from './web/connectors.js';
+import './web/wikidata.js';
+import './web/links.js';
+import { weightsStatus } from './web/weights.js';
+import { searchMetrics, metricMeta, catalogStatus } from './web/catalog.js';
+import { connectionsFor, neighborhood, webLayer, webStats } from './web/connections.js';
 import { startReserves, reservesFor, stocksForCommodity, reservesLayer, gasLayer, reservesStatus, GRAINS } from './reserves.js';
 import crypto from 'node:crypto';
 import { normName } from './graph.js';
@@ -99,7 +106,8 @@ api.get('/entity/:id', (req: AuthedRequest, res) => {
       let cur = getEntity(r.to);
       while (cur) { if (cur.id === e.id) return true; cur = cur.parentId ? getEntity(cur.parentId) : undefined; }
       return false;
-    })).map((c) => ({ ...stub(c.id), attrs: { public: c.attrs?.public, exchange: c.attrs?.exchange, quoteSymbol: c.attrs?.quoteSymbol }, industries: relsOfType(c.id, 'in_industry', 'out').map((r) => stub(r.to)) }));
+    })).sort((a, b) => Number(b.depth === 'curated') - Number(a.depth === 'curated') || (Number(b.attrs?.sitelinks) || 0) - (Number(a.attrs?.sitelinks) || 0))
+      .slice(0, 60).map((c) => ({ ...stub(c.id), attrs: { public: c.attrs?.public, exchange: c.attrs?.exchange, quoteSymbol: c.attrs?.quoteSymbol, origin: c.attrs?.origin }, industries: relsOfType(c.id, 'in_industry', 'out').map((r) => stub(r.to)) }));
   }
   // Party of each person linked here (for government tables), resolved server-side.
   const partyOf: Record<string, any> = {};
@@ -140,8 +148,16 @@ api.get('/preview/:id', wrap(async (req, res) => {
 
 api.get('/entities', (req, res) => {
   const type = String(req.query.type || '');
-  res.json(listByType(type).map((e) => ({ ...stub(e.id)!, attrs: type === 'event' || type === 'city' || type === 'company' || type === 'commodity' ? e.attrs : undefined, coords: e.coords })).sort((a, b) => a.name.localeCompare(b.name)));
+  let list = listByType(type);
+  // ?top=N: the best-known N (hand-checked first, then by Wikipedia language editions) — the web
+  // holds hundreds of organizations and thousands of companies.
+  const top = Number(req.query.top) || 0;
+  if (top > 0) list = [...list].sort((a, b) => Number(b.depth === 'curated') - Number(a.depth === 'curated') || (Number(b.attrs?.sitelinks) || 0) - (Number(a.attrs?.sitelinks) || 0)).slice(0, top);
+  res.json(list.map((e) => ({ ...stub(e.id)!, attrs: type === 'event' || type === 'city' || type === 'company' || type === 'commodity' ? e.attrs : undefined, coords: e.coords })).sort((a, b) => a.name.localeCompare(b.name)));
 });
+
+// Names for a few ids at once (pickers showing selections).
+api.get('/stubs', (req, res) => res.json(String(req.query.ids || '').split(',').filter(Boolean).slice(0, 50).map((id) => stub(id)).filter(Boolean)));
 
 api.get('/geo/nav', (_req, res) => {
   const regions = listByType('region').map((r) => ({ id: r.id, name: r.name,
@@ -227,8 +243,14 @@ api.get('/map/layer/:layer', wrap(async (req, res) => {
   if (layer === 'govtype') {
     const groups = [{ key: 'presidential', label: 'Presidential / semi-presidential republic' }, { key: 'parliamentary', label: 'Parliamentary system (republic or monarchy)' }, { key: 'monarchy', label: 'Executive monarchy' }, { key: 'one-party', label: 'One-party state' }];
     const values: Record<string, string> = {}; const detail: Record<string, string> = {};
-    for (const e of listByType('country')) if (e.attrs?.govGroup && e.iso3) { values[e.iso3] = e.attrs.govGroup; detail[e.iso3] = e.attrs.govType; }
-    return res.json({ kind: 'categorical', label: 'Government type', categories: groups, values, detail, sourceIds: ['world-countries'], note: `Curated for ${Object.keys(values).length} countries so far; others show as not yet classified.` });
+    let fromWd = 0;
+    for (const e of listByType('country')) {
+      if (!e.iso3) continue;
+      if (e.attrs?.govGroup) { values[e.iso3] = e.attrs.govGroup; detail[e.iso3] = e.attrs.govType; }
+      else if (e.attrs?.govGroupWd) { values[e.iso3] = e.attrs.govGroupWd; detail[e.iso3] = `${(e.attrs.govFormsWd || []).join(', ')} (Wikidata — verify)`; fromWd++; }
+    }
+    return res.json({ kind: 'categorical', label: 'Government type', categories: groups, values, detail, sourceIds: fromWd ? ['world-countries', 'wikidata'] : ['world-countries'],
+      note: `${Object.keys(values).length - fromWd} countries hand-checked${fromWd ? `, ${fromWd} from Wikidata’s “form of government” (community-maintained)` : ''}; others show as not classified.` });
   }
   if (layer === 'igo') {
     const igos = String(req.query.igos || 'igo:nato').split(',').filter((i) => getEntity(i)).slice(0, 3);
@@ -342,7 +364,9 @@ api.get('/map/layer/:layer', wrap(async (req, res) => {
   }
   if (layer.startsWith('imf:')) {
     const [, code, yr] = layer.split(':');
-    const def = IMF_INDICATORS[code]; if (!def) return res.status(404).json({ error: 'Unknown IMF indicator' });
+    const meta = metricMeta(`imf:${code}`);
+    const def = IMF_INDICATORS[code] || (meta ? { label: meta.label, unit: meta.unit || '', short: meta.label } : /^[A-Za-z0-9_]{2,40}$/.test(code) ? { label: code, unit: '', short: code } : null);
+    if (!def) return res.status(404).json({ error: 'Unknown IMF indicator' });
     const year = yr || String(new Date().getFullYear());
     const r = await imfIndicator(code);
     const values: Record<string, { value: number; period: string }> = {};
@@ -394,6 +418,13 @@ api.get('/map/layer/:layer', wrap(async (req, res) => {
     return res.json({ kind: 'numeric', label: which === 'us-effective' ? `US tariff actually charged on imports, by country of origin (${'month' in t ? t.month : ''})` : 'US tariff on imports — change from a year earlier', unit: which === 'us-effective' ? '%' : 'pts',
       scale: which === 'us-change' ? 'diverging' : 'sequential', values: t.values, detail: t.detail, sourceIds: ['census-trade'], fetchedAt: t.fetchedAt, stale: 'stale' in t ? t.stale : false,
       note: 'Calculated duties ÷ value of imports for consumption, from the US Census Bureau’s monthly trade data. This is the average rate importers actually declared, after exemptions and trade agreements — usually well below headline rates. Refunds and later court rulings are not reflected.' });
+  }
+  if (layer.startsWith('web:')) {
+    const id = layer.slice(4); const w = webLayer(id);
+    if (!w) return res.status(404).json({ error: 'Not found' });
+    if (Object.keys(w.values).length < 1) return res.status(503).json({ error: `No connections of ${getEntity(id)?.name || id} that can be placed on the map yet.` });
+    return res.json({ kind: 'categorical', label: w.label, categories: w.categories, values: w.values, detail: w.detail, sourceIds: [], focus: id,
+      note: 'Each country is shaded by its strongest kind of connection (the first in the legend); hover for all of them. Companies, people and cities are placed in their country.' });
   }
   if (layer.startsWith('tradewith:')) {
     const [, iso3, metric = 'total'] = layer.split(':');
@@ -557,6 +588,40 @@ api.get('/calendar/econ', (req, res) => {
   res.json({ events, status: calendarStatus(), now: new Date().toISOString() });
 });
 api.get('/calendar/econ/places', (_req, res) => res.json(calendarPlaces()));
+// ───────────── The knowledge web ─────────────
+// Every connection of an entity, grouped and ranked, with sources; its neighborhood as a network.
+api.get('/web/:id', (req, res) => {
+  const c = connectionsFor(req.params.id, { limitPer: Math.min(400, Number(req.query.limit) || 40) });
+  if (!c) return res.status(404).json({ error: 'Not found' });
+  res.json(c);
+});
+api.get('/web/:id/graph', (req, res) => {
+  const g = neighborhood(req.params.id, { depth: Number(req.query.depth) === 2 ? 2 : 1, max: Number(req.query.max) || 70, perGroup: Number(req.query.per) || 8, types: req.query.types ? String(req.query.types).split(',').filter(Boolean) : undefined });
+  if (!g) return res.status(404).json({ error: 'Not found' });
+  res.json(g);
+});
+api.get('/web-status', (_req, res) => res.json({ connectors: connectorsStatus(), stats: webStats(), catalog: catalogStatus(), weights: weightsStatus() }));
+// Run one connector now (signed-in users; e.g. after allowing a host in the network settings).
+api.post('/web-status/run/:id', wrap(async (req, res) => {
+  if (!req.userId) return res.status(401).json({ error: 'Sign in to run a connector' });
+  if (!connectorIds().includes(req.params.id)) return res.status(404).json({ error: 'Unknown connector' });
+  res.json(await runConnector(req.params.id));
+}));
+// Indicator catalog: any World Bank or IMF series as a map layer or chart.
+api.get('/catalog/metrics', (req, res) => res.json(searchMetrics(String(req.query.q || ''), { provider: req.query.provider === 'wb' || req.query.provider === 'imf' ? req.query.provider : undefined, limit: Math.min(60, Number(req.query.limit) || 30) })));
+api.get('/catalog/metric/:id', (req, res) => { const m = metricMeta(req.params.id); if (!m) return res.status(404).json({ error: 'Not in the catalog (yet)' }); res.json(m); });
+api.get('/indicator/:iso3/:code', wrap(async (req, res) => {
+  const iso3 = req.params.iso3.toUpperCase(); const code = req.params.code;
+  if (!byIso3.has(iso3) && iso3 !== 'EUU' && iso3 !== 'WLD') return res.status(404).json({ error: 'Unknown country' });
+  if (code.startsWith('imf:')) {
+    const r = await imfIndicator(code.slice(4)); const m = metricMeta(code);
+    const ys = r.data[iso3] || {};
+    return res.json({ code, label: m?.label || code.slice(4), unit: m?.unit || '', series: Object.entries(ys).map(([period, value]) => ({ period, value })).sort((a, b) => a.period.localeCompare(b.period)), sourceId: 'imf-weo', fetchedAt: r.fetchedAt, description: m?.description });
+  }
+  const c = code.replace(/^wb:/, '');
+  const r = await wbCountrySeries(iso3, [c]); const ind = r.data[0]; const m = metricMeta(`wb:${c}`);
+  res.json({ code: `wb:${c}`, label: ind?.label || m?.label || c, unit: ind?.unit || m?.unit || '', series: ind?.series || [], sourceId: 'world-bank-wdi', fetchedAt: r.fetchedAt, description: m?.description });
+}));
 // Sanctions against a country (and those a country or organisation imposes), and possible matches for a person or company.
 api.get('/sanctions/place/:id', (req, res) => {
   const e = getEntity(req.params.id); if (!e) return res.status(404).json({ error: 'Not found' });
@@ -667,7 +732,7 @@ const PROVIDER_LABELS: Record<string, { label: string; sourceId?: string }> = {
   wb: { label: 'World Bank WDI', sourceId: 'world-bank-wdi' }, comtrade: { label: 'UN Comtrade', sourceId: 'un-comtrade' }, treasury: { label: 'US Treasury yield curve', sourceId: 'us-treasury' },
   yahoo: { label: 'Yahoo Finance quotes', sourceId: 'yahoo-finance' }, spark: { label: 'Yahoo Finance boards (FX, commodities)', sourceId: 'yahoo-finance' }, consensus: { label: 'Yahoo Finance analyst consensus', sourceId: 'yahoo-finance' },
   sec: { label: 'SEC EDGAR', sourceId: 'sec-edgar' }, gnews: { label: 'Google News search', sourceId: 'google-news' }, gdelt: { label: 'GDELT news index', sourceId: 'gdelt' },
-  congress: { label: 'Congress legislators', sourceId: 'congress-legislators' }, wd: { label: 'Wikidata leaders', sourceId: 'wikidata' }, wp: { label: 'Wikipedia conflicts & elections', sourceId: 'wikipedia-conflicts' },
+  congress: { label: 'Congress legislators', sourceId: 'congress-legislators' }, wd: { label: 'Wikidata (leaders, organizations, companies, cities)', sourceId: 'wikidata' }, catalog: { label: 'Indicator catalogs (World Bank, IMF)', sourceId: 'world-bank-wdi' }, wp: { label: 'Wikipedia conflicts & elections', sourceId: 'wikipedia-conflicts' },
   bis: { label: 'BIS policy rates', sourceId: 'bis-policy' }, fred: { label: 'FRED (OECD yields, FOMC projections)', sourceId: 'oecd-mei' }, oecd: { label: 'OECD 10-year yields', sourceId: 'oecd-mei' },
   curve: { label: 'Government yield curves (ECB, BoE, MOF, BoC)', sourceId: 'ecb-yield-curve' }, imf: { label: 'IMF World Economic Outlook', sourceId: 'imf-weo' },
   sanctions: { label: 'Sanctions lists (OFAC, EU, UK, UN)', sourceId: 'ofac-sdn' }, tariffs: { label: 'US tariffs (Federal Register, Census)', sourceId: 'federal-register' }, econ: { label: 'Release calendars (BLS, FRED)', sourceId: 'bls-schedule' },
@@ -682,7 +747,7 @@ function providerRows() {
   }).sort((a, b) => a.label.localeCompare(b.label));
 }
 api.get('/provenance/status', (_req, res) => {
-  res.json({ providers: providerRows(), live: liveStatus, news: newsStatus(), calendar: calendarStatus(), sanctions: sanctionsStatus(), tariffs: tariffsStatus(), reserves: reservesStatus(), coverage: coverage(), generatedAt: new Date().toISOString() });
+  res.json({ providers: providerRows(), live: liveStatus, news: newsStatus(), calendar: calendarStatus(), sanctions: sanctionsStatus(), tariffs: tariffsStatus(), reserves: reservesStatus(), web: { connectors: connectorsStatus(), stats: webStats(), catalog: catalogStatus(), weights: weightsStatus() }, coverage: coverage(), generatedAt: new Date().toISOString() });
 });
 api.get('/quality/report', (req, res) => {
   const issues = audit();
@@ -826,6 +891,7 @@ startSanctions();
 startTariffs();
 startBudgets();
 startReserves();
+startConnectors();
 // Warm the caches behind the first screens people open (default map layer, map previews, rates),
 // a few seconds after start-up and at low concurrency, so the first visit does not wait on providers.
 setTimeout(() => {

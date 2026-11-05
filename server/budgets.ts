@@ -7,7 +7,7 @@
 //   • United States, live — debt to the penny, interest on the debt and its average rate (Treasury
 //     Fiscal Data), and monthly receipts, outlays and deficit (Monthly Treasury Statement, via FRED).
 import { cached, fetchJson } from './cache.js';
-import { getEntity } from './graph.js';
+import { getEntity, membersByName } from './graph.js';
 import { fredSeries } from './markets.js';
 import { recordChange, kvGet, kvSet } from './changes.js';
 import { wbCountrySeries, BUDGET_INDICATORS } from './providers.js';
@@ -95,7 +95,8 @@ export function jsonStatRows(j: any): { dims: Record<string, string>; value: num
 }
 export async function cofogFor(placeId: string) {
   const iso3 = placeId.startsWith('country:') ? placeId.slice(8) : '';
-  if (placeId !== 'igo:eu' && !COFOG_COUNTRIES.includes(iso3)) return null;
+  const covered = [...membersByName('European Union', COFOG_COUNTRIES.slice(0, 27)), ...membersByName('European Free Trade Association', ['NOR', 'ISL', 'CHE'])];
+  if (placeId !== 'igo:eu' && !covered.includes(iso3) && !COFOG_COUNTRIES.includes(iso3)) return null;
   const geo = EUROSTAT_GEO[placeId] || EUROSTAT_GEO[iso3] || getEntity(placeId)?.iso2;
   if (!geo) return null;
   const r = await cached(`eurostat:cofog:${geo}:v1`, 7 * 86400, async () => {

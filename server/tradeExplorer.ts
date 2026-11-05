@@ -3,14 +3,15 @@
 //   • one pair A ↔ B — six years of trade as reported by each side (the "mirror" check: A's exports to B
 //     against B's imports from A), what they trade by HS chapter, plus tariffs and sanctions between them.
 import { cached } from './cache.js';
-import { getEntity, byCcn3, relsOfType, stub } from './graph.js';
+import { getEntity, byCcn3, relsOfType, stub, membersOf } from './graph.js';
 import { ctFetch, toComtrade, fromComtrade, HS_CHAPTERS, COMTRADE_AREAS } from './providers.js';
 import { sanctionsFor, LISTS, type ListId } from './sanctions.js';
 import { tariffsFor } from './tariffs.js';
 import { EURO_AREA } from './markets.js';
 
 const CT = 'https://comtradeapi.un.org/public/v1/preview/C/A/HS';
-const EU_MEMBERS = new Set([...EURO_AREA, 'CZE', 'DNK', 'HUN', 'POL', 'ROU', 'SWE']);
+// EU members from the membership links (Wikidata and the hand-checked list); a fixed list only if neither is loaded.
+const euMembers = () => { const m = membersOf('igo:eu').map((x) => x.slice(8)); return new Set(m.length >= 20 ? m : [...EURO_AREA, 'CZE', 'DNK', 'HUN', 'POL', 'ROU', 'SWE']); };
 
 export interface Partner { ccn3: string; exports: number; imports: number; }
 /** Rows for one reporter, all partners, flows X and M (re-exports and re-imports are left out). */
@@ -78,7 +79,7 @@ export function chapters(rows: any[], flow: 'X' | 'M') {
     .sort((a, b) => b.value - a.value);
 }
 /** Which sanctions list a country runs (EU members share the EU's). */
-const listOf = (iso3: string): ListId | undefined => (iso3 === 'USA' ? 'US' : iso3 === 'GBR' ? 'UK' : EU_MEMBERS.has(iso3) ? 'EU' : undefined);
+const listOf = (iso3: string): ListId | undefined => (iso3 === 'USA' ? 'US' : iso3 === 'GBR' ? 'UK' : euMembers().has(iso3) ? 'EU' : undefined);
 function sanctionsBetween(a: string, b: string) {
   const out: { by: string; target: string; list: ListId; authority: string; programmes: { program: string; count: number }[]; listings: number }[] = [];
   for (const [imposer, target] of [[a, b], [b, a]]) {

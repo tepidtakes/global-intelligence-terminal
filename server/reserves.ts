@@ -10,7 +10,7 @@ import zlib from 'node:zlib';
 import { Readable } from 'node:stream';
 import { StringDecoder } from 'node:string_decoder';
 import { cached, fetchJson } from './cache.js';
-import { getEntity } from './graph.js';
+import { getEntity, membersByName } from './graph.js';
 import { fredSeries } from './markets.js';
 import { countryIso } from './sanctions.js';
 import { USER_AGENT } from './config.js';
@@ -212,8 +212,8 @@ const PROGRAMMES: Record<string, { text: string; url: string }> = {
 export function oilProgramme(iso3: string) {
   const notes: { text: string; url: string }[] = [];
   if (PROGRAMMES[iso3]) notes.push(PROGRAMMES[iso3]);
-  if (EU.includes(iso3)) notes.push({ text: 'As an EU member it must keep emergency stocks of at least 90 days of net imports or 61 days of inland consumption, whichever is larger (Directive 2009/119/EC).', url: 'https://eur-lex.europa.eu/eli/dir/2009/119/oj' });
-  if (IEA_MEMBERS.includes(iso3)) notes.push({ text: 'As an IEA member it must hold oil stocks equal to at least 90 days of net imports while it is a net importer, and join collective releases in a supply emergency.', url: 'https://www.iea.org/about/oil-security-and-emergency-response' });
+  if (membersByName('European Union', EU).includes(iso3)) notes.push({ text: 'As an EU member it must keep emergency stocks of at least 90 days of net imports or 61 days of inland consumption, whichever is larger (Directive 2009/119/EC).', url: 'https://eur-lex.europa.eu/eli/dir/2009/119/oj' });
+  if (membersByName('International Energy Agency', IEA_MEMBERS).includes(iso3)) notes.push({ text: 'As an IEA member it must hold oil stocks equal to at least 90 days of net imports while it is a net importer, and join collective releases in a supply emergency.', url: 'https://www.iea.org/about/oil-security-and-emergency-response' });
   return notes;
 }
 

@@ -11,6 +11,7 @@ import { cached, fetchText } from './cache.js';
 import { countryIdByName, getEntity, listByType, normName, byIso3 } from './graph.js';
 import { recordChange, kvGet, kvSet, type Change } from './changes.js';
 import { USER_AGENT } from './config.js';
+import { runConnector } from './web/connectors.js';
 
 export type ListId = 'US' | 'UN' | 'EU' | 'UK';
 export const LIST_IDS: ListId[] = ['US', 'EU', 'UK', 'UN'];
@@ -298,6 +299,7 @@ export async function refreshSanctions() {
       } as Change);
     }
   }
+  void runConnector('sanctions-web').catch(() => undefined); // sanctions links in the web follow the new lists
   return state;
 }
 

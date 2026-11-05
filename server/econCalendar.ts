@@ -15,6 +15,8 @@
 // central-bank decision from the BIS policy-rate data. Consensus forecasts are licensed data and
 // are not shown.
 import { cached, fetchText, fetchJson } from './cache.js';
+import { economyWeight } from './web/weights.js';
+import { onConnectorRun } from './web/connectors.js';
 import { getEntity, listByType, relsOfType, stub } from './graph.js';
 import { policyRates, policyRateHistory, fredSeries, EURO_AREA } from './markets.js';
 import { recordChange, emitNew, kvGet, kvSet, type Change } from './changes.js';
@@ -89,7 +91,9 @@ const WEIGHT: Record<string, [number, string]> = {
   'igo:g20': [2, 'G20: the largest economies'], 'igo:g7': [2, 'G7'], 'igo:opec-plus': [1.5, 'OPEC+: oil supply'], 'igo:opec': [1, 'OPEC'], 'igo:un': [1, 'United Nations'], 'igo:nato': [1, 'NATO'], 'igo:imf': [1, 'IMF'], 'igo:asean': [0.5, 'ASEAN'], 'igo:brics': [1, 'BRICS'], 'igo:wto': [0.5, 'WTO'],
 };
 export function grade(base: number, baseWhy: string, placeIds: string[], extra: [number, string][] = []) {
-  const w = placeIds.map((p) => WEIGHT[p]).filter(Boolean).sort((a, b) => b[0] - a[0])[0];
+  // Weight from the economy's (or members') share of world GDP; the table above is only a fallback
+  // until the GDP figures have loaded.
+  const w = placeIds.map((p) => economyWeight(p) || WEIGHT[p]).filter(Boolean).sort((a, b) => b![0] - a![0])[0];
   const why = [`${baseWhy}: ${base}`];
   let v = base;
   if (w) { v += w[0]; why.push(`${w[1]}: +${w[0]}`); }
@@ -448,6 +452,11 @@ function emitUpcoming() {
 
 /** Events for a place: a euro-area member also sees ECB decisions and euro-area releases. */
 export function calendarFor(o: { from?: string; to?: string; place?: string; minImportance?: number; kinds?: string[] } = {}) {
+  // A central bank's calendar is its country's (or the euro area's) rate decisions.
+  if (o.place?.startsWith('institution:')) {
+    const of = relsOfType(o.place, 'central_bank_of', 'out')[0]?.to;
+    if (of) o = { ...o, place: of, kinds: o.kinds?.length ? o.kinds : ['central-bank'] };
+  }
   const places = new Set<string>();
   if (o.place) { places.add(o.place); const iso3 = o.place.startsWith('country:') ? o.place.slice(8) : ''; if (EURO_AREA.includes(iso3)) places.add('igo:eu'); }
   // Elections and curated events come from the live graph at query time (results update every 30 min).
@@ -479,6 +488,8 @@ export function calendarSourceIds() {
   return [...new Set([...bankEvents(), ...usualEvents(from, to, new Set()), ...igoEvents(), ...budgetEvents(from, to)].map((e) => e.sourceId).concat(['bls-schedule', 'fred-releases', 'fred', 'eurostat', 'bis-policy']))];
 }
 
+// Rebuild when weights or organizations change, so importance reflects the latest data.
+onConnectorRun((id) => { if (id === 'economy-weights' || id === 'wikidata-organizations') void buildCalendar().catch(() => undefined); });
 export function startCalendar() {
   setTimeout(() => { void buildCalendar().catch((e) => console.warn('[calendar]', e.message)); }, 8000).unref();
   setInterval(() => { void buildCalendar().catch(() => {}); }, 6 * 3600_000).unref();

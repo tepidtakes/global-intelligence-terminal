@@ -14,6 +14,7 @@ import { AlertButton, RecentChanges } from '../components/alertBits';
 import { SanctionsTariffsSection, SanctionsMatchNotice } from './profile/SanctionsSection';
 import { BudgetSection } from './profile/BudgetSection';
 import { ReservesSection, CommodityStocksSection } from './profile/ReservesSection';
+import { ConnectionsCard, IndicatorExplorer } from '../components/WebBits';
 import { isTrusted } from '../../shared/newsSources';
 import { TYPE_ICON, fmtUnit, fmtDate, ago } from '../format';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
@@ -23,7 +24,7 @@ import type { Entity, RelView, Source, Fact } from '../../shared/types';
 const SANCTIONING_IGOS = new Set(['igo:eu', 'igo:un']);
 // Commodities with country stock data (JODI oil, USDA grain).
 const STOCKED = new Set(['commodity:crude-oil', 'commodity:wheat', 'commodity:corn', 'commodity:rice']);
-const MAPPABLE = new Set(['country', 'state', 'county', 'city', 'region', 'igo', 'company', 'person', 'party', 'event']);
+const MAPPABLE = new Set(['country', 'state', 'county', 'city', 'region', 'igo', 'institution', 'company', 'person', 'party', 'event']);
 
 export function ProfilePage() {
   const id = decodeURIComponent(useParams().id!);
@@ -49,14 +50,15 @@ export function ProfilePage() {
   if (t === 'company' || (t === 'commodity' && e.attrs?.quoteSymbol)) sections.push(['market', 'Market data']);
   if (t === 'commodity' && PRODUCTS.some((p) => p.commodity === e.id)) sections.push(['traders', 'Exporters']);
   if (t === 'company') sections.push(['financials', 'Financials'], ...(e.attrs?.public ? [['consensus', 'Consensus'] as [string, string]] : []), ['position', 'My position']);
-  if (t === 'country' || t === 'igo') sections.splice(1, 0, ['calendar', 'Calendar']);
+  if (t === 'country' || t === 'igo' || t === 'institution') sections.splice(1, 0, ['calendar', 'Calendar']);
   if (t === 'igo') sections.push(['members', 'Members']);
   if (SANCTIONING_IGOS.has(e.id)) sections.push(['sanctions', 'Sanctions']);
   if (e.id === 'igo:eu') sections.push(['budget', 'Budgets'], ['reserves', 'Reserves']);
   if (STOCKED.has(e.id)) sections.push(['stocks', 'Stocks']);
   const isElection = t === 'event' && e.attrs?.category === 'election';
   if (isElection) sections.push(['election', 'Result'], ['candidates', 'Candidates'], ['markets', 'Markets']);
-  sections.push(['relationships', 'Relationships'], ['events', 'Events'], ['news', 'News'], ['notes', 'Research'], ['sources', 'Sources']);
+  if (t === 'country') sections.push(['indicators', 'Indicators']);
+  sections.push(['relationships', 'Connections'], ['events', 'Events'], ['news', 'News'], ['notes', 'Research'], ['sources', 'Sources']);
 
   const operating = rels.filter((r) => r.rel.type === 'operates_in' && r.direction === 'in');
 
@@ -98,7 +100,7 @@ export function ProfilePage() {
         {(t === 'country' || t === 'state' || t === 'city') && <GovernmentSection e={e} rels={rels} events={data.events} partyOf={data.partyOf} mayors={data.mayors} />}
         {isElection && <ElectionSection id={e.id} />}
         {(t === 'country' || t === 'state') && <ConflictsSection id={e.id} name={e.name} />}
-        {(t === 'country' || t === 'igo') && <CalendarSection placeId={e.id} name={e.name} />}
+        {(t === 'country' || t === 'igo' || t === 'institution') && <CalendarSection placeId={e.id} name={e.name} />}
         {t === 'country' && e.iso3 && <MacroSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <OutlookSection iso3={e.iso3} />}
         {t === 'country' && e.iso3 && <RatesSection iso3={e.iso3} />}
@@ -125,9 +127,8 @@ export function ProfilePage() {
         {t === 'person' && <RolesCard rels={rels} />}
         {t === 'party' && <PartyMembersCard rels={rels} />}
         {t === 'event' && <EventCard e={e} rels={rels} />}
-        <Card title="Relationships" id="relationships" actions={<span className="tiny muted">{rels.length} links · click any to navigate</span>}>
-          {rels.length ? <RelGroups rels={rels} maxPer={40} /> : <div className="small muted">No relationships recorded yet.</div>}
-        </Card>
+        {t === 'country' && e.iso3 && <IndicatorExplorer iso3={e.iso3} name={e.name} />}
+        <ConnectionsCard id={e.id} name={e.name} />
         {e.timeline && e.timeline.length > 0 && <TimelineCard items={e.timeline} />}
         <EventsCard events={data.events} catalysts={data.user?.catalysts || []} entityId={e.id} />
         <NewsCard id={e.id} />

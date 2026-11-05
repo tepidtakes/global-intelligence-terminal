@@ -3,11 +3,11 @@
 
 export type EntityType =
   | 'region' | 'country' | 'state' | 'county' | 'city'
-  | 'igo' | 'person' | 'party' | 'company' | 'commodity' | 'industry' | 'event';
+  | 'igo' | 'institution' | 'person' | 'party' | 'company' | 'commodity' | 'industry' | 'event';
 
 export const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
   region: 'Region', country: 'Country', state: 'State / province', county: 'County', city: 'City',
-  igo: 'Organization', person: 'Person', party: 'Political party', company: 'Company',
+  igo: 'Organization', institution: 'Institution', person: 'Person', party: 'Political party', company: 'Company',
   commodity: 'Commodity / product', industry: 'Industry', event: 'Event',
 };
 
@@ -66,7 +66,9 @@ export type RelType =
   | 'belongs_to_party' | 'party_in' | 'governing_party' | 'located_in' | 'capital_of'
   | 'headquartered_in' | 'operates_in' | 'produces' | 'exports' | 'imports' | 'consumes'
   | 'trade_partner' | 'subsidiary_of' | 'competitor_of' | 'in_industry' | 'affects' | 'uses'
-  | 'in_region' | 'shareholder_of' | 'borders' | 'supplies' | 'candidate_in';
+  | 'in_region' | 'shareholder_of' | 'borders' | 'supplies' | 'candidate_in'
+  // Links computed from live data: trade flows, sanctions programmes, news co-mentions, central banks.
+  | 'trades_with' | 'sanctions' | 'mentioned_with' | 'central_bank_of';
 
 export interface Relationship {
   id: string;
@@ -80,6 +82,15 @@ export interface Relationship {
   sourceId?: string;
   note?: string;
   origin?: string;   // set on relationships loaded from a live source (replaced on refresh)
+  /** Size of the link where it has one (trade in US$, stories in common, listings…), used to rank and draw it. */
+  value?: number; unit?: string; period?: string;
+  /** Extra figures carried by the link (exports and imports, programmes…). */
+  data?: Record<string, any>;
+  /** Other sources that report the same link (shown as "✓ 2 sources"). */
+  alsoIn?: string[];
+  /** Sources that disagree with this link (e.g. another source says the membership ended). */
+  disputes?: { sourceId: string; detail: string }[];
+  retrievedAt?: string;
 }
 
 /** Forward label is read "from → to", inverse is shown on the "to" entity's profile. */
@@ -111,6 +122,10 @@ export const REL_LABELS: Record<RelType, { fwd: string; inv: string }> = {
   borders: { fwd: 'Neighbors', inv: 'Neighbors' },
   supplies: { fwd: 'Supplies', inv: 'Key suppliers' },
   candidate_in: { fwd: 'Candidate in', inv: 'Candidates' },
+  trades_with: { fwd: 'Trade partners (as it reports)', inv: 'Trade partners (as they report)' },
+  sanctions: { fwd: 'Sanctions programmes against', inv: 'Under sanctions programmes of' },
+  mentioned_with: { fwd: 'In the news with', inv: 'In the news with' },
+  central_bank_of: { fwd: 'Central bank of', inv: 'Central bank' },
 };
 
 /** A relationship as seen from one entity, with the other side resolved. */

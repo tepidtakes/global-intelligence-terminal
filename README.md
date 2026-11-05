@@ -73,7 +73,9 @@ server listens on this computer only unless you change `HOST` — see [SECURITY.
 Optional free API keys that add sources (everything works without them):
 `FRED_API_KEY` (official dates for every US release, not only BLS ones), `EIA_API_KEY`
 (weekly Strategic Petroleum Reserve levels straight from the EIA), `AGSI_API_KEY` (European
-gas storage), `CENSUS_API_KEY` (higher rate limit for US duty data). Alert webhooks go to
+gas storage), `CENSUS_API_KEY` (higher rate limit for US duty data). Size of the web:
+`WIKIDATA_COMPANY_MIN_SITELINKS` (default 25 — lower loads more companies) and
+`TRADE_WEB_COUNTRIES` (default 40 largest economies). Alert webhooks go to
 Slack, Discord and ntfy by default; add hosts with `TERMINAL_WEBHOOK_HOSTS=host1,host2`.
 
 Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:live` ·
@@ -81,10 +83,24 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
 (consistency audit of the built-in dataset, offline; fails on errors) · `npm run check:parsers`
 (rates, election, prediction-market and mayor parsers on fixtures, offline) ·
 `npm run check:econ` (alerts, calendar, sanctions, tariffs, budgets, reserves and trade
-explorer on fixtures, offline).
+explorer on fixtures, offline) · `npm run check:web` (the knowledge web: Wikidata loaders,
+corroboration and disputes, trade/sanctions/news links, weights, catalog, connections; offline).
 
 ## What's in it
 
+- **The knowledge web**: everything is one connected graph — countries, every international
+  organization countries belong to (discovered from Wikidata, with join and leave dates),
+  central banks and governors, listed companies with their executives, parents, industries
+  and live quotes, capitals and big cities, people, parties, commodities and events — joined
+  by links that carry data: trade between the largest economies (UN Comtrade, both countries'
+  reports), sanctions programmes from imposer to target, and who is in trusted news together
+  this week. Every profile has a **Connections** card (ranked by what each link carries, ✓ when
+  two sources agree, ⚠ when they disagree), **Web** (`/web`) draws the network around anything,
+  and the map layer **Where something is connected** shades the world by how each country
+  relates to it. Little is hard-coded: organizations, companies, cities and indicators come
+  from the sources' own data, and importance weights are computed from GDP shares.
+- **Any indicator**: search ~1,700 World Bank and IMF series from the map's layer search or a
+  country's **Explore any indicator** card — chart it, or map every country.
 - **Map** (MapLibre GL): 241 country shapes → 56 US states/territories (zoom ≥ 3) → 3,231
   US counties (zoom ≥ 5) → curated cities. Hover previews, click to select, breadcrumbs,
   fly-to, returns to your last position.

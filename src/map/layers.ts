@@ -27,6 +27,7 @@ export interface LayerDef {
 }
 
 export const GROUPS: { id: string; label: string; icon: string }[] = [
+  { id: 'web', label: 'Connections', icon: '❖' },
   { id: 'politics', label: 'Politics & elections', icon: '🏛' },
   { id: 'security', label: 'Conflict & security', icon: '⚔' },
   { id: 'economy', label: 'Economy & people', icon: '📈' },
@@ -38,12 +39,16 @@ export const GROUPS: { id: string; label: string; icon: string }[] = [
   { id: 'markets', label: 'Markets & rates', icon: '💱' },
   { id: 'personal', label: 'My portfolio', icon: '👤' },
   { id: 'history', label: 'Historical', icon: '🕰' },
+  { id: 'catalog', label: 'Indicator catalog', icon: '🔎' },
 ];
 
 const Y = new Date().getFullYear();
 const imfVariants = (code: string) => [{ id: `imf:${code}:${Y}`, label: String(Y) }, { id: `imf:${code}:${Y + 1}`, label: String(Y + 1) }, { id: `imf:${code}:${Y - 1}`, label: `${Y - 1} (est.)` }];
 
 export const LAYERS: LayerDef[] = [
+  // The web: any entity's connections, placed on the map
+  { id: 'web', label: 'Where something is connected', group: 'web', live: true, hint: 'Pick any country, organization, company, person or commodity: countries are shaded by how they connect to it — members, trade partners, sanctions, head offices, people, news.', keywords: 'network links relations connections web graph members partners',
+    color: { kind: 'auto' } },
   // Politics
   { id: 'elections', label: 'Elections', group: 'politics', live: true, hint: 'National elections in the next 12 months and the last 60 days (Wikipedia electoral calendars).', keywords: 'vote ballot',
     color: { kind: 'categories', colors: { soon: ['#d97706', '#f59e0b'], upcoming: ['#f5c66b', '#8a6418'], recent: ['#8aa4c8', '#4f6a90'] } } },
@@ -138,18 +143,34 @@ const COMMODITY_HUE: Record<string, Hue> = {
 const PRODUCT_HUE: Record<ProductGroup, Hue> = { Energy: 'amber', 'Metals & minerals': 'steel', 'Agriculture & food': 'olive', 'Manufactured goods': 'indigo', 'Chemicals & materials': 'purple' };
 export { PRODUCTS };
 
+// Layers for any series in the indicator catalog (World Bank, IMF), made on demand. The catalog
+// does not say which end of a series is better, so they use a neutral size scale.
+const catalogDefs = new Map<string, LayerDef>();
+export function catalogDef(fill: string): LayerDef {
+  const id = fill.startsWith('imf:') ? fill.split(':').slice(0, 2).join(':') : fill;
+  let d = catalogDefs.get(id);
+  if (!d) {
+    const imf = id.startsWith('imf:');
+    d = { id, label: id.split(':')[1], group: 'catalog', live: imf, yearable: !imf, hint: `From the ${imf ? 'IMF' : 'World Bank'} indicator catalog. Darker = larger — the catalog does not say which end is better.`,
+      color: { kind: 'magnitude', hue: 'steel' }, ...(imf ? { variants: imfVariants(id.slice(4)) } : {}) };
+    catalogDefs.set(id, d);
+  }
+  return d;
+}
 export function layerDefFor(fill: string) {
+  if (fill.startsWith('web:')) return LAYERS.find((l) => l.id === 'web')!;
   if (fill.startsWith('commodity:')) return LAYERS.find((l) => l.id === 'commodity')!;
   if (fill.startsWith('trade:')) return LAYERS.find((l) => l.id === 'trade')!;
   if (fill.startsWith('tradewith:')) return LAYERS.find((l) => l.id === (fill.endsWith(':balance') ? 'tradewith-balance' : 'tradewith'))!;
   if (fill.startsWith('fx:')) return LAYERS.find((l) => l.id === 'fx')!;
-  if (fill.startsWith('imf:')) return LAYERS.find((l) => l.id === fill.split(':').slice(0, 2).join(':'));
-  return LAYERS.find((l) => l.id === fill || l.variants?.some((v) => v.id === fill));
+  if (fill.startsWith('imf:')) return LAYERS.find((l) => l.id === fill.split(':').slice(0, 2).join(':')) || catalogDef(fill);
+  return LAYERS.find((l) => l.id === fill || l.variants?.some((v) => v.id === fill)) || (fill.startsWith('wb:') ? catalogDef(fill) : undefined);
 }
 /** The concrete layer id to load when a layer is picked from the list. */
 export function defaultFill(def: LayerDef) {
   if (def.id === 'commodity') return 'commodity:crude-oil';
   if (def.id === 'trade') return 'trade:X:2709';
+  if (def.id === 'web') return 'web:igo:nato';
   if (def.id === 'tradewith') return 'tradewith:USA:total';
   if (def.id === 'tradewith-balance') return 'tradewith:USA:balance';
   if (def.variants) return def.id === 'fx' ? 'fx:y1' : def.variants[0].id;
@@ -157,15 +178,17 @@ export function defaultFill(def: LayerDef) {
 }
 
 // ───────────── Palettes ─────────────
-export interface Palette { dark: boolean; goodBad: string[]; neutral: string; cat: string[]; nodata: string; former: string; line: string; ocean: string; hover: string; sel: string; overlay: string; }
+export interface Palette { dark: boolean; goodBad: string[]; neutral: string; cat: string[]; catWide: string[]; nodata: string; former: string; line: string; ocean: string; hover: string; sel: string; overlay: string; }
 export function palette(dark: boolean): Palette {
   return dark ? {
     dark, goodBad: ['#ff9575', '#8c2f22', '#2a8f6b', '#9af2cb'], neutral: '#4a4842',
     cat: ['#3987e5', '#d95926', '#199e70', '#d55181'],
+    catWide: ['#3987e5', '#d95926', '#199e70', '#d55181', '#9085e9', '#d4aa1c', '#4fb0c2', '#c97b52', '#8fae3a', '#8c99a5', '#e66767', '#6fb3ff'],
     nodata: '#232321', former: '#5a5953', line: '#4a4a46', ocean: '#111416', hover: '#f0efec', sel: '#eda100', overlay: '#f0efec',
   } : {
     dark, goodBad: ['#8f1d14', '#f0956f', '#b7e6cf', '#0e7a5a'], neutral: '#ebe6d6',
     cat: ['#2a78d6', '#eb6834', '#1baf7a', '#e87ba4'],
+    catWide: ['#2a78d6', '#eb6834', '#1baf7a', '#e87ba4', '#6250d6', '#c9a227', '#1d8399', '#a35d3d', '#76841f', '#5d6b78', '#c8312d', '#5598e7'],
     nodata: '#cfcdc5', former: '#a9a69c', line: '#9d9a90', ocean: '#dfe6ec', hover: '#0b0b0b', sel: '#c98500', overlay: '#0b0b0b',
   };
 }
@@ -280,6 +303,9 @@ export function colorize(data: LayerData | undefined, pal: Palette, classify: 'q
     cats.forEach((c, i) => { map[c.key] = steps[i] || ramp[2]; });
   } else if (rule.kind === 'categories') {
     cats.forEach((c, i) => { map[c.key] = rule.colors[c.key] ? pick(rule.colors[c.key], pal.dark) : pal.cat[i % pal.cat.length]; });
+  } else if (def?.id === 'web') {
+    // The entity's own country in the highlight color; each kind of connection its own color.
+    let n = 0; cats.forEach((c) => { map[c.key] = c.key === 'self' ? pal.sel : pal.catWide[n++ % pal.catWide.length]; });
   } else {
     cats.forEach((c, i) => { map[c.key] = c.key === 'former' ? pal.former : pal.cat[i % pal.cat.length]; });
   }

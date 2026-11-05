@@ -37,6 +37,7 @@ export function PreviewPane({ id, data, loading, error, onClose }: { id: string;
               <NewNoteButton entityIds={[id]} />
               <WatchButton id={id} />
               {data?.entity && <AlertButton entityId={id} name={data.entity.name} type={data.entity.type} />}
+              <Link className="btn sm" to={`/web?focus=${encodeURIComponent(id)}`} title="Everything connected to this, as a network">❖ Network</Link>
               {e.type === 'country' && <button className="btn sm" onClick={() => toggleCompare(id)} aria-pressed={compare.includes(id)}>{compare.includes(id) ? '✓ Comparing' : '⇄ Compare'}</button>}
               {e.type === 'country' && data?.entity?.iso3 && <TradeButtons iso3={data.entity.iso3} fill={mapCfg.fill} onMap={() => setMap({ fill: `tradewith:${data.entity.iso3}:total` })} />}
             </div>

@@ -73,6 +73,7 @@ export function DataPage() {
             <div className="tiny muted" style={{ marginTop: 6 }}>Run at start-up and every 12 hours. “Stale copy” means the source failed and the previous download is in use.</div>
           </Card>
 
+          <WebCard web={data.web} />
           <WatchLoaders data={data} />
 
           <Card title={`Trusted news feeds (${feedsOk}/${news.feeds.length} working)`} id="feeds">
@@ -175,6 +176,33 @@ function WatchLoaders({ data }: { data: any }) {
           {row('Grain stocks (USDA PSD)', res ? !!res.grains : null, res?.grains?.fetchedAt, res?.grains ? Object.entries<string>(res.grains.years).map(([k, y]) => `${k} ${y}`).join(' · ') : res?.grainError ? <span className="tiny">{res.grainError}</span> : '—', '/?fill=reserves:grain-wheat')}
         </tbody></table></div>
       <div className="tiny muted" style={{ marginTop: 6 }}>Sanctions and tariffs refresh every 6 hours, reserves every 12, the calendar every 6 (results every 15 minutes). Optional free keys add sources: FRED_API_KEY (official US release dates), EIA_API_KEY (weekly SPR), AGSI_API_KEY (European gas storage), CENSUS_API_KEY (higher Census rate limit).</div>
+    </Card>
+  );
+}
+
+const TYPE_NAMES: Record<string, string> = { country: 'Countries', igo: 'Organizations', institution: 'Institutions', company: 'Companies', person: 'People', party: 'Parties', city: 'Cities', state: 'States', county: 'Counties', region: 'Regions', commodity: 'Commodities', industry: 'Industries', event: 'Events' };
+/** The knowledge web: every connector, what it adds, and how big and well-sourced the web is. */
+function WebCard({ web }: { web: any }) {
+  if (!web) return null;
+  const st = web.stats;
+  const topTypes = Object.entries<number>(st.byType).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  return (
+    <Card title="The knowledge web" id="web">
+      <div className="kpis" style={{ margin: '0 0 10px' }}>
+        <div className="kpi"><div className="tiny muted">Entities</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{st.entities.toLocaleString()}</div><div className="tiny muted">{Object.entries<number>(st.byEntityType).filter(([t]) => t !== 'county').sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t, n]) => `${n.toLocaleString()} ${(TYPE_NAMES[t] || t).toLowerCase()}`).join(' · ')}</div></div>
+        <div className="kpi"><div className="tiny muted">Links</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{st.links.toLocaleString()}</div><div className="tiny muted">{Object.keys(st.bySource).length} sources</div></div>
+        <div className="kpi" title="Links that two independent sources report"><div className="tiny muted">Confirmed by a 2nd source</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{st.corroborated.toLocaleString()}</div><div className="tiny muted">✓ shown on profiles</div></div>
+        <div className="kpi" title="Links where sources disagree — listed in the audit below"><div className="tiny muted">Sources disagree</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{st.disputed.toLocaleString()}</div><div className="tiny muted">⚠ see the audit</div></div>
+        {web.catalog && <div className="kpi"><div className="tiny muted">Indicators searchable</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{web.catalog.metrics.toLocaleString()}</div><div className="tiny muted">{web.catalog.wb.toLocaleString()} World Bank · {web.catalog.imf} IMF</div></div>}
+      </div>
+      <div style={{ overflowX: 'auto' }}><table className="data"><thead><tr><th>Connector</th><th>Status</th><th>Updated</th><th>Adds to the web</th></tr></thead>
+        <tbody>{web.connectors.map((c: any) => (
+          <tr key={c.id}><td><strong>{c.label}</strong><div className="tiny muted">every {c.everyHours >= 24 ? `${Math.round(c.everyHours / 24)} day${c.everyHours >= 48 ? 's' : ''}` : c.everyHours >= 1 ? `${c.everyHours} h` : `${Math.round(c.everyHours * 60)} min`}</div></td>
+            <td className="small"><span className={`health ${!c.status ? '' : c.status.ok ? (c.status.stale ? 'stale' : 'ok') : 'failing'}`} />{c.running ? 'running…' : !c.status ? 'not yet run' : c.status.ok ? (c.status.stale ? 'stale copy' : 'ok') : 'failed'}</td>
+            <td className="small">{c.status?.fetchedAt ? ago(c.status.fetchedAt) : c.status?.at ? ago(c.status.at) : '—'}</td>
+            <td className="small">{c.provides}<div className="tiny" style={{ color: c.status && !c.status.ok ? 'var(--warn)' : 'var(--muted)' }}>{c.status?.detail}</div></td></tr>
+        ))}</tbody></table></div>
+      <div className="tiny muted" style={{ marginTop: 6 }}>Largest kinds of link: {topTypes.map(([t, n]) => `${t.replace(/_/g, ' ')} ${n.toLocaleString()}`).join(' · ')}.{web.weights ? ` Economy weights: ${web.weights.source}, ${web.weights.year}.` : ''}</div>
     </Card>
   );
 }

@@ -4,7 +4,7 @@ import { useApp, useAuth, useIsDark, load, save } from '../state';
 import { LAYERS, GROUPS, COMMODITY_LAYERS, PRODUCTS, layerDefFor, defaultFill, palette, swatchFor, type LayerDef } from './layers';
 import { TYPE_ICON } from '../format';
 import { Link } from 'react-router-dom';
-import { EntityPicker } from '../components/common';
+import { EntityPicker, useDebounced } from '../components/common';
 
 const YEARS = ['', '2024', '2020', '2015', '2010', '2005', '2000', '1995', '1990'];
 type Tab = 'layers' | 'places' | 'saved';
@@ -24,6 +24,11 @@ export function LayerPanel({ nav, onNavigate }: { nav: any[]; onNavigate: (id: s
   const matches = (d: LayerDef) => !q || `${d.label} ${d.hint} ${d.keywords || ''}`.toLowerCase().includes(q.toLowerCase());
   const pick = (d: LayerDef) => { if (layerDefFor(cfg.fill)?.id !== d.id) setMap({ fill: defaultFill(d) }); };
   const anyMatch = LAYERS.some(matches);
+  const dq = useDebounced(q.trim(), 250);
+  const catalog = useApi<any[]>(dq.length >= 3 ? `/catalog/metrics?q=${encodeURIComponent(dq)}&limit=12` : null, 600_000);
+  const featured = new Set(LAYERS.flatMap((l) => [l.id, ...(l.variants || []).map((v) => v.id)]));
+  const catalogHits = (catalog.data || []).filter((m) => !featured.has(m.id) && !featured.has(m.provider === 'imf' ? `imf:${m.code}:${new Date().getFullYear()}` : m.id));
+  const pickMetric = (m: any) => setMap({ fill: m.provider === 'imf' ? `imf:${m.code}:${new Date().getFullYear()}` : m.id, year: null });
 
   return (
     <aside className="sidebar sb" aria-label="Map layers and navigation">
@@ -68,7 +73,22 @@ export function LayerPanel({ nav, onNavigate }: { nav: any[]; onNavigate: (id: s
                 </div>
               );
             })}
-            {!anyMatch && <div className="small muted" style={{ padding: '8px 14px' }}>No layer matches “{q}”.</div>}
+            {!anyMatch && !catalogHits.length && <div className="small muted" style={{ padding: '8px 14px' }}>{dq.length >= 3 && catalog.loading ? 'Searching the indicator catalog…' : `No layer matches “${q}”.`}</div>}
+            {catalogHits.length > 0 && (
+              <div className="lgroup">
+                <div className="lgHead" style={{ cursor: 'default' }}><span className="gi" aria-hidden>🔎</span><span className="gl">From the indicator catalog</span><span className="cnt">{catalogHits.length}</span></div>
+                <div className="lgItems">
+                  {catalogHits.map((m) => (
+                    <button key={m.id} className={`litem${cfg.fill.startsWith(m.id) ? ' on' : ''}`} onClick={() => pickMetric(m)} title={m.description || m.label}>
+                      <span className="lsw" style={{ background: 'linear-gradient(90deg, #e4e7ea, #36434e)' }} aria-hidden />
+                      <span className="ll">{m.label}</span>
+                      <span className="lbadge" title={m.source}>{m.provider === 'imf' ? 'IMF' : 'WB'}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {q.trim().length > 0 && q.trim().length < 3 && <div className="tiny muted" style={{ padding: '4px 14px' }}>Type 3+ letters to also search ~1,700 World Bank and IMF series.</div>}
           </div>
           <DisplayOptions />
         </>
@@ -82,7 +102,10 @@ export function LayerPanel({ nav, onNavigate }: { nav: any[]; onNavigate: (id: s
 
 function ActiveLayer({ def, swatch }: { def: LayerDef; swatch: string }) {
   const { map: cfg, setMap } = useApp();
-  const igos = useApi<any[]>(def.id === 'igo' ? '/entities?type=igo' : null, 3600_000);
+  const igos = useApi<any[]>(def.id === 'igo' ? '/entities?type=igo&top=24' : null, 3600_000);
+  const meta = useApi<any>(def.group === 'catalog' ? `/catalog/metric/${encodeURIComponent(def.id)}` : null, 3600_000);
+  const extra = def.id === 'igo' ? cfg.igos.filter((id) => !(igos.data || []).some((g) => g.id === id)) : [];
+  const extraStubs = useApi<any[]>(extra.length ? `/stubs?ids=${encodeURIComponent(extra.join(','))}` : null, 3600_000);
   const group = GROUPS.find((g) => g.id === def.group);
   const toggleIgo = (id: string) => {
     const cur = cfg.igos.includes(id) ? cfg.igos.filter((x) => x !== id) : [...cfg.igos, id].slice(-3);
@@ -96,11 +119,12 @@ function ActiveLayer({ def, swatch }: { def: LayerDef; swatch: string }) {
         <span className="alIcon" aria-hidden>{group?.icon}</span>
         <div style={{ minWidth: 0 }}>
           <div className="tiny muted">{group?.label} · showing</div>
-          <div className="alTitle">{def.label}</div>
+          <div className="alTitle">{def.group === 'catalog' && meta.data?.label ? meta.data.label : def.label}</div>
         </div>
       </div>
       {def.id !== 'none' && <div className="alSwatch" style={{ background: swatch }} aria-hidden />}
-      <div className="small muted">{def.hint}</div>
+      <div className="small muted">{def.group === 'catalog' && meta.data?.description ? `${meta.data.description.slice(0, 220)}${meta.data.description.length > 220 ? '…' : ''}` : def.hint}</div>
+      {def.group === 'catalog' && meta.data?.source && <div className="tiny muted" style={{ marginTop: 4 }}>Source: {meta.data.source}</div>}
       <div className="stack" style={{ marginTop: 8 }}>
         {def.variants && (
           <div className="seg" role="group" aria-label="Measure">
@@ -138,6 +162,7 @@ function ActiveLayer({ def, swatch }: { def: LayerDef; swatch: string }) {
           </>
         )}
         {def.id.startsWith('tradewith') && <TradeWithPicker fill={cfg.fill} setFill={(fill) => setMap({ fill })} />}
+        {def.id === 'web' && <WebPicker fill={cfg.fill} setFill={(fill) => setMap({ fill })} />}
         {def.id === 'commodity' && (
           <label className="field">Commodity
             <select className="input" value={cfg.fill.startsWith('commodity:') ? cfg.fill : 'commodity:crude-oil'} onChange={(e) => setMap({ fill: e.target.value })}>
@@ -147,12 +172,13 @@ function ActiveLayer({ def, swatch }: { def: LayerDef; swatch: string }) {
         )}
         {def.id === 'igo' && (
           <>
-            <div className="small muted">Pick up to 3 — overlaps get their own color.</div>
+            <div className="small muted">Pick up to 3 — overlaps get their own color. Any organization in the web can be added below.</div>
             <div className="chips">
-              {(igos.data || []).map((g) => (
+              {[...(igos.data || []), ...(extraStubs.data || [])].map((g) => (
                 <button key={g.id} className={`chip${cfg.igos.includes(g.id) ? ' on' : ''}`} style={{ cursor: 'pointer', ...(cfg.igos.includes(g.id) ? { background: 'var(--accent-wash)', borderColor: 'var(--accent)' } : {}) }} onClick={() => toggleIgo(g.id)} aria-pressed={cfg.igos.includes(g.id)}>{g.name}</button>
               ))}
             </div>
+            <EntityPicker types={['igo']} placeholder="Find another organization…" onPick={(e) => toggleIgo(e.id)} exclude={cfg.igos} />
             <label className="field">Membership as of <strong>{cfg.igoYear || 'today'}</strong>
               <input type="range" min={1945} max={new Date().getFullYear()} value={cfg.igoYear ? Number(cfg.igoYear) : new Date().getFullYear()}
                 onChange={(e) => setMap({ igoYear: Number(e.target.value) >= new Date().getFullYear() ? null : e.target.value })} aria-label="Membership year" />
@@ -287,6 +313,19 @@ function TradeWithPicker({ fill, setFill }: { fill: string; setFill: (f: string)
         {TRADE_MEASURES.map(([k, l]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setFill(`tradewith:${iso3}:${k}`)}>{l}</button>)}
       </div>
       <div className="tiny muted">Click a country on the map, then “Trade with …” in its preview, to compare both sides.</div>
+    </>
+  );
+}
+
+/** Pick the entity whose connections the map shows. */
+function WebPicker({ fill, setFill }: { fill: string; setFill: (f: string) => void }) {
+  const id = fill.slice(4);
+  const e = useApi<any>(id ? `/entity/${encodeURIComponent(id)}` : null, 3600_000);
+  return (
+    <>
+      <div className="small">Showing: <strong>{e.data?.entity ? `${e.data.entity.flag || TYPE_ICON[e.data.entity.type] || ''} ${e.data.entity.name}` : id}</strong> · <Link to={`/entity/${encodeURIComponent(id)}`}>profile</Link> · <Link to={`/web?focus=${encodeURIComponent(id)}`}>network →</Link></div>
+      <EntityPicker placeholder="Any country, organization, company, person…" onPick={(x) => setFill(`web:${x.id}`)} />
+      <div className="tiny muted">Tip: “Map connections” on any profile opens this layer for that entity.</div>
     </>
   );
 }

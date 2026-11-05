@@ -1,6 +1,64 @@
 # Global Intelligence Terminal — Architecture
 
-Status: Phase I (working MVP). Last revised 2026-11-03.
+Status: Phase I (working MVP). Last revised 2026-11-05.
+
+## 0. The knowledge web — the core idea
+
+Everything in the terminal is one connected graph: **entities** (countries, organizations,
+institutions, companies, people, parties, cities, commodities, events) joined by **links**
+(member of, leads, central bank of, headquartered in, owns, trades with, sanctions, in the news
+with…). Pages, map layers, alerts and the calendar are views of that graph, not separate
+datasets. Three rules keep it current and trustworthy:
+
+1. **As little as possible is written in code.** Structure comes from live sources through
+   *connectors*; hand-entered data is a thin, dated overlay that the live data checks.
+2. **Every link says where it came from.** A link carries its source, retrieval time, and —
+   where it has one — a size (trade value, stories in common, listings) and a period.
+3. **Sources are compared, not overwritten.** When a live source reports a link that already
+   exists, the link is marked *confirmed by a second source* (✓); when it disagrees (e.g. says
+   a membership is still current), the link is marked *disputed* (⚠) and listed in the audit.
+
+```
+ connectors (server/web/connectors.ts) ──► graph (server/graph.ts) ──► views
+   Wikidata: countries, organizations,       entities + links            profiles: Connections card
+     memberships, central banks, cities,      with value/period/data,     /web: network view
+     companies, executives                    sources, ✓ / ⚠             map: "where it is connected"
+   UN Comtrade: trade web                    identity by Wikidata id      calendar importance
+   OFAC/EU/UK/UN: sanctions web              (attrs.wikidata), names in   alerts (change feed)
+   Trusted news: co-mentions (30 min)        11 languages for matching    search (notability-ranked)
+   World Bank/IMF: catalogs, GDP weights
+```
+
+**Identity.** Records from different sources are joined by Wikidata id first, then by
+exact name, ticker or country code. Live leaders, mayors, organizations, central banks,
+cities and companies all carry `attrs.wikidata`, so a company's chief executive, the city of
+its head office and the organization it belongs to are the same nodes everywhere.
+
+**Discovery instead of lists.** Organizations are not listed in code: every organization
+that three or more countries belong to (per Wikidata) becomes a node with its members, join
+and leave dates, seat and leader. Companies are every listed company known in 25+ Wikipedia
+languages (configurable), with tickers mapped to live quotes. Which economies' trade is
+loaded is decided by GDP. Indicators come from the providers' own catalogs (~1,700 series).
+
+**Computed weights.** How much an economy matters (calendar importance, node size) is its
+share of world GDP (IMF WEO; World Bank as fallback); an organization's is its members'
+combined share — replacing a hand-set table.
+
+| Module | What it does |
+|---|---|
+| `server/graph.ts` | Entities, links (with data, sources, ✓/⚠), Wikidata-id index, member sets, search |
+| `server/web/connectors.ts` | Connector registry: schedules, isolation of failures, status for the Data page |
+| `server/web/wikidata.ts` | Countries, organizations + memberships, central banks + governors, cities, companies + executives |
+| `server/web/links.ts` | Trade web (Comtrade), sanctions web, news co-mentions, World Bank country names |
+| `server/web/weights.ts` | GDP shares → economy and organization weights |
+| `server/web/catalog.ts` | World Bank and IMF indicator catalogs, search |
+| `server/web/connections.ts` | Connections of an entity (grouped, ranked), neighborhood network, map layer, statistics |
+
+**Still entered by hand, and why.** Facts no open source publishes in machine-readable form
+(central-bank meeting dates, summit dates, editorial trust tiers for news outlets, which end
+of a featured map layer is "better"), vendor conventions (Yahoo Finance symbol suffixes), and
+the June 2026 verified overlay in `server/data/curated.ts`. Each is dated, and the audit warns
+when live data disagrees with it or a schedule runs out.
 
 ## 1. Shape of the system
 

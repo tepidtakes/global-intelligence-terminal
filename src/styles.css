@@ -326,7 +326,8 @@ table.data th.sortable:hover { color: var(--text); }
 .graphBox .node { cursor: pointer; }
 .graphBox .node:focus-visible circle { stroke: var(--accent); stroke-width: 3; }
 .graphBox .lbl { font-size: 11px; fill: var(--text-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
-.graphBox .legend { position: absolute; left: 10px; bottom: 8px; display: flex; gap: 12px; font-size: 11px; color: var(--text-2); background: color-mix(in srgb, var(--surface) 85%, transparent); padding: 3px 6px; border-radius: 6px; }
+.graphBox .legend { position: absolute; left: 10px; bottom: 8px; display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: calc(100% - 20px); font-size: 11px; color: var(--text-2); background: color-mix(in srgb, var(--surface) 85%, transparent); padding: 3px 6px; border-radius: 6px; }
+.graphBox .legend span { white-space: nowrap; }
 .graphBox .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 .graphBox .tools { position: absolute; right: 8px; top: 8px; display: flex; gap: 4px; }
 .vaultList { display: flex; flex-direction: column; gap: 6px; }
@@ -514,3 +515,16 @@ table.data th.sortable:hover { color: var(--text); }
 .calTable tr.done td { background: color-mix(in srgb, var(--good) 5%, transparent); }
 .basis { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; cursor: help; }
 .basis.ok { color: var(--good); } .basis.warn { color: var(--warn); border-style: dashed; }
+
+/* ───────── The knowledge web ───────── */
+.webItems { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.webItem { display: inline-flex; gap: 5px; align-items: baseline; max-width: 100%; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 12.5px; }
+.webItem:hover { text-decoration: none; border-color: var(--border-strong); }
+.webItem .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
+.webItem .dt { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.webItem .ok { color: var(--good); font-size: 11px; font-weight: 600; }
+.webItem .warnMark { color: var(--warn); font-size: 11px; }
+.webItem.former { opacity: .62; border-style: dashed; }
+.webLayout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+.webSide { position: sticky; top: 70px; }
+@media (max-width: 900px) { .webLayout { grid-template-columns: minmax(0, 1fr); } .webSide { position: static; } }

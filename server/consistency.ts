@@ -31,6 +31,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   'election-result-conflict': 'Election result differs between sources',
   'result-missing': 'Election held, result not recorded',
   'schedule-ending': 'Hand-entered schedule runs out within 90 days',
+  'source-disagreement': 'Two sources disagree about a link',
 };
 
 // Offices legitimately held by more than one person at once.
@@ -81,6 +82,7 @@ export function audit(force = false): Issue[] {
 
     // Live-source ambiguity notes (Wikidata lists two current holders, etc.).
     for (const n of e.attrs?.leaderNotes || []) if (/more than one current/i.test(n)) push({ severity: 'info', category: 'leader-ambiguity', entityId: e.id, message: n });
+      else if (e.type === 'company' && /^.+: Wikidata lists/.test(n)) push({ severity: 'warning', category: 'source-disagreement', entityId: e.id, message: n.replace(/^[^:]+: /, '') });
 
     // Trusted news reporting something the record does not show.
     for (const s of e.attrs?.newsSignals || []) if (s.entityId === e.id && s.status === 'differs-from-record' && s.strength !== 'single-source')
@@ -94,6 +96,7 @@ export function audit(force = false): Issue[] {
     if (r.sourceId && !sources.has(r.sourceId)) push({ severity: 'error', category: 'unknown-source', entityId: r.from, message: `Relationship ${r.type} → ${getEntity(r.to)?.name || r.to} cites unknown source “${r.sourceId}”.` });
     if (r.validFrom && r.validTo && r.validTo < r.validFrom) push({ severity: 'error', category: 'reversed-term', entityId: r.from, relatedIds: [r.to], message: `${r.type} → ${getEntity(r.to)?.name}: ends ${r.validTo}, before it starts (${r.validFrom}).` });
     if (!r.origin && r.validTo && /^Term end inferred from Wikidata/.test(r.note || '')) push({ severity: 'info', category: 'term-closed-by-live-data', entityId: r.from, relatedIds: [r.to], message: r.note! });
+    for (const d of r.disputes || []) push({ severity: 'warning', category: 'source-disagreement', entityId: r.from, relatedIds: [r.to], message: `${r.type.replace(/_/g, ' ')} → ${getEntity(r.to)?.name || r.to}: ${sources.get(r.sourceId || '')?.name?.split(' — ')[0] || r.sourceId || 'the record'} and ${d.detail}.` });
     if ((r.type === 'head_of_state' || r.type === 'head_of_government') && !r.validTo && !SHARED_OFFICE.has(r.to)) {
       const k = `${r.to}|${r.type}`;
       (holders.get(k) || holders.set(k, new Set()).get(k)!).add(r.from);

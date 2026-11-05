@@ -57,8 +57,25 @@ export const PROFILE_INDICATORS = [
 const WB = 'https://api.worldbank.org/v2';
 
 /** One indicator for every country (map layers). year undefined = most recent non-empty value per country. */
+/** Unit of a World Bank indicator from its name: "GDP (current US$)" → USD, "(% of GDP)" → % of GDP. */
+export function unitFromName(name: string) {
+  const u = /\(([^()]*)\)\s*$/.exec(name)?.[1] || '';
+  if (/US\$/.test(u)) return 'USD';
+  if (/^% of /.test(u)) return u;
+  if (/%/.test(u)) return '%';
+  if (/^(per |years?$|days?$|months?$|kg|metric tons|hectares|km|tonnes)/i.test(u)) return u;
+  return u || '';
+}
+const WB_CODE = /^[A-Za-z0-9._]{3,48}$/;
+/** Label and unit for any World Bank indicator: the hand-labelled ones, else from the data's own name. */
+export function wbMeta(code: string, name?: string) {
+  if (WB_INDICATORS[code]) return WB_INDICATORS[code];
+  const label = name || code;
+  return { label, unit: unitFromName(label), short: label.replace(/\s*\([^)]*\)\s*$/, '') };
+}
+
 export async function wbIndicatorAll(code: string, year?: string) {
-  if (!WB_INDICATORS[code]) throw new Error('Unknown indicator');
+  if (!WB_CODE.test(code)) throw new Error('Unknown indicator');
   const q = year ? `date=${encodeURIComponent(year)}` : 'mrnev=1';
   return cached(`wb:all:${code}:${year || 'latest'}`, 86400, async () => {
     const json = await fetchJson(`${WB}/country/all/indicator/${code}?format=json&per_page=1000&${q}`);
@@ -68,7 +85,8 @@ export async function wbIndicatorAll(code: string, year?: string) {
       if (r.value == null || !r.countryiso3code) continue;
       values[r.countryiso3code] = { value: r.value, period: r.date };
     }
-    return { code, ...WB_INDICATORS[code], values, lastUpdated: json?.[0]?.lastupdated as string | undefined };
+    if (!rows.length && !WB_INDICATORS[code]) throw new Error(`The World Bank has no data for indicator ${code}`);
+    return { code, ...wbMeta(code, rows[0]?.indicator?.value), values, lastUpdated: json?.[0]?.lastupdated as string | undefined };
   });
 }
 
@@ -88,7 +106,8 @@ export async function wbCountrySeries(iso3: string, codes = PROFILE_INDICATORS) 
           .filter((r) => r.indicator?.id === code && r.value != null)
           .map((r) => ({ period: r.date, value: r.value }))
           .sort((a, b) => a.period.localeCompare(b.period));
-        out.push({ code, label: WB_INDICATORS[code].label, unit: WB_INDICATORS[code].unit, series, latest: series[series.length - 1], sourceId: 'world-bank-wdi' });
+        const meta = wbMeta(code, rows.find((r) => r.indicator?.id === code)?.indicator?.value);
+        out.push({ code, label: meta.label, unit: meta.unit, series, latest: series[series.length - 1], sourceId: 'world-bank-wdi' });
       }
     }
     return out;
@@ -99,10 +118,10 @@ export async function wbCountrySeries(iso3: string, codes = PROFILE_INDICATORS) 
 export async function wbCountryMeta() {
   return cached('wb:countrymeta', 7 * 86400, async () => {
     const json = await fetchJson(`${WB}/country?format=json&per_page=400`);
-    const meta: Record<string, { incomeLevel: string; region: string; lendingType: string; capital: string }> = {};
+    const meta: Record<string, { incomeLevel: string; region: string; lendingType: string; capital: string; name?: string }> = {};
     for (const c of json?.[1] || []) {
       if (c.region?.value === 'Aggregates') continue;
-      meta[c.id] = { incomeLevel: c.incomeLevel?.value, region: c.region?.value?.trim(), lendingType: c.lendingType?.value, capital: c.capitalCity };
+      meta[c.id] = { incomeLevel: c.incomeLevel?.value, region: c.region?.value?.trim(), lendingType: c.lendingType?.value, capital: c.capitalCity, name: c.name };
     }
     return meta;
   });

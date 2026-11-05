@@ -7,6 +7,7 @@ import { AlertBell } from './alertBits';
 
 const NAV = [
   { to: '/', label: 'Map', icon: '◎', end: true },
+  { to: '/web', label: 'Web', icon: '❖' },
   { to: '/markets', label: 'Markets', icon: '◫' },
   { to: '/trade', label: 'Trade', icon: '⇆' },
   { to: '/conflicts', label: 'Conflicts', icon: '⚔' },

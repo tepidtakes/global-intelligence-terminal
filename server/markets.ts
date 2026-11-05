@@ -439,7 +439,7 @@ export const IMF_INDICATORS: Record<string, { label: string; unit: string; short
 const IMF_ISO: Record<string, string> = { UVK: 'UNK', WBG: 'PSE' };
 
 export async function imfIndicator(code: string) {
-  if (!IMF_INDICATORS[code]) throw new Error('Unknown IMF indicator');
+  if (!/^[A-Za-z0-9_]{2,40}$/.test(code)) throw new Error('Unknown IMF indicator');
   return cached(`imf:${code}`, 24 * 3600, async () => {
     const json = await fetchJson(`https://www.imf.org/external/datamapper/api/v1/${code}`, {}, 40000);
     const vals = json?.values?.[code] || {};

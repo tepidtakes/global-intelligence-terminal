@@ -155,6 +155,37 @@ mayors, governor, Congress delegation and state and city elections; country prof
 their capital's and other cities' leaders. Curated mayors are compared with Wikidata the same
 way as national leaders.
 
+## The knowledge web
+
+The terminal is one connected graph, built mostly from live sources rather than lists in the
+code. Each **connector** (listed on the Data page with what it adds and when it last ran):
+
+| Connector | Source | Adds | Refresh |
+|---|---|---|---|
+| Countries | Wikidata | Wikidata ids, names in 11 languages (so other sources' spellings match), currency, form of government | 3 days |
+| Organizations & memberships | Wikidata | Every organization 3+ countries belong to: members with join/leave dates, seat, leader | 2 days |
+| Central banks | Wikidata | Each country's central bank (the ECB for the euro area) and its governor | 3 days |
+| Capitals & big cities | Wikidata | Every capital and city of 1M+ people, with population and location | 7 days |
+| Listed companies | Wikidata | Companies known in 25+ Wikipedia languages: tickers → live quotes, head office, industry, parent, CEO and chair | 3 days |
+| Trade web | UN Comtrade | Goods trade between the 40 largest economies (by IMF GDP) and their top 30 partners, as each reports it | 7 days |
+| Sanctions web | OFAC, EU, UK, UN lists | Imposer → country, for programmes aimed at the country | with the lists |
+| News web | Trusted outlets | Entities named together in 2+ trusted stories in the last 7 days | 30 min |
+| Economy weights | IMF WEO (World Bank fallback) | Share of world GDP — calendar importance and node size | daily |
+| Indicator catalog | World Bank, IMF | ~1,700 searchable series for maps and charts | 3 days |
+
+**How sources are combined.** Records are matched by Wikidata id, then by exact name, ticker
+or country code — never by guesswork. When a live source reports a link the hand-checked data
+already has, the link shows **✓ 2 sources**; when it disagrees (another end date, a different
+CEO), the link is marked **⚠** and the disagreement is listed in the audit — neither side is
+silently overwritten. Wikidata is community-maintained: links from it are labelled with their
+source on hover.
+
+**Still entered by hand.** Central-bank meeting dates and summit dates (no open
+machine-readable source), the trust tier of each news outlet (an editorial judgement), which
+end of a featured map layer is "better", Yahoo Finance's symbol suffix for each exchange, and
+the June 2026 verified overlay. The audit warns when a schedule runs out or live data
+disagrees.
+
 ## Paid publishers (WSJ, FT, Bloomberg…)
 
 The terminal reads only what publishers offer openly: their **official RSS feeds**
