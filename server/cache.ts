@@ -6,10 +6,13 @@ import crypto from 'node:crypto';
 import { DATA_DIR } from './db.js';
 import { USER_AGENT } from './config.js';
 import { netFetch } from './net.js';
+import { publish } from './live.js';
 
 interface Entry<T> { fetchedAt: string; payload: T; }
 const mem = new Map<string, Entry<any>>();
 const inflight = new Map<string, Promise<any>>();
+/** Fingerprint of each key's latest payload: open pages are told only when the figures change. */
+const sigs = new Map<string, string>();
 
 const file = (key: string) => path.join(DATA_DIR, 'cache', crypto.createHash('sha1').update(key).digest('hex') + '.json');
 
@@ -54,9 +57,16 @@ export async function cached<T>(key: string, ttlSec: number, fetcher: () => Prom
         try {
           const payload = await fetcher();
           const e: Entry<T> = { fetchedAt: new Date().toISOString(), payload };
+          const prev = mem.get(key);
           mem.set(key, e);
-          fs.writeFile(file(key), JSON.stringify(e), () => {});
+          const body = JSON.stringify(payload) ?? 'null';
+          fs.writeFile(file(key), `{"fetchedAt":${JSON.stringify(e.fetchedAt)},"payload":${body}}`, () => {});
           h.lastOk = e.fetchedAt;
+          // Tell open pages (server/live.ts) when the figures changed, not when only the retrieval time did.
+          const sig = crypto.createHash('sha1').update(body).digest('hex');
+          const before = sigs.get(key) ?? (prev ? crypto.createHash('sha1').update(JSON.stringify(prev.payload) ?? 'null').digest('hex') : undefined);
+          sigs.set(key, sig);
+          if (sig !== before) publish(key.split(':')[0]);
           return e;
         } catch (err: any) {
           h.failures++; h.lastError = String(err?.message || err).slice(0, 200); h.lastErrorAt = new Date().toISOString();

@@ -23,7 +23,7 @@ function ObsidianSettings() {
     setVaultPath(c.vaultPath); setFolder(c.folder); setAutoSync(c.autoSync); setEntityPages(c.entityPages);
   }, [data?.config?.vaultPath, data?.config?.folder]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!data) return <Loading lines={3} />;
-  const win = data.platform === 'win32';
+  const win = data.platform === 'win32', mac = data.platform === 'darwin';
   const sep = win ? '\\' : '/';
   const c = data.config;
   const r = c?.lastResult;
@@ -70,8 +70,8 @@ function ObsidianSettings() {
         </div>
       )}
       <label className="field">Vault folder
-        <input className="input codeish" value={vaultPath} onChange={(e) => setVaultPath(e.target.value)} placeholder={win ? 'C:\\Users\\you\\Documents\\My Vault' : '/Users/you/Documents/My Vault'} spellCheck={false} />
-        <span className="tiny muted">{win ? 'Tip: in File Explorer, Shift + right-click the vault folder → “Copy as path”, then paste here. OneDrive folders work too.' : 'The folder you opened as a vault in Obsidian.'}{!data.detected.length && ' No vaults were found automatically.'}</span>
+        <input className="input codeish" value={vaultPath} onChange={(e) => setVaultPath(e.target.value)} placeholder={win ? 'C:\\Users\\you\\Documents\\My Vault' : mac ? '/Users/you/Documents/My Vault' : '/home/you/Documents/My Vault'} spellCheck={false} />
+        <span className="tiny muted">{win ? 'Tip: in File Explorer, Shift + right-click the vault folder → “Copy as path”, then paste here. OneDrive folders work too.' : mac ? 'The folder you opened as a vault in Obsidian. Tip: select it in Finder and press ⌥⌘C to copy its path.' : 'The folder you opened as a vault in Obsidian. Tip: in your file manager select the folder, press Ctrl+C and paste here (a file:// link works too).'}{!data.detected.length && ' No vaults were found automatically.'}</span>
       </label>
       <label className="field">Folder inside the vault
         <input className="input" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="Terminal" style={{ maxWidth: 260 }} />

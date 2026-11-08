@@ -24,7 +24,7 @@
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #e87ba4; --s5: #eda100;
   --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
   --radius: 8px;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", "DejaVu Sans", "Liberation Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
   --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
@@ -528,3 +528,13 @@ table.data th.sortable:hover { color: var(--text); }
 .webLayout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
 .webSide { position: sticky; top: 70px; }
 @media (max-width: 900px) { .webLayout { grid-template-columns: minmax(0, 1fr); } .webSide { position: static; } }
+
+/* Live indicator in the top bar (src/components/LiveBadge.tsx) */
+.liveBadge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1; color: var(--muted); padding: 4px 9px; margin-right: 6px; border-radius: 999px; border: 1px solid var(--border, rgba(127, 127, 127, 0.35)); white-space: nowrap; cursor: default; user-select: none; }
+.liveBadge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.6; flex: none; }
+.liveBadge.live .dot { background: #2fa36b; opacity: 1; animation: livePulse 2.4s ease-out infinite; }
+.liveBadge.connecting .dot, .liveBadge.offline .dot { background: var(--warn, #d08a1e); opacity: 1; }
+.liveBadge.offline { color: var(--warn, #d08a1e); }
+@keyframes livePulse { 0% { box-shadow: 0 0 0 0 rgba(47, 163, 107, 0.5); } 70% { box-shadow: 0 0 0 6px rgba(47, 163, 107, 0); } 100% { box-shadow: 0 0 0 0 rgba(47, 163, 107, 0); } }
+@media (prefers-reduced-motion: reduce) { .liveBadge.live .dot { animation: none; } }
+@media (max-width: 720px) { .liveBadge { border: 0; padding: 4px; margin-right: 2px; } .liveBadge .lbl { display: none; } }

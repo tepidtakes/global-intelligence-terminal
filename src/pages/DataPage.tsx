@@ -74,7 +74,7 @@ export function DataPage() {
           </Card>
 
           <WebCard web={data.web} />
-          <NetworkCard hosts={data.net} />
+          <NetworkCard hosts={data.net} stream={data.stream} />
           <AgreementCard />
           <WatchLoaders data={data} />
 
@@ -211,7 +211,7 @@ function WebCard({ web }: { web: any }) {
 
 // ───────────────────────── Network: one gate per host (server/net.ts) ─────────────────────────
 const NET_STATE: Record<string, [string, string]> = { ok: ['ok', 'ok'], degraded: ['stale', 'recent failures'], open: ['failing', 'skipped'], trial: ['stale', 'due a retest'] };
-function NetworkCard({ hosts }: { hosts?: any[] }) {
+function NetworkCard({ hosts, stream }: { hosts?: any[]; stream?: any }) {
   const [all, setAll] = useState(false);
   if (!hosts?.length) return null;
   const skipped = hosts.filter((h) => h.state === 'open');
@@ -223,6 +223,7 @@ function NetworkCard({ hosts }: { hosts?: any[] }) {
       <div className="kpis" style={{ margin: '0 0 10px' }}>
         <div className="kpi"><div className="tiny muted">Hosts contacted</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{hosts.length}</div><div className="tiny muted">{requests.toLocaleString()} requests</div></div>
         <div className="kpi"><div className="tiny muted">Retried</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{retries.toLocaleString()}</div><div className="tiny muted">rate limits, dropped connections</div></div>
+        {stream && <div className="kpi" title="Open pages receive these over Server-Sent Events and refresh what they show"><div className="tiny muted">Live updates sent</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{stream.seq.toLocaleString()}</div><div className="tiny muted">{stream.lastAt ? `last ${ago(stream.lastAt)}` : 'none yet'} · {stream.clients} open page{stream.clients === 1 ? '' : 's'}</div></div>}
         <div className="kpi"><div className="tiny muted">Skipped now</div><div style={{ fontSize: 18, fontWeight: 600, color: skipped.length ? 'var(--warn)' : undefined }} className="num">{skipped.length}</div><div className="tiny muted">{skipped.length ? skipped.slice(0, 2).map((h) => h.host).join(', ') : 'every host is answering'}</div></div>
       </div>
       <div style={{ overflowX: 'auto' }}><table className="data"><thead><tr><th>Host</th><th>State</th><th className="num">Requests</th><th className="num">Average</th><th className="num">Retries</th><th>Last error</th></tr></thead>

@@ -10,11 +10,12 @@ import { TYPE_ICON } from '../format';
 
 const KINDS: [string, string, string][] = [['release', 'Data releases', '📊'], ['central-bank', 'Central banks', '🏦'], ['igo', 'Summits, assemblies & votes', '🗓'], ['budget', 'Budgets', '💰'], ['election', 'Elections', '🗳'], ['event', 'Other events', '◷']];
 const BASIS: Record<string, { label: string; help: string; cls: string }> = {
-  'official-live': { label: 'official', help: 'From an official calendar, fetched live', cls: 'ok' },
+  'official-live': { label: 'official', help: 'From an official calendar or the institution’s own schedule page, read live', cls: 'ok' },
   'official-curated': { label: 'official', help: 'From an official published schedule, entered by hand and checked against several sources', cls: 'ok' },
   'official-rule': { label: 'official rule', help: 'A fixed rule the institution publishes (e.g. “the 20th of each month”)', cls: 'ok' },
   'usual-timing': { label: '≈ usual timing', help: 'Not a confirmed date: the agency usually publishes around this time. Check the source before relying on it.', cls: 'warn' },
   'to-verify': { label: 'to verify', help: 'From a single source — check the official calendar', cls: 'warn' },
+  'reference-live': { label: 'Wikidata', help: 'Found in Wikidata (community-edited, read daily) — confirm on the organizer’s site before relying on it', cls: 'warn' },
 };
 const RANGES: [string, string, number, number][] = [['today', 'Today', 0, 0], ['week', 'Next 7 days', 0, 6], ['month', 'Next 30 days', 0, 30], ['quarter', 'Next 90 days', 0, 90], ['past', 'Past 14 days', -14, -1]];
 const addDays = (d: string, n: number) => { const x = new Date(`${d}T12:00:00`); x.setDate(x.getDate() + n); return x.toLocaleDateString('en-CA'); };

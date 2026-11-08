@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import TurndownService from 'turndown';
 // @ts-ignore — no type declarations published
@@ -45,13 +46,15 @@ function safeFileName(filename: string) {
   const ext = path.extname(filename).replace(/[^A-Za-z0-9.]/g, '').slice(0, 12);
   return safeName(path.basename(filename, path.extname(filename)), 100) + ext;
 }
-/** Accepts what people paste on Windows: quotes from "Copy as path", %USERPROFILE%, ~, / or \. */
+/** Accepts what people paste: quotes from Windows' "Copy as path", %USERPROFILE%, ~, / or \, and
+ *  file:// links (what Linux file managers put on the clipboard when you copy a folder). */
 export function normalizeVaultPath(input: string) {
   let p = String(input || '').trim().replace(/^["']+|["']+$/g, '');
+  if (/^file:\/\//i.test(p)) { try { p = fileURLToPath(p); } catch { /* not a local file link: rejected below */ } }
   p = p.replace(/%([^%]+)%/g, (m, v) => process.env[v] ?? process.env[v.toUpperCase()] ?? m);
   if (p === '~' || /^~[\\/]/.test(p)) p = path.join(os.homedir(), p.slice(1));
   if (!p) throw new Error('Enter the folder of your Obsidian vault.');
-  if (!path.isAbsolute(p)) throw new Error(process.platform === 'win32' ? 'Use a full path, e.g. C:\\Users\\you\\Documents\\My Vault' : 'Use a full path, e.g. /Users/you/Documents/My Vault');
+  if (!path.isAbsolute(p)) throw new Error(process.platform === 'win32' ? 'Use a full path, e.g. C:\\Users\\you\\Documents\\My Vault' : process.platform === 'darwin' ? 'Use a full path, e.g. /Users/you/Documents/My Vault' : 'Use a full path, e.g. /home/you/Documents/My Vault');
   return path.resolve(p);
 }
 function normalizeFolder(input: string) {
@@ -208,6 +211,18 @@ function getConfig(userId: string): VaultConfig | undefined {
 const vaultName = (p: string) => path.basename(p);
 const obsidianUri = (absFile: string) => `obsidian://open?path=${encodeURIComponent(absFile)}`;
 
+// Linux (and other Unix) file systems are case-sensitive: "Notes" and "notes" are two folders there.
+const vaultKey = (p: string) => (process.platform === 'win32' || process.platform === 'darwin' ? p.toLowerCase() : p);
+/** The Documents folder, which Linux desktops may name in the user's language (xdg-user-dirs). */
+function documentsDir(home: string) {
+  if (process.platform === 'linux') {
+    try {
+      const m = fs.readFileSync(path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'user-dirs.dirs'), 'utf8').match(/^XDG_DOCUMENTS_DIR="?([^"\n]+)"?/m);
+      if (m) return m[1].replace(/^\$HOME(?=\/|$)/, home);
+    } catch { /* no xdg-user-dirs on this system */ }
+  }
+  return path.join(home, 'Documents');
+}
 /** Vaults Obsidian knows about (its own vault list) plus vault-looking folders in Documents / OneDrive. */
 export function detectVaults() {
   const home = os.homedir();
@@ -215,21 +230,21 @@ export function detectVaults() {
     ? [path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'obsidian', 'obsidian.json')]
     : process.platform === 'darwin'
       ? [path.join(home, 'Library', 'Application Support', 'obsidian', 'obsidian.json')]
-      : [path.join(home, '.config', 'obsidian', 'obsidian.json'), path.join(home, '.var', 'app', 'md.obsidian.Obsidian', 'config', 'obsidian', 'obsidian.json'), path.join(home, 'snap', 'obsidian', 'current', '.config', 'obsidian', 'obsidian.json')];
+      : [path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'obsidian', 'obsidian.json'), path.join(home, '.var', 'app', 'md.obsidian.Obsidian', 'config', 'obsidian', 'obsidian.json'), path.join(home, 'snap', 'obsidian', 'current', '.config', 'obsidian', 'obsidian.json')];
   const found = new Map<string, { name: string; path: string; source: string }>();
   for (const f of cfgFiles) {
     try {
       const j = JSON.parse(fs.readFileSync(f, 'utf8'));
-      for (const v of Object.values<any>(j.vaults || {})) if (v?.path && fs.existsSync(v.path)) found.set(path.resolve(v.path).toLowerCase(), { name: vaultName(v.path), path: path.resolve(v.path), source: 'Obsidian vault list' });
+      for (const v of Object.values<any>(j.vaults || {})) if (v?.path && fs.existsSync(v.path)) found.set(vaultKey(path.resolve(v.path)), { name: vaultName(v.path), path: path.resolve(v.path), source: 'Obsidian vault list' });
     } catch { /* Obsidian not installed for this account */ }
   }
-  const roots = [path.join(home, 'Documents'), home, process.env.OneDrive && path.join(process.env.OneDrive, 'Documents'), process.env.OneDrive].filter(Boolean) as string[];
+  const roots = [documentsDir(home), home, process.env.OneDrive && path.join(process.env.OneDrive, 'Documents'), process.env.OneDrive].filter(Boolean) as string[];
   for (const r of roots) {
     try {
       for (const d of fs.readdirSync(r, { withFileTypes: true })) {
         if (!d.isDirectory() || d.name.startsWith('.')) continue;
         const p = path.join(r, d.name);
-        if (fs.existsSync(path.join(p, '.obsidian')) && !found.has(p.toLowerCase())) found.set(p.toLowerCase(), { name: d.name, path: p, source: 'Found on disk' });
+        if (fs.existsSync(path.join(p, '.obsidian')) && !found.has(vaultKey(p))) found.set(vaultKey(p), { name: d.name, path: p, source: 'Found on disk' });
       }
     } catch { /* folder missing */ }
   }

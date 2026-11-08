@@ -25,13 +25,13 @@ import { mayorsWithin } from './localPolitics.js';
 import { registerAlertRoutes, alertsByPlace } from './alerts.js';
 import { startMarketWatch } from './marketWatch.js';
 import { startCalendar, calendarFor, calendarPlaces, calendarStatus } from './econCalendar.js';
-import { changesFor, recentChanges, emitNew, CHANGE_KINDS, type Change } from './changes.js';
+import { changesFor, recentChanges, emitNew, onChange, CHANGE_KINDS, type Change } from './changes.js';
 import { startSanctions, sanctionsFor, listingsFor, regimesOf, sanctionsLayer, sanctionsStatus, sanctionsMeta, LIST_OF_IMPOSER, LISTS, LIST_IDS, type ListId } from './sanctions.js';
 import { startTariffs, tariffsFor, tariffLayer, tariffsStatus } from './tariffs.js';
 import { startBudgets, budgetFor } from './budgets.js';
 import { partnersView, tradePair, tradeWithLayer } from './tradeExplorer.js';
 // The knowledge web: connectors register themselves when their modules load.
-import { startConnectors, connectorsStatus, runConnector, connectorIds } from './web/connectors.js';
+import { startConnectors, connectorsStatus, runConnector, connectorIds, onConnectorRun } from './web/connectors.js';
 import './web/wikidata.js';
 import './web/links.js';
 import { weightsStatus } from './web/weights.js';
@@ -39,9 +39,10 @@ import { searchMetrics, metricMeta, catalogStatus } from './web/catalog.js';
 import { connectionsFor, neighborhood, webLayer, webStats } from './web/connections.js';
 import { startReserves, reservesFor, stocksForCommodity, reservesLayer, gasLayer, reservesStatus, GRAINS } from './reserves.js';
 import { hostHealth } from './net.js';
+import { publish, liveStream, streamStatus } from './live.js';
 import { agreementFor, agreementSummary, agreementStatus } from './agreement.js';
 import crypto from 'node:crypto';
-import { normName } from './graph.js';
+import { normName, onGraphChange } from './graph.js';
 import { canonicalUrl, titleKey, sameStory } from './newsParse.js';
 import { publisherForDomain, publisherForName, tierForDomain, isTrusted, TIER_INFO, PUBLISHERS } from '../shared/newsSources.js';
 import { INTENSITY } from './worldEvents.js';
@@ -602,6 +603,8 @@ api.get('/web/:id/graph', (req, res) => {
   if (!g) return res.status(404).json({ error: 'Not found' });
   res.json(g);
 });
+// Live updates for open pages (Server-Sent Events, server/live.ts).
+api.get('/live', liveStream);
 api.get('/web-status', (_req, res) => res.json({ connectors: connectorsStatus(), stats: webStats(), catalog: catalogStatus(), weights: weightsStatus() }));
 // Run one connector now (signed-in users; e.g. after allowing a host in the network settings).
 api.post('/web-status/run/:id', wrap(async (req, res) => {
@@ -749,7 +752,7 @@ function providerRows() {
   }).sort((a, b) => a.label.localeCompare(b.label));
 }
 api.get('/provenance/status', (_req, res) => {
-  res.json({ providers: providerRows(), live: liveStatus, news: newsStatus(), calendar: calendarStatus(), sanctions: sanctionsStatus(), tariffs: tariffsStatus(), reserves: reservesStatus(), web: { connectors: connectorsStatus(), stats: webStats(), catalog: catalogStatus(), weights: weightsStatus() }, net: hostHealth(), agreement: agreementStatus(), coverage: coverage(), generatedAt: new Date().toISOString() });
+  res.json({ providers: providerRows(), live: liveStatus, news: newsStatus(), calendar: calendarStatus(), sanctions: sanctionsStatus(), tariffs: tariffsStatus(), reserves: reservesStatus(), web: { connectors: connectorsStatus(), stats: webStats(), catalog: catalogStatus(), weights: weightsStatus() }, net: hostHealth(), stream: streamStatus(), agreement: agreementStatus(), coverage: coverage(), generatedAt: new Date().toISOString() });
 });
 // World Bank vs IMF: the summary (Data page) and one country (profile).
 api.get('/quality/agreement', (_req, res) => res.json(agreementSummary() || { ready: false }));
@@ -914,6 +917,11 @@ setTimeout(() => {
 }, 4000).unref();
 // When live leaders/conflicts change, re-tag headlines and re-check news signals against them.
 onLiveRefresh(() => retagAll());
+// Tell open pages when data changes; modules with their own refresh loops publish too.
+onGraphChange(() => publish('graph'));
+onConnectorRun((id) => publish(`connector:${id}`));
+onLiveRefresh(() => publish('live-data'));
+onChange(() => publish('changes'));
 // Data discrepancies become (low-importance) changes, so a rule can watch for them. World Bank vs
 // IMF conflicts post their own, once per country, figure and year (agreement.ts).
 onLiveRefresh(() => {

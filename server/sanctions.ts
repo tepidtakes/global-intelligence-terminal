@@ -7,6 +7,7 @@
 // after a country (US "IRAN", EU "RUS", UK "Russia", UN "DPRK") counts as a programme targeting
 // that country; everything else counts as individual listings connected to it.
 // Graph people and companies are flagged only on an exact full-name match, shown as "possible match".
+import { publish } from './live.js';
 import { cached, fetchText } from './cache.js';
 import { countryIdByName, getEntity, listByType, normName, byIso3 } from './graph.js';
 import { recordChange, kvGet, kvSet, type Change } from './changes.js';
@@ -353,7 +354,7 @@ export function sanctionsLayer(list: ListId | 'ALL') {
 
 export function startSanctions() {
   setTimeout(() => { void refreshSanctions().catch((e) => console.warn('[sanctions]', e.message)); }, 15000).unref();
-  setInterval(() => { void refreshSanctions().catch(() => {}); }, 6 * 3600_000).unref();
+  setInterval(() => { void refreshSanctions().then(() => publish('sanctions')).catch(() => {}); }, 6 * 3600_000).unref();
 }
 
 export const _test = { setState: (s: any) => { state = s; nameIndex = null; }, splitCountries };

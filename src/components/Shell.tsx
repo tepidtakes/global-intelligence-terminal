@@ -4,6 +4,7 @@ import { useAuth, useApp } from '../state';
 import { GlobalSearch } from './GlobalSearch';
 import { ErrorBoundary } from './ErrorBoundary';
 import { AlertBell } from './alertBits';
+import { LiveBadge } from './LiveBadge';
 
 const NAV = [
   { to: '/', label: 'Map', icon: '◎', end: true },
@@ -49,6 +50,7 @@ export function Shell() {
           {link('/settings', 'Settings', '⚙', 'menuOnly')}
         </nav>
         <div className="spacer" />
+        <LiveBadge />
         <button className="btn ghost sm" onClick={() => setTheme(nextTheme)} title={`Theme: ${theme} (click for ${nextTheme})`} aria-label="Toggle theme">
           {theme === 'dark' ? '☾' : theme === 'light' ? '☀' : '◐'}
         </button>

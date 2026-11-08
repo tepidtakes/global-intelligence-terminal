@@ -14,6 +14,9 @@
 // Results: US data from FRED (BLS/BEA/Census/Fed series), euro-area inflation from Eurostat, every
 // central-bank decision from the BIS policy-rate data. Consensus forecasts are licensed data and
 // are not shown.
+import { publish } from './live.js';
+import { readSchedulePage, acceptSchedule, hasSchedulePage } from './bankSchedules.js';
+import { liveOrgEvents } from './web/events.js';
 import { cached, fetchText, fetchJson } from './cache.js';
 import { economyWeight } from './web/weights.js';
 import { onConnectorRun } from './web/connectors.js';
@@ -23,7 +26,7 @@ import { recordChange, emitNew, kvGet, kvSet, type Change } from './changes.js';
 import { USER_AGENT } from './config.js';
 
 export type CalKind = 'release' | 'central-bank' | 'igo' | 'budget' | 'election' | 'event';
-export type DateBasis = 'official-live' | 'official-curated' | 'official-rule' | 'usual-timing' | 'to-verify';
+export type DateBasis = 'official-live' | 'official-curated' | 'official-rule' | 'usual-timing' | 'to-verify' | 'reference-live';
 export interface CalResult { headline: string; actual?: number; previous?: number; unit?: string; period?: string; sourceId: string; retrievedAt: string; url?: string; }
 export interface CalEvent {
   id: string; kind: CalKind; title: string; placeIds: string[]; start: string; end?: string; allDay: boolean; timeLabel?: string;
@@ -176,12 +179,30 @@ export const BANK_SCHEDULES: BankSchedule[] = [
   { area: 'CAN', placeIds: ['country:CAN'], bank: 'Bank of Canada', tz: 'America/Toronto', time: '09:45', timeLabel: '09:45 ET', sourceId: 'boc-schedule', url: 'https://www.bankofcanada.ca/core-functions/monetary-policy/key-interest-rate/',
     dates: ['2026-12-09', '2027-01-27', '2027-03-03', '2027-04-28', '2027-06-02', '2027-07-21', '2027-09-08', '2027-10-27', '2027-12-08'] },
 ];
+// Dates read from the banks' own schedule pages (bankSchedules.ts) when the reading agrees with the
+// checked list above; the checked list stands in for banks whose page could not be read or used.
+const liveBanks = new Map<string, { dates: string[]; at: string }>();
+function bankDates(b: BankSchedule) {
+  const from = new Date(Date.now() - 45 * 86400_000).toISOString().slice(0, 10);
+  return [...new Set([...b.dates, ...(liveBanks.get(b.area)?.dates || []).filter((d) => d >= from)])].sort();
+}
+const pageNote = (b: BankSchedule, d: string) => `Read from the bank’s published schedule (${liveBanks.get(b.area)!.at.slice(0, 10)})${b.dates.includes(d) ? '; matches the checked list' : ''}`;
+async function readBankPages(errors: string[]) {
+  await Promise.all(BANK_SCHEDULES.filter((b) => hasSchedulePage(b.area)).map(async (b) => {
+    try {
+      const r = await readSchedulePage(b.area, b.url);
+      const v = acceptSchedule(r.data, b.dates);
+      if (v.ok) liveBanks.set(b.area, { dates: v.dates, at: r.fetchedAt });
+      else { liveBanks.delete(b.area); errors.push(`${b.bank}: its schedule page was read but not used (${v.reason}) — showing the checked dates`); }
+    } catch (e: any) { errors.push(`${b.bank} schedule page: ${e?.message || e} — showing the checked dates`); }
+  }));
+}
 function bankEvents(): CalEvent[] {
   const out: CalEvent[] = [];
-  for (const b of BANK_SCHEDULES) for (const d of b.dates) {
-    const g = grade(6, 'Policy-rate decision', b.placeIds);
+  for (const b of BANK_SCHEDULES) for (const d of bankDates(b)) {
+    const g = grade(6, 'Policy-rate decision', b.placeIds); const fromPage = !!liveBanks.get(b.area)?.dates.includes(d);
     out.push({ id: `cb:${b.area}:${d}`, kind: 'central-bank', title: `${b.bank} rate decision`, placeIds: b.placeIds, start: zonedToUtc(d, b.time, b.tz), allDay: false, timeLabel: b.timeLabel,
-      basis: 'official-curated', basisNote: 'Published meeting schedule (entered by hand, checked against several sources)', sourceId: b.sourceId, url: b.url, note: b.note, status: 'scheduled', indicator: `cb:${b.area}`, ...g });
+      basis: fromPage ? 'official-live' : 'official-curated', basisNote: fromPage ? pageNote(b, d) : 'Published meeting schedule (entered by hand, checked against several sources)', sourceId: b.sourceId, url: b.url, note: b.note, status: 'scheduled', indicator: `cb:${b.area}`, ...g });
   }
   return out;
 }
@@ -281,9 +302,29 @@ export const IGO_EVENTS: IgoDef[] = [
   { id: 'g20-2026', title: 'G20 Leaders’ Summit — Miami', placeIds: ['igo:g20', 'country:USA'], start: '2026-12-14', end: '2026-12-15', base: 5, baseWhy: 'Leaders’ summit of the largest economies', url: 'https://en.wikipedia.org/wiki/2026_G20_Miami_summit', basis: 'official-curated' },
   { id: 'euco-2026-12', title: 'European Council summit (EU heads of government)', placeIds: ['igo:eu'], start: '2026-12-16', end: '2026-12-17', base: 5, baseWhy: 'EU leaders’ summit (decisions by consensus)', url: 'https://www.consilium.europa.eu/en/meetings/calendar/', basis: 'to-verify', note: 'June 2026 planning gives 16–17 December; an earlier plan said 17–18 — confirm on the Council calendar.' },
 ];
-function igoEvents(): CalEvent[] {
+function curatedIgoEvents(): CalEvent[] {
   return IGO_EVENTS.map((d) => ({ id: `igo:${d.id}`, kind: 'igo' as const, title: d.title, placeIds: d.placeIds, start: d.start, end: d.end, allDay: true, basis: d.basis, basisNote: d.basis === 'to-verify' ? 'Single source — verify' : 'Published schedule (checked against several sources)',
     sourceId: 'igo-calendars', url: d.url, note: d.note, status: 'scheduled' as const, ...grade(d.base, d.baseWhy, d.placeIds) }));
+}
+
+/** The checked IGO dates above plus meetings of the web's organizations found in Wikidata
+ *  (web/events.ts). Where both have the same meeting (same organization, start within a day) the
+ *  checked entry stays and notes that Wikidata agrees. */
+function igoEvents(): CalEvent[] {
+  const out = curatedIgoEvents();
+  for (const e of liveOrgEvents()) {
+    const twin = IGO_EVENTS.find((d) => Math.abs(Date.parse(d.start) - Date.parse(e.start)) <= 86400_000 && d.placeIds.some((p) => e.placeIds.includes(p)));
+    if (twin) {
+      const c = out.find((x) => x.id === `igo:${twin.id}`);
+      if (c && !/Wikidata/.test(c.basisNote || '')) c.basisNote = c.basisNote ? `${c.basisNote} · Wikidata has the same dates` : 'Wikidata has the same dates';
+      continue;
+    }
+    const base = /summit|leaders/i.test(e.title) ? 5 : /ministerial|council|assembly|conference|congress|session/i.test(e.title) ? 4 : 3;
+    const why = base === 5 ? 'Summit of an organization in the web' : base === 4 ? 'Ministerial meeting, assembly or conference' : 'Meeting of an organization in the web';
+    out.push({ id: `igo:wd-${e.qid}`, kind: 'igo', title: e.location && !e.title.includes(e.location) ? `${e.title} — ${e.location}` : e.title, placeIds: e.placeIds, start: e.start, end: e.end, allDay: true,
+      basis: 'reference-live', basisNote: 'From Wikidata (community-edited, read daily) — confirm on the organizer’s site', sourceId: 'wikidata', url: e.url, status: 'scheduled', ...grade(base, why, e.placeIds) });
+  }
+  return out;
 }
 
 // ───────────────────────── Budget days (statutory / standing practice) ─────────────────────────
@@ -399,7 +440,7 @@ const resultsStore = () => kvGet<Record<string, CalResult>>('econ:results', {});
 export async function buildCalendar() {
   const from = new Date(Date.now() - 45 * 86400_000), to = new Date(Date.now() + 120 * 86400_000);
   const errors: string[] = [];
-  const [bls, fred] = await Promise.allSettled([blsCalendar(), fredCalendar()]);
+  const [bls, fred] = await Promise.allSettled([blsCalendar(), fredCalendar(), readBankPages(errors)]);
   const live: CalEvent[] = [];
   if (bls.status === 'fulfilled') live.push(...bls.value.data); else errors.push(`BLS calendar: ${bls.reason?.message || bls.reason}`);
   if (fred.status === 'fulfilled' && fred.value) live.push(...fred.value.data); else if (fred.status === 'rejected') errors.push(`FRED calendar: ${fred.reason?.message || fred.reason}`);
@@ -419,6 +460,7 @@ export async function buildCalendar() {
   lastBuild = { at: new Date().toISOString(), errors, counts };
   await updateResults();
   emitUpcoming();
+  publish('calendar');
   return lastBuild;
 }
 
@@ -477,8 +519,8 @@ export function scheduleWarnings(days = 90) {
   const horizon = new Date(Date.now() + days * 86400_000).toISOString().slice(0, 10);
   const out: { message: string; entityId?: string }[] = [];
   for (const b of BANK_SCHEDULES) {
-    const last = [...b.dates].sort().at(-1) || '';
-    if (last < horizon) out.push({ entityId: b.placeIds[0], message: `${b.bank}: the hand-entered meeting schedule ends ${last || '(no dates)'} — add the next dates from ${b.url}` });
+    const last = bankDates(b).at(-1) || '';
+    if (last < horizon) out.push({ entityId: b.placeIds[0], message: `${b.bank}: the meeting schedule ends ${last || '(no dates)'} (checked list${hasSchedulePage(b.area) ? ', not extended by the bank’s page' : ''}) — add the next dates from ${b.url}` });
   }
   return out;
 }
@@ -489,12 +531,12 @@ export function calendarSourceIds() {
 }
 
 // Rebuild when weights or organizations change, so importance reflects the latest data.
-onConnectorRun((id) => { if (id === 'economy-weights' || id === 'wikidata-organizations') void buildCalendar().catch(() => undefined); });
+onConnectorRun((id) => { if (id === 'economy-weights' || id === 'wikidata-organizations' || id === 'wikidata-events') void buildCalendar().catch(() => undefined); });
 export function startCalendar() {
   setTimeout(() => { void buildCalendar().catch((e) => console.warn('[calendar]', e.message)); }, 8000).unref();
   setInterval(() => { void buildCalendar().catch(() => {}); }, 6 * 3600_000).unref();
   // Results: every 15 minutes (a release's figures appear in the sources within minutes to hours).
-  setInterval(() => { void updateResults().then(emitUpcoming).catch(() => {}); }, 15 * 60_000).unref();
+  setInterval(() => { void updateResults().then(emitUpcoming).then(() => publish('calendar')).catch(() => {}); }, 15 * 60_000).unref();
 }
 
 export const _test = { bankEvents, usualEvents, igoEvents, budgetEvents };

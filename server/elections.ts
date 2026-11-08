@@ -7,6 +7,7 @@
 //   • candidate policies on request: each party's stated ideology and position, and the
 //     candidate's "Political positions" article or section.
 // Everything is labelled community (Wikipedia) and cross-checked with trusted-news reports.
+import { publish } from './live.js';
 import crypto from 'node:crypto';
 import { cached, fetchJson } from './cache.js';
 import { entities, getEntity, upsertEntity, setLiveRels, relsOfType, findPerson, stub } from './graph.js';
@@ -309,6 +310,6 @@ export function startElectionDetails() {
     try { liveStatus['election-results'] = { ok: true, at: new Date().toISOString(), detail: await refreshElectionDetails(), sourceId: SRC }; }
     catch (e: any) { liveStatus['election-results'] = { ok: false, at: new Date().toISOString(), detail: e.message, sourceId: SRC }; }
   };
-  setInterval(() => { void run(); }, 30 * 60_000).unref();
+  setInterval(() => { void run().then(() => publish('elections')); }, 30 * 60_000).unref();
   return run;
 }

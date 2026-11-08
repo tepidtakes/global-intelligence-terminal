@@ -326,6 +326,10 @@ The World Bank and the IMF are compared country by country for GDP, real growth,
 
 Every request to the sources on this page goes through one network gate per host: rate-limited services (Wikidata, UN Comtrade, the SEC) get one or a few requests at a time with pauses between them, `Retry-After` is honoured, and a source that keeps failing is skipped for a while instead of slowing every page down. The Data page's *Network* card shows each host's state.
 
+## Calendar dates read live
+
+Central-bank decision days come from the banks' own schedule pages where the terminal can read them (Federal Reserve, ECB, Bank of England), cross-checked against a hand-checked list that stays in use whenever a page cannot be read or disagrees. Summits, conferences and assemblies of the organizations in the knowledge web come from Wikidata and are labelled as such. Details: *Calendar dates read live instead of typed in* in `docs/ARCHITECTURE.md`.
+
 ## Known gaps
 
 - No openly licensed prices for lithium, cobalt, nickel or rare earths; uranium and coal

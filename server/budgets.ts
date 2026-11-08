@@ -6,6 +6,7 @@
 //   • EU and EFTA members, and the EU as a whole — spending by function (Eurostat COFOG, gov_10a_exp);
 //   • United States, live — debt to the penny, interest on the debt and its average rate (Treasury
 //     Fiscal Data), and monthly receipts, outlays and deficit (Monthly Treasury Statement, via FRED).
+import { publish } from './live.js';
 import { cached, fetchJson } from './cache.js';
 import { getEntity, membersByName } from './graph.js';
 import { fredSeries } from './markets.js';
@@ -198,5 +199,5 @@ export async function budgetFor(placeId: string) {
 export function startBudgets() {
   // US debt: daily figure, checked every 6 hours (also records the "passed $N trillion" change).
   setTimeout(() => { void usFiscal().catch(() => {}); }, 30000).unref();
-  setInterval(() => { void usFiscal().catch(() => {}); }, 6 * 3600_000).unref();
+  setInterval(() => { void usFiscal().then(() => publish('budgets')).catch(() => {}); }, 6 * 3600_000).unref();
 }

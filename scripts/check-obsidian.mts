@@ -1,11 +1,12 @@
 // Checks the Obsidian Markdown conversion and Windows-safe naming.
 // Run: npm run check:obsidian   (uses a temporary data folder, never your real notes)
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 process.env.TERMINAL_DATA_DIR ||= path.join(os.tmpdir(), 'git-obsidian-check');
-const { _internal, safeName, normalizeVaultPath } = await import(pathToFileURL(path.resolve('server/obsidian.ts')).href);
+const { _internal, safeName, normalizeVaultPath, detectVaults } = await import(pathToFileURL(path.resolve('server/obsidian.ts')).href);
 const { htmlToMarkdown, markdownToHtml, entityNames } = _internal;
 const { entFile } = entityNames();
 let failed = 0;
@@ -71,6 +72,35 @@ if (process.platform === 'win32') {
   check('~ expands to home', normalizeVaultPath('~/Vault') === path.join(os.homedir(), 'Vault'));
   let threw = false; try { normalizeVaultPath('relative\\path'); } catch { threw = true; }
   check('relative path rejected', threw);
+}
+
+// Paths people paste on Linux and macOS
+if (process.platform !== 'win32') {
+  check('file:// links from a file manager accepted', normalizeVaultPath('file:///home/me/My%20Vault') === '/home/me/My Vault', normalizeVaultPath('file:///home/me/My%20Vault'));
+  check('~ expands to home', normalizeVaultPath('~/Vault') === path.join(os.homedir(), 'Vault'));
+  let example = ''; try { normalizeVaultPath('relative/path'); } catch (e: any) { example = e.message; }
+  check('relative path rejected, with an example for this system', process.platform === 'darwin' ? /\/Users\/you\//.test(example) : /\/home\/you\//.test(example), example);
+}
+// Vault detection on Linux: the XDG config folder, a Documents folder named in another language,
+// and folder names that differ only in case (Linux file systems are case-sensitive).
+if (process.platform === 'linux') {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'git-obsidian-linux-'));
+  const home = path.join(tmp, 'home'), cfg = path.join(tmp, 'cfg');
+  for (const d of ['Notes', 'notes', path.join('Dokumente', 'Arbeit', '.obsidian')]) fs.mkdirSync(path.join(home, d), { recursive: true });
+  fs.mkdirSync(path.join(cfg, 'obsidian'), { recursive: true });
+  fs.writeFileSync(path.join(cfg, 'obsidian', 'obsidian.json'), JSON.stringify({ vaults: { a: { path: path.join(home, 'Notes') }, b: { path: path.join(home, 'notes') } } }));
+  fs.writeFileSync(path.join(cfg, 'user-dirs.dirs'), 'XDG_DOCUMENTS_DIR="$HOME/Dokumente"\n');
+  const saved = { HOME: process.env.HOME, XDG: process.env.XDG_CONFIG_HOME };
+  process.env.HOME = home; process.env.XDG_CONFIG_HOME = cfg;
+  let found: string[] = [];
+  try { found = detectVaults().map((v: any) => v.path); } finally {
+    process.env.HOME = saved.HOME;
+    if (saved.XDG === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = saved.XDG;
+  }
+  check('vault list read from $XDG_CONFIG_HOME/obsidian/obsidian.json', found.includes(path.join(home, 'Notes')), found);
+  check('two vaults whose names differ only in case are both kept', found.includes(path.join(home, 'notes')) && found.includes(path.join(home, 'Notes')), found);
+  check('a vault in a Documents folder named in another language is found (xdg-user-dirs)', found.includes(path.join(home, 'Dokumente', 'Arbeit')), found);
+  fs.rmSync(tmp, { recursive: true, force: true });
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nAll checks passed');

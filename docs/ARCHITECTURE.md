@@ -86,7 +86,7 @@ Browser (React + MapLibre)                     Node server (Express, one process
 * **One process in dev**: Express mounts Vite in middleware mode, so `npm run dev` serves
   both the API and the hot-reloading UI on one port.
 * **Why SQLite instead of PostgreSQL/PostGIS for the MVP**: zero install on a desktop,
-  built into Node 24 (`node:sqlite`), FTS5 full-text search included. The storage layer is
+  built into Node 22.13+ (`node:sqlite`), FTS5 full-text search included. The storage layer is
   a thin module (`server/db.ts`); `db/postgres-schema.sql` is the production target with
   PostGIS geometry and the same tables. Geometry today ships as static TopoJSON
   (`world-atlas`, `us-atlas`), which MapLibre renders client-side.
@@ -355,6 +355,17 @@ The World Bank and the IMF publish the same headline figures. The `cross-source-
 | Population | SP.POP.TOTL | LP | 2% |
 
 Levels are compared by their difference as a share of the mean of the two figures; rates by percentage points, or 5% of the figure when that is more (very high inflation). Within the tolerance the figures agree, up to three times it they differ, beyond that they conflict. The current year (IMF projections), figures older than six years and aggregates such as the world are skipped. Conflicts go to the consistency audit (category `source-figures-conflict`; unemployment as information only, since the World Bank uses ILO modelled estimates and the IMF national definitions), to the change feed once per country, figure and year, to the Data page's *Cross-source checks* card and to the *Cross-checked figures* card on country profiles. API: `/api/quality/agreement`, `/api/quality/agreement/:iso3`.
+
+### Live updates
+
+`server/live.ts` turns data changes into events for open pages. Producers call `publish(source)`: the cache (`cached()` fingerprints each payload and publishes its provider prefix only when the figures change), the graph (`onGraphChange`), connector runs, the live-data refresh, the change feed, and the refresh loops of the news, calendar, elections, markets, sanctions, tariffs, budgets and reserves modules. Bursts are merged into one event, at most one every 2 s (`LIVE_MERGE_MS`), and sent over Server-Sent Events at `GET /api/live` (`Cache-Control: no-transform` keeps compression from buffering it; a comment line every 25 s keeps it open). The greeting carries the server's start time and event number, so a page that was away, or a restarted server, triggers a catch-up.
+
+In the browser, `src/api.ts` registers every mounted `useApi` view. On an event the views on screen fetch again (views with a TTL of 6 h or more hold reference data and refresh only by TTL); every 15 s, views older than their TTL (at least 30 s) refresh while the tab is visible. Refreshes are silent: no loading state, a failed refresh keeps the last good data, and an identical response keeps the same object, so nothing re-renders. Hidden tabs close their stream, so a browser holds at most one per visible tab. `useApi(path, ttl, { live: false })` opts a view out. The top bar's **Live** indicator (`LiveBadge`) shows the connection.
+
+### Calendar dates read live instead of typed in
+
+- **Central banks.** `server/bankSchedules.ts` reads the Federal Reserve, ECB and Bank of England schedule pages daily (`parseFomc`, `parseEcb`, `parseBoe`). A reading is used only if it has at least three dates, all weekdays, no more than 16 a year, and every hand-checked date in the span it covers (`acceptSchedule`); otherwise the calendar keeps the checked list and says why in its status. Dates from a page are marked official with the day they were read; the audit's "schedule runs out" warning uses the merged list. The Bank of Japan and the Bank of Canada keep their checked lists.
+- **Meetings of organizations.** `server/web/events.ts` (connector `wikidata-events`, daily) asks Wikidata for upcoming events organized by an organization in the web, in a series one of them organizes, or part of one. Nothing names a summit or an organization: the list follows the web. The calendar merges these with its hand-checked IGO dates; where both have the same meeting (same organization, start within a day) the checked entry stays and notes that Wikidata agrees. Wikidata-only events are labelled "Wikidata" (community-edited, confirm with the organizer) and graded by kind (summit 5, ministerial meeting, assembly or conference 4, other 3) plus the members' share of world GDP.
 
 ## 4. Major UI components
 

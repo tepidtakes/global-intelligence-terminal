@@ -24,8 +24,11 @@ their own licences.
 The terminal runs on your own computer and opens in your web browser. Setup takes about
 five minutes, once.
 
-1. **Install Node.js 24 or newer** from <https://nodejs.org> (the "LTS" download; accept the
+1. **Install Node.js 24** (22.13 or newer also works) from <https://nodejs.org> (the "LTS" download; accept the
    defaults). Close any terminal windows you already had open so they pick it up.
+   On Linux your distribution's package may be older: check with `node -v`, and if it is older
+   than 22.13 install it with [nvm](https://github.com/nvm-sh/nvm#installing-and-updating) (`nvm install 24`)
+   or from nodejs.org.
 2. **Download this project:** on this page click the green **Code** button → **Download ZIP**,
    then unzip it somewhere easy to find (e.g. your Documents folder). Unzipping can create a
    folder inside a folder — the right one is the folder that contains `package.json` and
@@ -37,6 +40,8 @@ five minutes, once.
      e.g. `C:\Users\you\Documents\global-intelligence-terminal-main>`.
    - macOS: right-click the folder in Finder → **New Terminal at Folder** (or open Terminal and
      type `cd ` then drag the folder into the window and press Enter).
+   - Linux: right-click inside the folder in your file manager → **Open in Terminal** (or open a
+     terminal and type `cd ` followed by the folder's path).
 4. **Install and start it** — type these two lines, pressing Enter after each:
 
    ```bash
@@ -46,6 +51,12 @@ five minutes, once.
 
 5. **Open <http://localhost:5180>** in your browser. Keep the terminal window open while you
    use it; close it (or press Ctrl+C) to stop.
+
+**Shortcut on Linux (and macOS):** instead of steps 4 and 5, run `bash start.sh` in that folder. It
+checks Node.js, installs what is needed on the first run, starts the terminal and opens your
+browser. `bash start.sh --desktop` also adds the terminal to your applications menu, and
+`bash start.sh --service` runs it in the background whenever you log in (a systemd user service;
+the script prints how to stop it).
 
 **If something goes wrong:** "running scripts is disabled" → you are in PowerShell; use `cmd`
 as in step 3 (or type `npm.cmd` instead of `npm`). "Could not read package.json" / "ENOENT" →
@@ -58,7 +69,7 @@ download the ZIP again and copy your old `data` folder into the new one to keep 
 
 ## Run it (developers)
 
-Requires Node 24+ (uses the built-in `node:sqlite`). `npm install` then `npm run dev`, and
+Requires Node 22.13+ (24 recommended; uses the built-in `node:sqlite`); runs on Linux, macOS and Windows. `npm install` then `npm run dev`, and
 open http://localhost:5180. Public data works signed out; create an account (Sign in →
 Create account) for notes, positions, watchlists, saved views and catalysts. Accounts and
 everything you write stay in `data/` on your computer. (`seed/test-account.example.json`
@@ -85,7 +96,8 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
 `npm run check:econ` (alerts, calendar, sanctions, tariffs, budgets, reserves and trade
 explorer on fixtures, offline) · `npm run check:web` (the knowledge web: Wikidata loaders,
 corroboration and disputes, trade/sanctions/news links, weights, catalog, connections; offline) · `npm run check:quality` (the network gate against local
-HTTP servers: limits, gaps, Retry-After, circuit breaker, readable errors; and the World Bank vs IMF cross-checks; offline).
+HTTP servers: limits, gaps, Retry-After, circuit breaker, readable errors; and the World Bank vs IMF cross-checks; offline) · `npm run check:updates` (live updates to open pages,
+central-bank dates read from the banks' pages, meetings from Wikidata; offline).
 
 ## What's in it
 
@@ -291,6 +303,15 @@ docs/ARCHITECTURE.md     architecture, schema, data requirements, roadmap
 data/            runtime: SQLite DB, provider cache, uploads (git-ignored)
 ```
 
+## Live updates
+
+What you see updates by itself. The server tells open pages when its data changes (a provider
+answered with new figures, a connector refreshed the knowledge web, a calendar result came in, a
+change reached the feed) and each page fetches what it shows again, keeping the current numbers on
+screen meanwhile. Pages also refresh anything older than its normal lifetime while the tab is
+visible. The **Live** dot in the top bar shows the connection (hover it for the last update);
+hidden tabs pause and catch up when you return. The Data page's *Network* card counts the updates sent.
+
 ## Speed and screen sizes
 
 Each page loads only the code it needs (a country profile is about 100 KB compressed; the map,
@@ -334,7 +355,8 @@ drawer and bottom sheet) through tablets and laptops to 4K monitors.
   Data page warns 90 days before a schedule runs out.
 - Auth is local email/password (scrypt, httpOnly cookie). For cloud deployment move to
   PostgreSQL (`db/postgres-schema.sql`) and an identity provider.
-- Windows doesn't render flag emoji, so flags show as two-letter codes there.
+- Windows doesn't render flag emoji, so flags show as two-letter codes there. Linux shows them
+  when a colour emoji font is installed (Noto Color Emoji: `fonts-noto-color-emoji` on Debian/Ubuntu).
 - Obsidian sync needs the terminal running on the same computer as the vault (it reads
   and writes files there). Things the terminal's editor has no equivalent for — embeds
   (`![[image.png]]`), callout styling, Dataview queries, highlights — are kept as text and
