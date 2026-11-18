@@ -14,6 +14,12 @@ import { emitNew, type Change } from './changes.js';
 export interface Pair { key: string; label: string; wb: string; imf: string; unit: 'US$ bn' | '%' | '% of GDP' | 'million'; scale: number; kind: 'level' | 'rate'; tol: number; severity: 'warning' | 'info'; note?: string; }
 /** The same statistic in both catalogs. `scale` turns the World Bank figure into the IMF's unit;
  *  `tol` is a percentage for levels and percentage points for rates. */
+// Countries whose IMF figures follow the government's fiscal year (WEO country notes), while the World
+// Bank reports calendar years: for flows and averages the two cover different twelve months, so a
+// gap there is expected, not a sign that either figure is wrong. Checked against live data: Egypt's
+// inflation was 14.1% (World Bank, calendar 2025) against 20.4% (IMF, fiscal 2024/25).
+const FISCAL_YEAR = new Set(['AFG', 'BGD', 'BTN', 'EGY', 'ETH', 'HTI', 'IRN', 'NPL', 'PAK']);
+const FISCAL_NOTE = 'The IMF reports this country’s fiscal year, the World Bank the calendar year';
 export const PAIRS: Pair[] = [
   { key: 'gdp', label: 'GDP', wb: 'NY.GDP.MKTP.CD', imf: 'NGDPD', unit: 'US$ bn', scale: 1e9, kind: 'level', tol: 3, severity: 'warning', note: 'Current US$; where a country has more than one exchange rate the two may convert at different ones' },
   { key: 'growth', label: 'Real GDP growth', wb: 'NY.GDP.MKTP.KD.ZG', imf: 'NGDP_RPCH', unit: '%', scale: 1, kind: 'rate', tol: 0.5, severity: 'warning' },
@@ -77,7 +83,7 @@ export async function refreshAgreement(): Promise<State> {
       if (typeof imfV !== 'number') { skip(`the IMF has no figure for ${year}`); continue; }
       const c = compareFigures(p, v.value, imfV);
       st.compared++; st[c.verdict]++;
-      slot(iso).checks.push({ key: p.key, label: p.label, unit: p.unit, year, wb: c.wb, imf: c.imf, wbText: fmtFigure(p, c.wb), imfText: fmtFigure(p, c.imf), gap: c.gap, gapText: gapText(p, c.gap), allowedText: tolText(p, c.allowed), ratio: c.ratio, verdict: c.verdict, severity: p.severity, note: p.note });
+      slot(iso).checks.push({ key: p.key, label: p.label, unit: p.unit, year, wb: c.wb, imf: c.imf, wbText: fmtFigure(p, c.wb), imfText: fmtFigure(p, c.imf), gap: c.gap, gapText: gapText(p, c.gap), allowedText: tolText(p, c.allowed), ratio: c.ratio, verdict: c.verdict, ...(FISCAL_YEAR.has(iso) && p.key !== 'population' ? { severity: 'info' as const, note: p.note ? `${p.note}. ${FISCAL_NOTE}` : FISCAL_NOTE } : { severity: p.severity, note: p.note }) });
     }
     return st;
   }));
