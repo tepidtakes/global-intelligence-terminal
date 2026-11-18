@@ -4,6 +4,7 @@
 //   • sanctions: imposer (US, EU, UK, UN) → country, for programmes aimed at that country
 //   • news: entities named together in trusted headlines over the last 7 days
 //   • names: the World Bank's spellings of country names, for reading other sources
+import crypto from 'node:crypto';
 import { setLiveRels, byIso3, getEntity, addCountryNames, byCcn3 } from '../graph.js';
 import type { Relationship } from '../../shared/types.js';
 import { registerConnector, runConnector } from './connectors.js';
@@ -70,6 +71,7 @@ export const refreshSanctionsWeb = () => runConnector('sanctions-web').catch(() 
 
 // ───────────────────────── News co-mentions ─────────────────────────
 const NEWS_DAYS = 7;
+let newsSig = '';
 export function newsLinks(stories: { title: string; url: string; date: string; tags?: { id: string }[] }[], minStories = 2, perEntity = 15): NewRel[] {
   const pairs = new Map<string, { a: string; b: string; n: number; last?: { title: string; url: string; at: string } }>();
   for (const s of stories) {
@@ -95,8 +97,12 @@ registerConnector({
   provides: `Links between entities named together in two or more trusted stories in the last ${NEWS_DAYS} days — updated every 30 minutes`,
   run: async () => {
     const stories = latestStories({ hours: NEWS_DAYS * 24, trustedOnly: true, limit: 5000 });
-    const n = setLiveRels('news-web', newsLinks(stories));
-    return { detail: `${n} links from ${stories.length} stories`, fetchedAt: new Date().toISOString(), counts: { links: n, stories: stories.length } };
+    const links = newsLinks(stories);
+    // Runs every half hour; most runs find the links they found last time, which is not news.
+    const sig = crypto.createHash('sha1').update(JSON.stringify(links)).digest('hex');
+    const changed = sig !== newsSig; newsSig = sig;
+    const n = setLiveRels('news-web', links);
+    return { detail: `${n} links from ${stories.length} stories`, fetchedAt: new Date().toISOString(), counts: { links: n, stories: stories.length }, changed };
   },
 });
 

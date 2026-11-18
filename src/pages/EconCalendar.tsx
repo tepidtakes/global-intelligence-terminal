@@ -12,6 +12,8 @@ const KINDS: [string, string, string][] = [['release', 'Data releases', '📊'],
 const BASIS: Record<string, { label: string; help: string; cls: string }> = {
   'official-live': { label: 'official', help: 'From an official calendar or the institution’s own schedule page, read live', cls: 'ok' },
   'official-curated': { label: 'official', help: 'From an official published schedule, entered by hand and checked against several sources', cls: 'ok' },
+  'official-page': { label: 'bank’s page', help: 'Read from the bank’s own schedule page. Not in the hand-checked list; the reading it comes from agrees with that list wherever the two overlap', cls: 'ok' },
+  'page-unconfirmed': { label: 'unconfirmed', help: 'Read from the bank’s own schedule page, with no hand-checked date left to compare the reading with — confirm on the bank’s site', cls: 'warn' },
   'official-rule': { label: 'official rule', help: 'A fixed rule the institution publishes (e.g. “the 20th of each month”)', cls: 'ok' },
   'usual-timing': { label: '≈ usual timing', help: 'Not a confirmed date: the agency usually publishes around this time. Check the source before relying on it.', cls: 'warn' },
   'to-verify': { label: 'to verify', help: 'From a single source — check the official calendar', cls: 'warn' },

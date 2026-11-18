@@ -1,13 +1,17 @@
 // One gate for every outbound request, per host, shared by every module that calls that host:
 //   • at most N requests in flight and a minimum gap between request starts (polite to rate-limited
-//     services such as Wikidata, UN Comtrade and the SEC, however many loaders run at once);
-//   • retries for 429/502/503/504 and dropped connections, honouring Retry-After, else exponential
-//     backoff with jitter. A Retry-After longer than `maxRetryAfterMs` is not waited out inside the
-//     request: the caller gets the answer and the host is skipped until then. Timeouts, refused
-//     connections and unknown host names are not retried;
+//     services such as Wikidata, UN Comtrade and the SEC, however many loaders run at once). A
+//     request is in flight until its whole answer has been read, not just the headers;
+//   • retries for 429/502/503/504 and dropped connections, honouring Retry-After (at least a quarter
+//     of a second), else exponential backoff with jitter. A Retry-After longer than half the
+//     request's own time limit, or than `maxRetryAfterMs`, is not waited out inside the request: the
+//     caller gets the answer and the host is skipped until then. Timeouts, refused connections and
+//     unknown host names are not retried;
 //   • a circuit breaker: after `failThreshold` consecutive failures the host is skipped (requests fail
-//     at once) for a cool-down that doubles up to `maxCoolDownMs`; then a single trial request
-//     decides whether it is back. Answers such as 400 or 404 are not outages and never trip it.
+//     at once, including those already waiting for a slot) for a cool-down that doubles up to
+//     `maxCoolDownMs`; then a single trial request decides whether it is back. Requests sent before
+//     the host was skipped do not change that decision when they finish. Answers such as 400 or 404
+//     are not outages and never trip it.
 // Failures carry a readable reason ("api.worldbank.org: host name not found") instead of "fetch failed".
 
 export interface HostPolicy { concurrency: number; minGapMs: number; retries: number; failThreshold: number; coolDownMs: number; maxCoolDownMs: number; maxRetryAfterMs: number; }
@@ -26,13 +30,16 @@ const POLICIES: Record<string, Partial<HostPolicy>> = {
 interface Gate {
   host: string; policy: HostPolicy; active: number; queue: (() => void)[]; lastStart: number;
   failures: number; openUntil: number; openReason?: string; coolDown: number; trial: boolean;
+  /** Raised each time the host starts being skipped. A request remembers the number it was sent
+   *  under; if it has changed when the answer arrives, the answer is about an earlier state. */
+  gen: number;
   stats: { requests: number; ok: number; failed: number; retries: number; fastFails: number; totalMs: number; lastError?: string; lastErrorAt?: string; lastOkAt?: string };
 }
 const gates = new Map<string, Gate>();
 const policyFor = (host: string): HostPolicy => ({ ...DEFAULT, ...(POLICIES[host] || {}) });
 function gate(host: string) {
   let g = gates.get(host);
-  if (!g) { const policy = policyFor(host); g = { host, policy, active: 0, queue: [], lastStart: 0, failures: 0, openUntil: 0, coolDown: policy.coolDownMs, trial: false, stats: { requests: 0, ok: 0, failed: 0, retries: 0, fastFails: 0, totalMs: 0 } }; gates.set(host, g); }
+  if (!g) { const policy = policyFor(host); g = { host, policy, active: 0, queue: [], lastStart: 0, failures: 0, openUntil: 0, coolDown: policy.coolDownMs, trial: false, gen: 0, stats: { requests: 0, ok: 0, failed: 0, retries: 0, fastFails: 0, totalMs: 0 } }; gates.set(host, g); }
   return g;
 }
 /** Change a host's policy (configuration and tests). */
@@ -40,13 +47,19 @@ export function setHostPolicy(host: string, p: Partial<HostPolicy>) { POLICIES[h
 export function resetHosts() { gates.clear(); }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function acquire(g: Gate) {
+/** Waits for a slot and for the host's minimum gap. `check` throws when the host is being skipped:
+ *  it runs as soon as the slot is obtained, before a start time is reserved, so when the breaker
+ *  opens everything in the queue fails at once instead of one request per gap. */
+async function acquire(g: Gate, check: () => void) {
   // A released slot is handed straight to the next waiter, so the limit is never exceeded.
   if (g.active < g.policy.concurrency) g.active++;
   else await new Promise<void>((r) => g.queue.push(r));
-  const now = Date.now(); const startAt = Math.max(now, g.lastStart + g.policy.minGapMs);
-  g.lastStart = startAt;
-  if (startAt > now) await sleep(startAt - now);
+  try {
+    check();
+    const now = Date.now(); const startAt = Math.max(now, g.lastStart + g.policy.minGapMs);
+    g.lastStart = startAt;
+    if (startAt > now) { await sleep(startAt - now); check(); } // it may have opened during the gap
+  } catch (e) { release(g); throw e; }
 }
 function release(g: Gate) { const next = g.queue.shift(); if (next) next(); else g.active--; }
 
@@ -68,17 +81,26 @@ function admit(g: Gate): boolean {
 }
 const fmtWait = (ms: number) => (ms >= 1000 ? `${Math.round(ms / 1000)} s` : `${Math.round(ms)} ms`);
 function noteError(g: Gate, reason: string) { g.stats.failed++; g.stats.lastError = reason.slice(0, 200); g.stats.lastErrorAt = new Date().toISOString(); }
-function succeeded(g: Gate) { g.failures = 0; g.openUntil = 0; g.openReason = undefined; g.trial = false; g.coolDown = g.policy.coolDownMs; g.stats.ok++; g.stats.lastOkAt = new Date().toISOString(); }
-function failed(g: Gate, reason: string) {
-  g.failures++; noteError(g, reason);
-  const open = (ms: number) => { g.openUntil = Date.now() + ms; g.openReason = `is not responding (${g.failures} failure${g.failures === 1 ? '' : 's'} in a row; last: ${reason})`; };
-  if (g.trial) { g.trial = false; g.coolDown = Math.min(g.coolDown * 2, g.policy.maxCoolDownMs); open(g.coolDown); }
+// `current` is false for a request sent before the host was last skipped (see Gate.gen). Its result
+// is counted in the statistics but says nothing about the host now: a late success must not cut a
+// skip short, and a late failure must not lengthen one or be mistaken for the trial's.
+function succeeded(g: Gate, current: boolean) {
+  g.stats.ok++; g.stats.lastOkAt = new Date().toISOString();
+  if (current) { g.failures = 0; g.openUntil = 0; g.openReason = undefined; g.trial = false; g.coolDown = g.policy.coolDownMs; }
+}
+function failed(g: Gate, reason: string, isTrial: boolean, current: boolean) {
+  noteError(g, reason);
+  if (!current) return;
+  g.failures++;
+  const open = (ms: number) => { g.gen++; g.openUntil = Date.now() + ms; g.openReason = `is not responding (${g.failures} failure${g.failures === 1 ? '' : 's'} in a row; last: ${reason})`; };
+  if (isTrial) { g.trial = false; g.coolDown = Math.min(g.coolDown * 2, g.policy.maxCoolDownMs); open(g.coolDown); }
   else if (g.failures >= g.policy.failThreshold) open(g.coolDown);
 }
-/** The host asked us to come back later than a request waits: skip it until then. Not an outage. */
+/** The host asked us to come back later than a request waits: skip it until then. Not an outage.
+ *  This holds whenever the request was sent, and takes the standing of any trial that is out. */
 function deferred(g: Gate, status: number, ms: number) {
   noteError(g, `${status} — asked to wait ${fmtWait(ms)}`);
-  g.trial = false; g.openUntil = Math.max(g.openUntil, Date.now() + Math.min(ms, g.policy.maxCoolDownMs));
+  g.gen++; g.trial = false; g.openUntil = Math.max(g.openUntil, Date.now() + Math.min(ms, g.policy.maxCoolDownMs));
   g.openReason = `asked us to wait (${status === 429 ? 'rate limit' : status})`;
 }
 /** Retry-After as milliseconds (seconds or an HTTP date). */
@@ -97,34 +119,53 @@ function describe(err: any, timeoutMs: number): { reason: string; retry: boolean
   return { reason: text[code] || code || err?.cause?.message || err?.message || 'network error', retry: ['ECONNRESET', 'EAI_AGAIN', 'ETIMEDOUT', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'EPIPE'].includes(code), timeout: false };
 }
 
-/** fetch() through the host's gate. Returns the response for any HTTP status (callers decide what a 404 means). */
+const NO_BODY = new Set([101, 103, 204, 205, 304]); // statuses a Response may not carry a body for
+/** fetch() through the host's gate. Returns the response for any HTTP status (callers decide what a
+ *  404 means). The body has already been read (every caller reads all of it anyway): the host's slot
+ *  and `timeoutMs` cover the whole answer, and a body that stalls or breaks off is a failure of the
+ *  host like any other. The response handed back reads like the original: text(), json(),
+ *  arrayBuffer(), ok, status, headers, url. */
 export async function netFetch(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
   const host = new URL(url).host; const g = gate(host);
   const { timeoutMs = 20000, ...rest } = init;
-  let trial = false; // the trial request keeps its standing across its own retries
-  for (let attempt = 0; ; attempt++) {
+  let trial = false; // the trial request keeps its standing across its own retries…
+  let gen = g.gen;
+  // Fails at once while the host is skipped; otherwise notes the state this request is sent under.
+  const check = () => {
+    if (trial && gen !== g.gen) trial = false; // …unless the host has since asked everyone to wait
     if (!trial) trial = admit(g);
-    await acquire(g);
-    // The breaker may have opened while this request waited for a slot: check again before sending.
-    if (!trial && g.openUntil) { try { trial = admit(g); } catch (e) { release(g); throw e; } }
+    gen = g.gen;
+  };
+  for (let attempt = 0; ; attempt++) {
+    check();
+    // The breaker may open while this request waits for a slot or for the gap: acquire checks again.
+    await acquire(g, check);
     const t0 = Date.now(); let res: Response | undefined; let err: any;
-    try { res = await fetch(url, { ...rest, signal: AbortSignal.timeout(timeoutMs) }); } catch (e) { err = e; } finally { release(g); }
+    try {
+      const r = await fetch(url, { ...rest, signal: AbortSignal.timeout(timeoutMs) });
+      const body = NO_BODY.has(r.status) ? null : await r.arrayBuffer(); // the same signal stops a stalled body
+      res = new Response(body, { status: r.status, statusText: r.statusText, headers: r.headers });
+      Object.defineProperty(res, 'url', { value: r.url }); // a copy has no address of its own
+    } catch (e) { err = e; res = undefined; } finally { release(g); }
     g.stats.requests++; g.stats.totalMs += Date.now() - t0;
+    const current = gen === g.gen;
     if (res && !RETRY_STATUS.has(res.status)) {
-      if (res.status >= 500) failed(g, `${res.status} ${res.statusText}`.trim()); else succeeded(g);
+      if (res.status >= 500) failed(g, `${res.status} ${res.statusText}`.trim(), trial, current); else succeeded(g, current);
       return res;
     }
     const d = err ? describe(err, timeoutMs) : { reason: `${res!.status} ${res!.statusText}`.trim(), retry: true, timeout: false };
     const asked = res ? retryAfterMs(res.headers.get('retry-after')) : undefined;
-    if (res && asked != null && asked > g.policy.maxRetryAfterMs) { deferred(g, res.status, asked); return res; }
+    // A wait the caller's own time limit would not cover is not slept here: the caller gets the
+    // answer now (and can fall back on a copy it holds) and the host is left alone until then.
+    if (res && asked != null && asked > Math.min(g.policy.maxRetryAfterMs, timeoutMs / 2)) { deferred(g, res.status, asked); return res; }
     if (!d.retry || attempt >= g.policy.retries) {
-      failed(g, d.reason);
+      failed(g, d.reason, trial, current);
       if (res) return res; // a 429/503 after retries: the caller sees the status
       throw new NetError(`${host}: ${d.reason}`, d.timeout ? 'timeout' : 'network');
     }
     g.stats.retries++;
-    await res?.body?.cancel().catch(() => undefined); // free the connection before waiting
-    await sleep(asked ?? 400 * 2 ** attempt + Math.random() * 300);
+    // "Retry-After: 0" still gets a short pause: the host has just said it is busy.
+    await sleep(asked != null ? Math.max(asked, 250) : 400 * 2 ** attempt + Math.random() * 300);
   }
 }
 

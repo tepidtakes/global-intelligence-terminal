@@ -10,6 +10,12 @@ a public website. Out of the box:
   cookie (marked `Secure` when `NODE_ENV=production`).
 - Failed logins are limited to 10 per 15 minutes per address and email.
 - Uploaded attachments are stored under random names and always served as downloads.
+- On Linux and macOS the data folder (accounts, notes, uploads) is readable only by the user
+  who runs the terminal: it is created with mode 700, and a folder an earlier version left
+  open to other users is closed at the next start.
+- The live-update stream needs no sign-in, so it is limited (200 streams, 20 per address) and
+  a client that stops reading is dropped. It carries no data, only the names of what changed;
+  changes to private data are announced to that account's pages only.
 - Obsidian vault sync (which reads and writes files on the server's disk) only answers
   requests made directly from the same computer — never through a reverse proxy.
 
@@ -21,6 +27,9 @@ a public website. Out of the box:
 | `PORT` | `5180` | Port. |
 | `ALLOW_SIGNUP` | on | Set to `0` after creating your account so nobody else can register. |
 | `TERMINAL_VAULT` | `local` | Obsidian sync: `local` (same computer only), `off`, or `any` (single-user private machine only). |
+| `TERMINAL_DATA_DIR` | `data` | Where the database, uploads and provider cache are kept. |
+| `TERMINAL_DATA_MODE` | `700` | Linux/macOS permissions of that folder. `750` shares it with a group (a backup user, say). |
+| `LIVE_MAX_STREAMS`, `LIVE_MAX_PER_ADDRESS` | `200`, `20` | Limits on open live-update streams, in total and per address. |
 | `CONTACT_EMAIL` | empty | Optional; sent in the User-Agent to SEC, Wikipedia and Wikidata, which ask API users for a contact. |
 | `NODE_ENV` | — | `production` serves the built app and marks cookies `Secure`. |
 

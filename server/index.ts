@@ -18,7 +18,7 @@ import {
 import { startLiveData, liveStatus, onLiveRefresh } from './augment.js';
 import { startNews, retagAll, newsFor, latestStories, allSignals, newsStatus, countryAttention, FEEDS } from './newsroom.js';
 import { audit, summarize, coverage, entityProvenance, CATEGORY_LABEL } from './consistency.js';
-import { providerHealth } from './cache.js';
+import { providerHealth, retryFailedNow } from './cache.js';
 import { electionCandidates, startElectionDetails, electionDetailsStatus } from './elections.js';
 import { allMarkets, marketsForElection, PLATFORM, clearMarketTags } from './predictionMarkets.js';
 import { mayorsWithin } from './localPolitics.js';
@@ -39,7 +39,7 @@ import { searchMetrics, metricMeta, catalogStatus } from './web/catalog.js';
 import { connectionsFor, neighborhood, webLayer, webStats } from './web/connections.js';
 import { startReserves, reservesFor, stocksForCommodity, reservesLayer, gasLayer, reservesStatus, GRAINS } from './reserves.js';
 import { hostHealth } from './net.js';
-import { publish, liveStream, streamStatus } from './live.js';
+import { publish, publishRun, liveStream, liveState, streamStatus, dropStreamsOf } from './live.js';
 import { agreementFor, agreementSummary, agreementStatus } from './agreement.js';
 import crypto from 'node:crypto';
 import { normName, onGraphChange } from './graph.js';
@@ -69,7 +69,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 // ───────────── Auth ─────────────
 api.post('/auth/register', register);
 api.post('/auth/login', login);
-api.post('/auth/logout', logout);
+api.post('/auth/logout', (req: AuthedRequest, res) => { if (req.userId) dropStreamsOf(req.userId); logout(req, res); });
 api.get('/auth/me', (req: AuthedRequest, res) => res.json(req.userId ? { id: req.userId, email: req.userEmail } : null));
 
 // ───────────── Entities ─────────────
@@ -588,7 +588,7 @@ api.get('/calendar/econ', (req, res) => {
   const events = calendarFor({ from: req.query.from ? String(req.query.from) : undefined, to: req.query.to ? String(req.query.to) : undefined, place: req.query.place ? String(req.query.place) : undefined, minImportance: Number(req.query.min) || 1, kinds })
     .filter((e) => req.query.usual !== '0' || e.basis !== 'usual-timing')
     .map((e) => ({ ...e, places: e.placeIds.map((id) => stub(id)).filter(Boolean) }));
-  res.json({ events, status: calendarStatus(), now: new Date().toISOString() });
+  res.json({ events, status: calendarStatus() });
 });
 api.get('/calendar/econ/places', (_req, res) => res.json(calendarPlaces()));
 // ───────────── The knowledge web ─────────────
@@ -603,13 +603,15 @@ api.get('/web/:id/graph', (req, res) => {
   if (!g) return res.status(404).json({ error: 'Not found' });
   res.json(g);
 });
-// Live updates for open pages (Server-Sent Events, server/live.ts).
+// Live updates for open pages (server/live.ts): the stream, and its numbers for pages that poll.
 api.get('/live', liveStream);
+api.get('/live/state', liveState);
 api.get('/web-status', (_req, res) => res.json({ connectors: connectorsStatus(), stats: webStats(), catalog: catalogStatus(), weights: weightsStatus() }));
 // Run one connector now (signed-in users; e.g. after allowing a host in the network settings).
 api.post('/web-status/run/:id', wrap(async (req, res) => {
   if (!req.userId) return res.status(401).json({ error: 'Sign in to run a connector' });
   if (!connectorIds().includes(req.params.id)) return res.status(404).json({ error: 'Unknown connector' });
+  retryFailedNow(); // a person asked to try again: do not answer from a failure remembered moments ago
   res.json(await runConnector(req.params.id));
 }));
 // Indicator catalog: any World Bank or IMF series as a map layer or chart.
@@ -766,7 +768,7 @@ api.get('/quality/report', (req, res) => {
   const issues = audit();
   const sev = String(req.query.severity || ''); const cat = String(req.query.category || '');
   const list = issues.filter((i) => (!sev || i.severity === sev) && (!cat || i.category === cat));
-  res.json({ summary: summarize(issues), categories: CATEGORY_LABEL, issues: list.slice(0, Number(req.query.limit) || 500), total: list.length, generatedAt: new Date().toISOString() });
+  res.json({ summary: summarize(issues), categories: CATEGORY_LABEL, issues: list.slice(0, Number(req.query.limit) || 500), total: list.length });
 });
 api.get('/quality/entity/:id', (req, res) => {
   const p = entityProvenance(req.params.id);
@@ -917,10 +919,11 @@ setTimeout(() => {
 }, 4000).unref();
 // When live leaders/conflicts change, re-tag headlines and re-check news signals against them.
 onLiveRefresh(() => retagAll());
-// Tell open pages when data changes; modules with their own refresh loops publish too.
+// Tell open pages when data changes (and only then: a failed or fruitless run is not news); modules
+// with their own refresh loops publish too.
 onGraphChange(() => publish('graph'));
-onConnectorRun((id) => publish(`connector:${id}`));
-onLiveRefresh(() => publish('live-data'));
+onConnectorRun((id, ok, changed) => { if (ok && changed) publish(`connector:${id}`); });
+onLiveRefresh((r) => { publishRun('live-data', r.ok > 0); });
 onChange(() => publish('changes'));
 // Data discrepancies become (low-importance) changes, so a rule can watch for them. World Bank vs
 // IMF conflicts post their own, once per country, figure and year (agreement.ts).

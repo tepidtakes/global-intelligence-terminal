@@ -319,10 +319,15 @@ export function findOrg(name: string) {
   const k = norm(name);
   return listByType('igo').find((e) => [e.name, ...(e.aliases || [])].some((n) => norm(n) === k))?.id;
 }
-/** Current members of the organization with this name, or `fallback` when it is not loaded. */
+/** Current members of the organization with this name, or `fallback` when it is not loaded. The
+ *  live list replaces the typed one only when it covers at least nine in ten of it: Wikidata's
+ *  membership statements are patchy for many organizations, and a half-filled live list must not
+ *  drop members the typed list has. Otherwise the two are combined. */
 export function membersByName(name: string, fallback: string[]) {
-  const id = findOrg(name); const m = id ? membersOf(id) : [];
-  return m.length >= Math.min(3, fallback.length) ? m.map((x) => x.slice(8)) : fallback;
+  const id = findOrg(name); const live = (id ? membersOf(id) : []).map((x) => x.slice(8));
+  if (live.length < Math.min(3, fallback.length)) return fallback;
+  const covered = fallback.filter((f) => live.includes(f)).length;
+  return covered >= 0.9 * fallback.length ? live : [...new Set([...fallback, ...live])];
 }
 /** Is a country currently a member of an organization? */
 export const isMember = (countryId: string, orgId: string) => currentRels(countryId, 'member_of', 'out').some((r) => r.to === orgId);

@@ -8,7 +8,7 @@
 // Info     — worth knowing: Wikidata ambiguity, terms closed automatically, ageing curated facts.
 import { entities, sources, allRels, danglingRels, normName, getEntity, relationshipsFor } from './graph.js';
 import { DATA_QUALITIES, type DataQuality, type Entity } from '../shared/types.js';
-import { scheduleWarnings, calendarSourceIds } from './econCalendar.js';
+import { scheduleWarnings, listWarnings, calendarSourceIds } from './econCalendar.js';
 import { SANCTIONS_SOURCE_IDS } from './sanctions.js';
 
 export type Severity = 'error' | 'warning' | 'info';
@@ -31,7 +31,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   'election-result-conflict': 'Election result differs between sources',
   'source-figures-conflict': 'World Bank and IMF figures disagree',
   'result-missing': 'Election held, result not recorded',
-  'schedule-ending': 'Hand-entered schedule runs out within 90 days',
+  'schedule-ending': 'Hand-entered schedule ends soon, has a gap or disagrees with its source',
   'source-disagreement': 'Two sources disagree about a link',
 };
 
@@ -130,7 +130,8 @@ export function audit(force = false): Issue[] {
 
   // Hand-entered calendars: every cited source must exist, and schedules must not run out unnoticed.
   for (const id of [...calendarSourceIds(), ...SANCTIONS_SOURCE_IDS]) if (!sources.has(id)) push({ severity: 'error', category: 'unknown-source', message: `The calendar or sanctions data cites unknown source “${id}”.` });
-  for (const w of scheduleWarnings(90)) push({ severity: 'warning', category: 'schedule-ending', entityId: w.entityId, message: w.message });
+  for (const w of scheduleWarnings(90)) push({ severity: w.severity, category: 'schedule-ending', entityId: w.entityId, message: w.message });
+  for (const w of listWarnings()) push({ severity: 'warning', category: 'schedule-ending', entityId: w.entityId, message: w.message });
 
   for (const check of extraChecks) { try { for (const i of check()) push(i); } catch { /* one failing check must not stop the audit */ } }
   memo = { at: Date.now(), issues };

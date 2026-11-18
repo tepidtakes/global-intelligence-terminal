@@ -1,6 +1,7 @@
 // Offline checks for data quality and concurrency: the per-host network gate (limits, gaps,
-// Retry-After, circuit breaker, readable errors) against local HTTP servers, and the World Bank vs
-// IMF agreement checks — the comparison rules, and a full run against a seeded cache.
+// Retry-After, circuit breaker, readable errors) against local HTTP servers, the World Bank vs
+// IMF agreement checks — the comparison rules, and runs against a seeded cache — and the early
+// retries of a connector whose run failed.
 // Run: npm run check:quality
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
@@ -8,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 
 process.env.TERMINAL_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'git-quality-check-'));
 const imp = (p: string) => import(pathToFileURL(path.resolve(p)).href);
@@ -54,6 +56,35 @@ console.log('Network gate: limits');
   ok(gaps.length === 3 && gaps.every((g) => g >= 135), 'requests start at least 150 ms apart, even when four may run at once', gaps);
   s.close();
 }
+{
+  // Headers at once, the rest of the answer 150 ms later: the slot is held until the answer is complete.
+  let active = 0, peak = 0;
+  const s = await serve((_q, res) => { active++; peak = Math.max(peak, active); res.writeHead(200, { 'Content-Type': 'text/plain' }); res.write('first,'); setTimeout(() => { active--; res.end('rest'); }, 150); });
+  N.setHostPolicy(s.host, { concurrency: 1 });
+  const t0 = Date.now();
+  const out = await Promise.all(Array.from({ length: 4 }, () => N.netFetch(s.url).then((r: Response) => r.text())));
+  ok(peak === 1 && out.every((x) => x === 'first,rest'), 'a host limited to one at a time never has two answers in progress, bodies included', { peak, out });
+  ok(Date.now() - t0 >= 560, 'four answers that take 150 ms to arrive are read one after another', Date.now() - t0);
+  s.close();
+}
+{
+  const s = await serve((q, res) => {
+    if (q.url === '/json') { res.writeHead(201, { 'Content-Type': 'application/json', 'X-Rows': '2' }); res.end('{"rows":[1,2]}'); }
+    else if (q.url === '/gzip') { res.writeHead(200, { 'Content-Encoding': 'gzip' }); res.end(zlib.gzipSync('squeezed')); }
+    else if (q.url === '/empty') { res.writeHead(204); res.end(); }
+    else { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('no such thing'); }
+  });
+  const j: Response = await N.netFetch(`${s.url}json`);
+  ok(j.ok && j.status === 201 && j.headers.get('x-rows') === '2' && j.url === `${s.url}json` && (await j.json()).rows.length === 2, 'the response handed back has the status, headers, address and JSON of the original', { status: j.status, url: j.url });
+  const b: Response = await N.netFetch(`${s.url}json`);
+  ok(Buffer.from(await b.arrayBuffer()).toString() === '{"rows":[1,2]}', 'its bytes can be read as a buffer');
+  const z: Response = await N.netFetch(`${s.url}gzip`);
+  ok((await z.text()) === 'squeezed', 'a compressed answer is unpacked once');
+  const e: Response = await N.netFetch(`${s.url}empty`);
+  const m: Response = await N.netFetch(`${s.url}missing`);
+  ok(e.status === 204 && (await e.text()) === '' && !m.ok && m.status === 404 && (await m.text()) === 'no such thing', 'an empty answer and a 404 come back as they are', { empty: e.status, missing: m.status });
+  s.close();
+}
 
 console.log('Network gate: retries');
 {
@@ -65,10 +96,13 @@ console.log('Network gate: retries');
   s.close();
 }
 {
-  const s = await serve((_q, res) => { res.writeHead(503, { 'Retry-After': '0' }); res.end('busy'); });
+  const at: number[] = [];
+  const s = await serve((_q, res) => { at.push(Date.now()); res.writeHead(503, { 'Retry-After': '0' }); res.end('busy'); });
   N.setHostPolicy(s.host, { retries: 2 });
   const r = await N.netFetch(s.url);
   ok(r.status === 503 && s.hits() === 3, 'a 503 is tried three times, then the caller sees the status', { status: r.status, hits: s.hits() });
+  const gaps = at.slice(1).map((t, i) => t - at[i]);
+  ok(gaps.every((g) => g >= 235), 'Retry-After: 0 still pauses a quarter of a second before each new try', gaps);
   const e = await attempt(CACHE.fetchJson(s.url));
   ok(/^503 from 127\.0\.0\.1:\d+: busy/.test(e.err?.message || ''), 'fetchJson still reports the status and host', e.err?.message);
   s.close();
@@ -80,6 +114,18 @@ console.log('Network gate: retries');
   const until = health(s.host)?.openUntil; const left = until ? Date.parse(until) - Date.now() : 0;
   ok(r.status === 429 && s.hits() === 1, 'a Retry-After of two minutes is not waited out inside the request', { status: r.status, hits: s.hits() });
   ok(e.err?.kind === 'circuit' && /rate limit/.test(e.err.message) && left > 110_000 && s.hits() === 1, 'the host is skipped until it said to come back', { msg: e.err?.message, left });
+  s.close();
+}
+{
+  // The caller allows half a second in all; the host asks for three. Sleeping would overrun the caller's limit.
+  const s = await serve((_q, res) => { res.writeHead(429, { 'Retry-After': '3' }); res.end('slow down'); });
+  const t0 = Date.now();
+  const r = await N.netFetch(s.url, { timeoutMs: 500 });
+  const ms = Date.now() - t0;
+  const e = await attempt(N.netFetch(s.url, { timeoutMs: 500 }));
+  const until = health(s.host)?.openUntil; const left = until ? Date.parse(until) - Date.now() : 0;
+  ok(r.status === 429 && s.hits() === 1 && ms < 400, 'a Retry-After longer than half the request’s time limit is not slept inside the request', { status: r.status, hits: s.hits(), ms });
+  ok(e.err?.kind === 'circuit' && /rate limit/.test(e.err.message) && left > 2300 && left <= 3000 && s.hits() === 1, 'the host is skipped for the three seconds it asked for instead', { msg: e.err?.message, left });
   s.close();
 }
 
@@ -114,6 +160,65 @@ console.log('Network gate: circuit breaker');
   s.close();
 }
 {
+  // One at a time, 300 ms apart: once the second failure opens the breaker, the six still waiting
+  // must all hear at once, not one per gap (which would take two more seconds).
+  const s = await serve((_q, res) => { res.writeHead(500); res.end('down'); });
+  N.setHostPolicy(s.host, { concurrency: 1, minGapMs: 300, failThreshold: 2, retries: 0 });
+  const t0 = Date.now();
+  const rs = await Promise.all(Array.from({ length: 8 }, () => attempt(N.netFetch(s.url)).then((r) => ({ ...r, ms: Date.now() - t0 }))));
+  const skipped = rs.filter((r) => r.err?.kind === 'circuit'); const last = Math.max(...rs.map((r) => r.ms));
+  ok(s.hits() === 2 && skipped.length === 6 && last < 600, 'when the breaker opens, every queued request is rejected at once, not one per gap', { hits: s.hits(), skipped: skipped.length, ms: rs.map((r) => r.ms) });
+  s.close();
+}
+{
+  // An answer still on its way when the host began to be skipped says nothing about the host now.
+  const handler = (q: http.IncomingMessage, res: http.ServerResponse) => {
+    if (q.url === '/slow') setTimeout(() => res.end('late'), 250);
+    else if (q.url === '/quota') { res.writeHead(429, { 'Retry-After': '120' }); res.end('quota'); }
+    else { res.writeHead(500); res.end('down'); }
+  };
+  const s = await serve(handler);
+  N.setHostPolicy(s.host, { concurrency: 4, failThreshold: 2, retries: 0, coolDownMs: 5000 });
+  const slow = attempt(N.netFetch(`${s.url}slow`));
+  await sleep(30);
+  for (let i = 0; i < 2; i++) await N.netFetch(`${s.url}bad`);
+  const late = await slow;
+  const after = await attempt(N.netFetch(`${s.url}slow`));
+  ok(late.res?.status === 200 && health(s.host)?.state === 'open' && after.err?.kind === 'circuit' && s.hits() === 3, 'a success that was sent before the breaker opened does not close it', { late: late.res?.status, state: health(s.host)?.state, after: after.err?.kind, hits: s.hits() });
+  ok(health(s.host)?.ok === 1 && health(s.host)?.failed === 2, 'the late answer is still counted', health(s.host));
+  s.close();
+  const q = await serve(handler);
+  N.setHostPolicy(q.host, { concurrency: 4 });
+  const slow2 = attempt(N.netFetch(`${q.url}slow`));
+  await sleep(30);
+  await N.netFetch(`${q.url}quota`);
+  const late2 = await slow2;
+  const after2 = await attempt(N.netFetch(`${q.url}slow`));
+  const until = health(q.host)?.openUntil; const left = until ? Date.parse(until) - Date.now() : 0;
+  ok(late2.res?.status === 200 && after2.err?.kind === 'circuit' && left > 110_000 && q.hits() === 2, 'nor does it cut short a wait the host asked for', { late: late2.res?.status, after: after2.err?.kind, left, hits: q.hits() });
+  q.close();
+}
+{
+  // A failure from before the breaker opened arrives while the trial request is out: the trial
+  // still decides, the cool-down is not doubled and no second trial is let out.
+  const s = await serve((q, res) => {
+    if (q.url === '/slowbad') setTimeout(() => { res.writeHead(500); res.end('down'); }, 600);
+    else if (q.url === '/slowok') setTimeout(() => res.end('up'), 600);
+    else { res.writeHead(500); res.end('down'); }
+  });
+  N.setHostPolicy(s.host, { concurrency: 4, failThreshold: 2, retries: 0, coolDownMs: 200, maxCoolDownMs: 5000 });
+  const old = attempt(N.netFetch(`${s.url}slowbad`));
+  await sleep(20);
+  for (let i = 0; i < 2; i++) await N.netFetch(`${s.url}bad`);
+  await sleep(250); // the cool-down has passed
+  const trial = attempt(N.netFetch(`${s.url}slowok`));
+  await old;
+  const other = await attempt(N.netFetch(`${s.url}bad`));
+  ok(health(s.host)?.state === 'trial' && other.err?.kind === 'circuit' && /being tested again/.test(other.err.message) && s.hits() === 4, 'a failure that was sent before the breaker opened is not taken for the trial’s', { state: health(s.host)?.state, msg: other.err?.message, hits: s.hits() });
+  ok((await trial).res?.status === 200 && health(s.host)?.state === 'ok' && (await N.netFetch(`${s.url}slowok`)).status === 200, 'the trial request itself then closes the breaker', health(s.host));
+  s.close();
+}
+{
   const s = await serve((_q, res) => { res.writeHead(404); res.end('no such thing'); });
   N.setHostPolicy(s.host, { failThreshold: 2 });
   for (let i = 0; i < 4; i++) await N.netFetch(s.url);
@@ -130,11 +235,20 @@ console.log('Network gate: readable errors');
   const t = await attempt(N.netFetch(s.url, { timeoutMs: 300 }));
   ok(t.err?.kind === 'timeout' && /: timed out after 300 ms$/.test(t.err.message) && s.hits() === 1, 'a timeout is reported as one and not retried', { msg: t.err?.message, hits: s.hits() });
   s.close();
+  // Headers and a first piece arrive, the rest never does.
+  const stall = await serve((_q, res) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.write('{"rows":['); });
+  N.setHostPolicy(stall.host, { failThreshold: 2, retries: 0 });
+  const b1 = await attempt(N.netFetch(stall.url, { timeoutMs: 300 }));
+  const b2 = await attempt(CACHE.fetchJson(stall.url, {}, 300));
+  const msg = `${stall.host}: timed out after 300 ms`;
+  ok(b1.err?.kind === 'timeout' && b1.err.message === msg && b2.err instanceof N.NetError && b2.err.message === msg, 'an answer that stalls part-way is a timeout of that host, with a readable reason', { b1: b1.err?.message, b2: b2.err?.message });
+  ok(health(stall.host)?.state === 'open' && health(stall.host)?.failed === 2 && health(stall.host)?.ok === 0, 'stalled answers count as failures and trip the breaker', health(stall.host));
+  stall.close();
   const u = await attempt(N.netFetch('http://nowhere.invalid/'));
   if (u.res) console.log('  – skipped: this machine resolves every host name');
   else ok(u.err instanceof N.NetError && /^nowhere\.invalid: (host name not found|DNS lookup failed)$/.test(u.err.message), 'an unknown host name gets a readable reason, not “fetch failed”', u.err?.message);
 }
-ok(N.hostHealth().length >= 8 && N.hostHealth().every((h: any) => typeof h.requests === 'number' && h.policy), 'host health lists every host contacted', N.hostHealth().length);
+ok(N.hostHealth().length >= 14 && N.hostHealth().every((h: any) => typeof h.requests === 'number' && h.policy), 'host health lists every host contacted', N.hostHealth().length);
 
 // ───────────────────────── Cross-source agreement ─────────────────────────
 console.log('Cross-source agreement: rules');
@@ -155,14 +269,31 @@ ok(A.fmtFigure(P.gdp, 18740) === 'US$18.74 tn' && A.fmtFigure(P.population, 0.03
 console.log('Cross-source agreement: a run against the seeded cache');
 const Y = String(new Date().getUTCFullYear() - 2), NOW = String(new Date().getUTCFullYear());
 const wbSeed = (code: string, values: Record<string, [number, string]>) => seed(`wb:all:${code}:latest`, { code, label: code, unit: '', short: code, values: Object.fromEntries(Object.entries(values).map(([k, [value, period]]) => [k, { value, period }])) });
+const CH = await imp('server/changes.ts');
+const announced = () => CH.recentChanges({ limit: 500 }).filter((c: any) => c.key.startsWith('agreement:')).map((c: any) => c.key);
 wbSeed('NY.GDP.MKTP.CD', { USA: [29.18e12, Y], CHN: [18.74e12, Y], IND: [3.91e12, Y], FRA: [3.2e12, NOW], DEU: [4.66e12, '2015'], JPN: [4.03e12, Y], WLD: [110e12, Y] });
 seed('imf:NGDPD', { USA: { [Y]: 29184.9 }, CHN: { [Y]: 15000 }, IND: { [Y]: 3730 }, FRA: { [NOW]: 3200 }, DEU: { 2015: 3400 }, JPN: { [String(Number(Y) - 1)]: 4200 } });
+{
+  // First run on a bad day: only GDP is there, the other five figures cannot be fetched (the network
+  // is switched off for this run, so the check never contacts the real sources).
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }); }) as typeof fetch;
+  const t0 = Date.now();
+  let st: any;
+  try { st = await CON.runConnector('cross-source-checks'); } finally { globalThis.fetch = realFetch; }
+  const p1 = A.agreementSummary().pairs;
+  ok(p1.filter((p: any) => p.error).length === 5 && /connection refused/.test(p1[1].error) && A.agreementFor('CHN').checks[0]?.verdict === 'conflict', 'a first run in which only GDP loads still compares GDP and says why the rest is missing', p1.map((p: any) => [p.key, p.error]));
+  const next = Date.parse(CON.connectorsStatus().find((c: any) => c.id === 'cross-source-checks').nextAt) - t0;
+  ok(st.ok && st.stale === true && /not loaded: Real GDP growth/.test(st.detail) && next > 4.5 * 60_000 && next < 5.5 * 60_000, 'an incomplete run is marked as such and tried again in five minutes, not tomorrow', { st, nextMin: next / 60_000 });
+  ok(announced().length === 0, 'the first run announces nothing: what exists is the baseline', announced());
+}
 wbSeed('NY.GDP.MKTP.KD.ZG', { USA: [2.8, Y], TUR: [3.2, Y] }); seed('imf:NGDP_RPCH', { USA: { [Y]: 2.8 }, TUR: { [Y]: 3.3 } });
 wbSeed('FP.CPI.TOTL.ZG', { TUR: [58.5, Y], ARG: [219.9, Y] }); seed('imf:PCPIPCH', { TUR: { [Y]: 40 }, ARG: { [Y]: 210 } });
 wbSeed('SL.UEM.TOTL.ZS', { ZAF: [33.2, Y] }); seed('imf:LUR', { ZAF: { [Y]: 25 } });
 wbSeed('BN.CAB.XOKA.GD.ZS', {}); seed('imf:BCA_NGDPD', {});
 wbSeed('SP.POP.TOTL', { USA: [335.9e6, Y] }); seed('imf:LP', { USA: { [Y]: 336.1 } });
 await A.refreshAgreement();
+ok(announced().length === 0, 'figures that load for the first time on a later run are a baseline too: their old conflicts are not announced as new', announced());
 const chn = A.agreementFor('CHN'), usa = A.agreementFor('USA'), fra = A.agreementFor('FRA'), deu = A.agreementFor('DEU'), jpn = A.agreementFor('JPN');
 ok(chn.checks.find((c: any) => c.key === 'gdp')?.verdict === 'conflict', 'China: GDP 22% apart is a conflict', chn.checks);
 ok(usa.checks.map((c: any) => c.key).join() === 'gdp,growth,population' && usa.checks.every((c: any) => c.verdict === 'agree'), 'United States: GDP, growth and population agree, listed in a fixed order', usa.checks.map((c: any) => [c.key, c.verdict]));
@@ -178,6 +309,54 @@ const issues = C.audit(true).filter((i: any) => i.category === 'source-figures-c
 ok(issues.length === 3 && issues.some((i: any) => i.entityId === 'country:CHN' && i.severity === 'warning' && /World Bank US\$18\.74 tn, IMF US\$15\.00 tn — 22\.2% apart \(tolerance 3%\)/.test(i.message)), 'conflicts appear in the consistency audit with both figures', issues.map((i: any) => i.message));
 ok(issues.find((i: any) => i.entityId === 'country:ZAF')?.severity === 'info', 'unemployment conflicts are information only: the definitions differ');
 ok(C.CATEGORY_LABEL['source-figures-conflict'] && CON.connectorsStatus().some((c: any) => c.id === 'cross-source-checks'), 'the audit category and the daily connector are registered');
+{
+  // A conflict that appears later in a figure already seen is news, once.
+  wbSeed('NY.GDP.MKTP.KD.ZG', { USA: [2.8, Y], TUR: [3.2, Y], BRA: [3.4, Y] }); seed('imf:NGDP_RPCH', { USA: { [Y]: 2.8 }, TUR: { [Y]: 3.3 }, BRA: { [Y]: 0.9 } });
+  CACHE._test.forget('wb:all:NY.GDP.MKTP.KD.ZG:latest'); CACHE._test.forget('imf:NGDP_RPCH');
+  await A.refreshAgreement(); await A.refreshAgreement();
+  ok(announced().join() === `agreement:BRA:growth:${Y}`, 'a conflict that appears later is announced, once', announced());
+}
+
+// ───────────────────────── Connector retries ─────────────────────────
+console.log('Connectors: a failed run is tried again soon');
+{
+  const seen: string[] = [];
+  CON.onConnectorRun((id: string, good: boolean, changed: boolean) => { if (id.startsWith('check-')) seen.push(`${id.slice(6)}:${good ? 'ok' : 'failed'}${changed ? ':changed' : ''}`); });
+  const row = (id: string) => CON.connectorsStatus().find((c: any) => c.id === id);
+  const inMs = (id: string) => Date.parse(row(id).nextAt) - Date.now();
+  const calls = { flaky: 0, down: 0, old: 0 };
+  const reg = (id: string, run: () => Promise<any>) => CON.registerConnector({ id, label: id, provides: 'check', sourceIds: ['terminal-audit'], everyHours: 24, run });
+  reg('check-flaky', async () => { if (++calls.flaky <= 3) throw new Error('source is having a bad few minutes'); return { detail: 'loaded', changed: false }; });
+  reg('check-down', async () => { calls.down++; throw new Error('source is gone'); });
+  reg('check-old', async () => (++calls.old === 1 ? { detail: 'older copy', stale: true, changed: false } : { detail: 'fresh copy', changed: false }));
+
+  const first = await CON.runConnector('check-flaky');
+  ok(!first.ok && inMs('check-flaky') > 4.9 * 60_000 && inMs('check-flaky') <= 5 * 60_000 && row('check-flaky').retries === 1, 'a failed run is due again five minutes later, not a day later', { ok: first.ok, nextMin: inMs('check-flaky') / 60_000 });
+  ok(!('timer' in row('check-flaky')) && JSON.stringify(CON.connectorsStatus()).length > 0, 'the status stays plain data');
+
+  CON._test.retryDelaysMs([60, 120, 180]); // the same three steps, in milliseconds
+  await CON.runConnector('check-flaky'); // asked for again by hand: replaces the pending retry, fails again
+  ok(calls.flaky === 2 && inMs('check-flaky') <= 60 && row('check-flaky').retries === 1, 'a run asked for meanwhile replaces the pending retry and starts the steps again', { calls: calls.flaky, next: inMs('check-flaky') });
+  await sleep(110);
+  ok(calls.flaky === 3 && !row('check-flaky').status.ok && inMs('check-flaky') > 0 && inMs('check-flaky') <= 120, 'the first retry ran, failed, and the second is due after the longer step', { calls: calls.flaky, next: inMs('check-flaky') });
+  await sleep(160);
+  ok(calls.flaky === 4 && row('check-flaky').status.ok && row('check-flaky').retries === 0 && inMs('check-flaky') > 23.9 * 3600_000, 'the retry that succeeds ends the series: next run on the usual schedule', { calls: calls.flaky, status: row('check-flaky').status, nextH: inMs('check-flaky') / 3600_000 });
+  await sleep(250);
+  ok(calls.flaky === 4, 'and nothing more runs after a success', calls.flaky);
+
+  await CON.runConnector('check-down');
+  await sleep(60 + 120 + 180 + 200);
+  ok(calls.down === 4 && !row('check-down').status.ok && inMs('check-down') > 23.9 * 3600_000, 'a source that stays down gets three retries, then waits for its usual turn', { calls: calls.down, nextH: inMs('check-down') / 3600_000 });
+  await sleep(250);
+  ok(calls.down === 4, 'no fourth retry', calls.down);
+
+  const old = await CON.runConnector('check-old');
+  ok(old.ok && old.stale === true && inMs('check-old') <= 60, 'a run that could only serve an older copy is tried again too', { old, next: inMs('check-old') });
+  await sleep(110);
+  ok(calls.old === 2 && row('check-old').status.detail === 'fresh copy' && !row('check-old').status.stale && inMs('check-old') > 23.9 * 3600_000, 'and the fresh copy ends the series', row('check-old'));
+  ok(seen.join() === 'flaky:failed,flaky:failed,flaky:failed,flaky:ok,down:failed,down:failed,down:failed,down:failed,old:ok,old:ok', 'listeners hear of every run, retries included, with ok and changed as before', seen);
+  CON._test.retryDelaysMs([5, 15, 45].map((m) => m * 60_000));
+}
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll quality checks passed');
 process.exit(failures ? 1 : 0);

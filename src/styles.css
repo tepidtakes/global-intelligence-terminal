@@ -355,12 +355,14 @@ table.data th.sortable:hover { color: var(--text); }
 /* One column at the content width — otherwise the widest unbreakable item in any card stretches every card. */
 .profile > .colMain, .profile > .colSide { grid-template-columns: minmax(0, 1fr); }
 .card { min-width: 0; }
-.navLinks { display: flex; gap: 2px; min-width: 0; }
+/* The icon row keeps its width (the search box gives way), so it never slides under what follows it. */
+.navLinks { display: flex; gap: 2px; min-width: 0; flex: none; }
 .navToggle, .navScrim, .navlink.menuOnly { display: none; }
 .legend { max-width: min(340px, calc(100% - 24px)); }
 
 @media (max-width: 1600px) { .brand small { display: none; } }
-@media (max-width: 1440px) {
+/* Eleven labelled links, the search box, the live badge and the account fit in one row only on screens wider than 1920px: icons only below that. */
+@media (max-width: 1920px) {
   .navLinks .navlink .lbl, .navlink.barOnly .lbl { display: none; }
   .navlink { padding: 6px 8px; }
 }
@@ -531,10 +533,17 @@ table.data th.sortable:hover { color: var(--text); }
 
 /* Live indicator in the top bar (src/components/LiveBadge.tsx) */
 .liveBadge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1; color: var(--muted); padding: 4px 9px; margin-right: 6px; border-radius: 999px; border: 1px solid var(--border, rgba(127, 127, 127, 0.35)); white-space: nowrap; cursor: default; user-select: none; }
-.liveBadge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.6; flex: none; }
-.liveBadge.live .dot { background: #2fa36b; opacity: 1; animation: livePulse 2.4s ease-out infinite; }
-.liveBadge.connecting .dot, .liveBadge.offline .dot { background: var(--warn, #d08a1e); opacity: 1; }
+.liveBadge .dot { position: relative; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.6; flex: none; }
+.liveBadge.live .dot { background: #2fa36b; opacity: 1; }
+/* The pulse animates transform and opacity only, which the compositor does without waking the page. */
+.liveBadge.live .dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: #2fa36b; opacity: 0; will-change: transform, opacity; animation: livePulse 2.4s ease-out infinite; }
+/* Not live: a hollow ring, so the state does not depend on colour alone. */
+.liveBadge.connecting .dot, .liveBadge.offline .dot, .liveBadge.paused .dot { background: transparent; box-shadow: inset 0 0 0 2px currentColor; opacity: 1; }
+.liveBadge.connecting .dot, .liveBadge.offline .dot { color: var(--warn, #d08a1e); }
+.liveBadge.paused .dot { opacity: 0.6; }
 .liveBadge.offline { color: var(--warn, #d08a1e); }
-@keyframes livePulse { 0% { box-shadow: 0 0 0 0 rgba(47, 163, 107, 0.5); } 70% { box-shadow: 0 0 0 6px rgba(47, 163, 107, 0); } 100% { box-shadow: 0 0 0 0 rgba(47, 163, 107, 0); } }
-@media (prefers-reduced-motion: reduce) { .liveBadge.live .dot { animation: none; } }
-@media (max-width: 720px) { .liveBadge { border: 0; padding: 4px; margin-right: 2px; } .liveBadge .lbl { display: none; } }
+@keyframes livePulse { 0% { transform: scale(1); opacity: 0.5; } 70%, 100% { transform: scale(2.7); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .liveBadge.live .dot::after { animation: none; } }
+/* Below 1100px the top bar is tight: the badge is its dot only (the tooltip and screen readers keep the words). */
+@media (max-width: 1100px) { .liveBadge { border: 0; padding: 4px; margin-right: 2px; } .liveBadge .lbl { display: none; } }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

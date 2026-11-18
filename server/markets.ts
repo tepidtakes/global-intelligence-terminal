@@ -23,6 +23,8 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T, i: nu
 }
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const daysAgo = (n: number, from = new Date()) => isoDate(new Date(from.getTime() - n * 86400_000));
+/** The first day of the month `n` months back: a start date for cached series that stays put for a month. */
+const monthsAgo = (n: number) => isoDate(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - n, 1)));
 
 /** Minimal RFC 4180 CSV parser (quoted fields may contain commas, quotes and newlines). */
 export function parseCsv(text: string): string[][] {
@@ -198,11 +200,12 @@ export async function policyRateHistory(iso3: string) {
 // ───────────────────────── 10-year government bond yields (OECD via FRED) ─────────────────────────
 const OECD_10Y = ['AU', 'AT', 'BE', 'CA', 'CL', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IS', 'IE', 'IL', 'IT', 'JP', 'KR', 'LV', 'LT', 'LU', 'MX', 'NL', 'NZ', 'NO', 'PL', 'PT', 'SK', 'SI', 'ES', 'SE', 'CH', 'GB', 'US', 'ZA', 'CR', 'CO', 'TR', 'IN', 'BR', 'CN', 'ID'];
 
-export async function fredSeries(id: string, since = '2015-01-01') {
-  return cached(`fred:${id}:${since}`, 24 * 3600, async () => {
+/** `since` is part of the cache key: pass one that moves monthly at most, not daily. */
+export async function fredSeries(id: string, since = '2015-01-01', ttlSec = 24 * 3600, opts: { grace?: number } = {}) {
+  return cached(`fred:${id}:${since}`, ttlSec, async () => {
     const rows = parseCsv(await fetchText(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=${since}`, {}, 20000));
     return rows.slice(1).map((r) => ({ t: r[0], v: parseFloat(r[1]) })).filter((p) => Number.isFinite(p.v));
-  });
+  }, opts);
 }
 
 /** Latest OECD monthly 10-year yield per country (no age cut-off here: staleness is flagged by the resolver). */
@@ -213,7 +216,7 @@ async function oecdTenYear() {
     // Up to 8 requests at a time (was 8 sequential batches of 6).
     await mapLimit(OECD_10Y, 8, async (c) => {
       try {
-        const last = (await fredSeries(`IRLTLT01${c}M156N`, daysAgo(400))).data.at(-1);
+        const last = (await fredSeries(`IRLTLT01${c}M156N`, monthsAgo(14))).data.at(-1);
         if (last && map[c]) out[map[c]] = { value: last.v, period: last.t.slice(0, 7) };
       } catch { /* that country has no series */ }
     });
@@ -292,7 +295,7 @@ export async function tenYearFor(iso3: string): Promise<TenYear | null> {
   const iso2 = getEntity(`country:${iso3}`)?.iso2;
   if (!iso2 || !OECD_10Y.includes(iso2)) return null;
   try {
-    const last = (await fredSeries(`IRLTLT01${iso2}M156N`, daysAgo(400))).data.at(-1);
+    const last = (await fredSeries(`IRLTLT01${iso2}M156N`, monthsAgo(14))).data.at(-1);
     return last ? { value: last.v, date: last.t.slice(0, 7), frequency: 'monthly', sourceId: 'oecd-mei', basis: 'Monthly average (OECD)', stale: last.t.slice(0, 7) < monthlyCut } : null;
   } catch { return null; }
 }

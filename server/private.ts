@@ -5,12 +5,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { all, get, run, tx, now, uid, DATA_DIR } from './db.js';
 import { requireUser, type AuthedRequest } from './auth.js';
+import { publish } from './live.js';
 import { getEntity, stub } from './graph.js';
 import { loadNote, saveNote, deleteNoteRow, findNoteByTitle } from './notes.js';
 import type { Catalyst, NoteHit, Position, PositionSummary, Transaction, Watchlist } from '../shared/types.js';
 
 export const priv = express.Router();
 priv.use(requireUser);
+// A write to private data (a note saved, a watchlist changed, an alert read…): this account's other
+// open pages are told, so a second window or device shows it within seconds. Nobody else is.
+priv.use((req: AuthedRequest, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') res.on('finish', () => { if (res.statusCode < 400) publish('account', req.userId); });
+  next();
+});
 
 const J = (s: string | null | undefined, d: any = []) => { try { return s ? JSON.parse(s) : d; } catch { return d; } };
 const uidOf = (req: AuthedRequest) => req.userId!;

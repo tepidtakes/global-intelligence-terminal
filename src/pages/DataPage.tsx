@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useApi } from '../api';
+import { useApi, REFERENCE_TTL_MS } from '../api';
 import { Card, Loading, Quality, Unavailable } from '../components/common';
 import { TierBadge } from '../components/newsBits';
 import { ago, fmtDate } from '../format';
@@ -140,13 +140,13 @@ function AuditCard({ q }: { q: ReturnType<typeof useApi<any>> }) {
           </div>
         </>
       )}
-      <div className="tiny muted" style={{ marginTop: 6 }}>Run the same audit offline with <code>npm run check:data</code>. Generated {fmtDate(d.generatedAt, true)}.</div>
+      <div className="tiny muted" style={{ marginTop: 6 }}>Run the same audit offline with <code>npm run check:data</code>.</div>
     </Card>
   );
 }
 
 function PublishersCard() {
-  const { data } = useApi<any>('/news-sources', 3600_000);
+  const { data } = useApi<any>('/news-sources', REFERENCE_TTL_MS);
   const [open, setOpen] = useState(false);
   if (!data) return null;
   const pubs: any[] = data.publishers;
@@ -223,7 +223,7 @@ function NetworkCard({ hosts, stream }: { hosts?: any[]; stream?: any }) {
       <div className="kpis" style={{ margin: '0 0 10px' }}>
         <div className="kpi"><div className="tiny muted">Hosts contacted</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{hosts.length}</div><div className="tiny muted">{requests.toLocaleString()} requests</div></div>
         <div className="kpi"><div className="tiny muted">Retried</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{retries.toLocaleString()}</div><div className="tiny muted">rate limits, dropped connections</div></div>
-        {stream && <div className="kpi" title="Open pages receive these over Server-Sent Events and refresh what they show"><div className="tiny muted">Live updates sent</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{stream.seq.toLocaleString()}</div><div className="tiny muted">{stream.lastAt ? `last ${ago(stream.lastAt)}` : 'none yet'} · {stream.clients} open page{stream.clients === 1 ? '' : 's'}</div></div>}
+        {stream && <div className="kpi" title={`Sent when data changes; open pages then refresh what they show. Each browser with a visible window holds one stream (at most ${stream.limit ?? 200} in all); pages that cannot hold one check every few seconds instead.${stream.refused ? ` ${stream.refused} stream${stream.refused === 1 ? '' : 's'} refused over the limit.` : ''}${stream.dropped ? ` ${stream.dropped} dropped for not reading.` : ''}`}><div className="tiny muted">Live updates sent</div><div style={{ fontSize: 18, fontWeight: 600 }} className="num">{stream.seq.toLocaleString()}</div><div className="tiny muted">{stream.lastAt ? `last ${ago(stream.lastAt)}` : 'none yet'} · {stream.clients} browser{stream.clients === 1 ? '' : 's'} connected</div></div>}
         <div className="kpi"><div className="tiny muted">Skipped now</div><div style={{ fontSize: 18, fontWeight: 600, color: skipped.length ? 'var(--warn)' : undefined }} className="num">{skipped.length}</div><div className="tiny muted">{skipped.length ? skipped.slice(0, 2).map((h) => h.host).join(', ') : 'every host is answering'}</div></div>
       </div>
       <div style={{ overflowX: 'auto' }}><table className="data"><thead><tr><th>Host</th><th>State</th><th className="num">Requests</th><th className="num">Average</th><th className="num">Retries</th><th>Last error</th></tr></thead>

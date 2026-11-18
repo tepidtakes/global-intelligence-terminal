@@ -13,6 +13,11 @@ const mem = new Map<string, Entry<any>>();
 const inflight = new Map<string, Promise<any>>();
 /** Fingerprint of each key's latest payload: open pages are told only when the figures change. */
 const sigs = new Map<string, string>();
+/** Fetches that just failed. Asking again right away (every open page refreshing, a profile with
+ *  twenty sections) would only hammer a provider that is down, so the failure stands for a moment:
+ *  a quarter of the data's lifetime, at most 30 seconds. */
+const failed = new Map<string, { until: number; err: unknown }>();
+const failMemoryMs = (ttlSec: number) => Math.min(30_000, ttlSec * 250);
 
 const file = (key: string) => path.join(DATA_DIR, 'cache', crypto.createHash('sha1').update(key).digest('hex') + '.json');
 
@@ -40,7 +45,7 @@ const GRACE: Record<string, number> = {
 };
 const graceFor = (key: string) => GRACE[key.split(':').slice(0, 2).join(':')] ?? GRACE[key.split(':')[0]] ?? 0;
 
-export async function cached<T>(key: string, ttlSec: number, fetcher: () => Promise<T>): Promise<Cached<T>> {
+export async function cached<T>(key: string, ttlSec: number, fetcher: () => Promise<T>, opts: { /** 0: once expired, wait for the fresh copy (no serve-then-refresh). */ grace?: number } = {}): Promise<Cached<T>> {
   let entry = mem.get(key) as Entry<T> | undefined;
   if (!entry) {
     // Async read: a large cached file must not block other requests.
@@ -62,14 +67,19 @@ export async function cached<T>(key: string, ttlSec: number, fetcher: () => Prom
           const body = JSON.stringify(payload) ?? 'null';
           fs.writeFile(file(key), `{"fetchedAt":${JSON.stringify(e.fetchedAt)},"payload":${body}}`, () => {});
           h.lastOk = e.fetchedAt;
-          // Tell open pages (server/live.ts) when the figures changed, not when only the retrieval time did.
+          failed.delete(key);
+          // Tell open pages (server/live.ts) when figures they may be showing changed: a copy held
+          // before now reads differently. A first fetch is not news to anyone (whoever asked gets it
+          // in the answer), and neither is the same data with a newer retrieval time.
           const sig = crypto.createHash('sha1').update(body).digest('hex');
           const before = sigs.get(key) ?? (prev ? crypto.createHash('sha1').update(JSON.stringify(prev.payload) ?? 'null').digest('hex') : undefined);
           sigs.set(key, sig);
-          if (sig !== before) publish(key.split(':')[0]);
+          if (before !== undefined && sig !== before) publish(key.split(':')[0]);
           return e;
         } catch (err: any) {
           h.failures++; h.lastError = String(err?.message || err).slice(0, 200); h.lastErrorAt = new Date().toISOString();
+          const ms = failMemoryMs(ttlSec);
+          if (ms > 0) { failed.set(key, { until: Date.now() + ms, err }); if (failed.size > 5000) { const now = Date.now(); for (const [k, f] of failed) if (f.until < now) failed.delete(k); } }
           throw err;
         }
       })().finally(() => inflight.delete(key)));
@@ -77,7 +87,23 @@ export async function cached<T>(key: string, ttlSec: number, fetcher: () => Prom
     return inflight.get(key)! as Promise<Entry<T>>;
   };
 
-  if (entry && age < ttlSec * (1 + graceFor(key)) * 1000) {
+  const serveStale = (e: Entry<T>): Cached<T> => {
+    const h = hp(key, ttlSec);
+    h.staleServes++; h.lastStaleAt = new Date().toISOString();
+    if (!h.oldestStaleCopy || e.fetchedAt < h.oldestStaleCopy) h.oldestStaleCopy = e.fetchedAt;
+    return { data: e.payload, fetchedAt: e.fetchedAt, stale: true };
+  };
+  const inGrace = !!entry && age < ttlSec * (1 + (opts.grace ?? graceFor(key))) * 1000;
+  // The last fetch failed moments ago: answer the same way without asking the provider again.
+  const f = failed.get(key);
+  if (f && !inflight.has(key)) {
+    if (f.until > Date.now()) {
+      if (entry) return inGrace ? { data: entry.payload, fetchedAt: entry.fetchedAt, stale: false } : serveStale(entry);
+      throw f.err;
+    }
+    failed.delete(key);
+  }
+  if (entry && inGrace) {
     start().catch(() => { /* recorded in provider health; the copy below stays in use */ });
     return { data: entry.payload, fetchedAt: entry.fetchedAt, stale: false };
   }
@@ -85,15 +111,14 @@ export async function cached<T>(key: string, ttlSec: number, fetcher: () => Prom
     const e = await start();
     return { data: e.payload, fetchedAt: e.fetchedAt, stale: false };
   } catch (err) {
-    if (entry) {
-      const h = hp(key, ttlSec);
-      h.staleServes++; h.lastStaleAt = new Date().toISOString();
-      if (!h.oldestStaleCopy || entry.fetchedAt < h.oldestStaleCopy) h.oldestStaleCopy = entry.fetchedAt;
-      return { data: entry.payload, fetchedAt: entry.fetchedAt, stale: true };
-    }
+    if (entry) return serveStale(entry);
     throw err;
   }
 }
+/** For tests: drop the in-memory copy of a key, so the next call reads the disk copy again. */
+export const _test = { forget: (key: string) => { mem.delete(key); sigs.delete(key); failed.delete(key); } };
+/** Forget remembered failures (tests, and "run now" on the Data page: a person asked to try again). */
+export function retryFailedNow(prefix = '') { for (const k of [...failed.keys()]) if (k.startsWith(prefix)) failed.delete(k); }
 
 /** Keep the in-memory cache bounded: drop entries not needed for 2 days (disk copies remain). */
 setInterval(() => {

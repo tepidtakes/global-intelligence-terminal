@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, useApi } from '../api';
+import { api, useApi, REFERENCE_TTL_MS } from '../api';
 import { TYPE_ICON, money, fmtDate } from '../format';
 import type { EntityStub, PositionSummary, SearchHit, Source, DataQuality, NoteHit } from '../../shared/types';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
@@ -25,10 +25,10 @@ export function Quality({ q }: { q: DataQuality }) {
   return <span className={`q ${q}`} title={Q_HELP[q]}>{q}</span>;
 }
 
-let sourcesCache: Record<string, Source> | null = null;
+let sourcesCache: Record<string, Source> | null = null; let sourcesFrom: Source[] | undefined;
 export function useSources() {
-  const { data } = useApi<Source[]>('/sources', 3600_000);
-  if (data && !sourcesCache) sourcesCache = Object.fromEntries(data.map((s) => [s.id, s]));
+  const { data } = useApi<Source[]>('/sources', REFERENCE_TTL_MS);
+  if (data && data !== sourcesFrom) { sourcesFrom = data; sourcesCache = Object.fromEntries(data.map((s) => [s.id, s])); }
   return sourcesCache || {};
 }
 export function SourceRef({ id, prefix = 'Source: ' }: { id?: string; prefix?: string }) {

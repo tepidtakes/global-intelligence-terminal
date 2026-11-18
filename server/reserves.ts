@@ -6,7 +6,7 @@
 //   • natural-gas storage in Europe — GIE AGSI+ (AGSI_API_KEY, free), % full;
 //   • foreign-exchange and gold reserves — World Bank (IMF IFS), in providers.ts;
 //   • how each major country holds strategic oil reserves — hand-entered from official pages.
-import { publish } from './live.js';
+import { publishRun } from './live.js';
 import { netFetch } from './net.js';
 import zlib from 'node:zlib';
 import { Readable } from 'node:stream';
@@ -180,7 +180,7 @@ async function usOilStocks() {
     return pack(r.data.spr, r.data.commercial, 'EIA API', r.fetchedAt);
   }
   // Without a key: the same weekly series as republished by FRED.
-  const since = new Date(Date.now() - 500 * 86400_000).toISOString().slice(0, 10);
+  const since = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 17, 1)).toISOString().slice(0, 10); // moves monthly: it is part of the cache key
   const [spr, com] = await Promise.all([fredSeries('WCSSTUS1', since), fredSeries('WCESTUS1', since).catch(() => null)]);
   return pack(spr.data, com?.data || [], 'FRED', spr.fetchedAt);
 }
@@ -305,7 +305,8 @@ export async function gasLayer() {
 }
 
 export function startReserves() {
-  setTimeout(() => { void refreshReserves().catch(() => {}); }, 45000).unref();
-  setInterval(() => { void refreshReserves().then(() => publish('reserves')).catch(() => {}); }, 12 * 3600_000).unref();
+  const run = () => { void refreshReserves().then(() => publishRun('reserves', true), () => publishRun('reserves', false)); };
+  setTimeout(run, 45000).unref();
+  setInterval(run, 12 * 3600_000).unref();
 }
 export const _test = { setOil: (d: any) => { oil = d ? { data: d, fetchedAt: new Date().toISOString(), stale: false } : null; }, setGrains: (d: any) => { grains = d ? { data: d, fetchedAt: new Date().toISOString(), stale: false } : null; } };

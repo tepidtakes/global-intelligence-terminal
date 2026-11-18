@@ -115,7 +115,10 @@ export function applyElectionInfo(e: Entity, article: string, info: ElectionInfo
   const place = knownPlace || placeOf(e);
   const countryId = countryOf(place?.id);
   const prevStatus = e.attrs?.status;
-  const status = out.status === 'completed' ? 'completed' : out.status === 'counting' ? 'results-pending' : prevStatus === 'outcome-not-recorded' ? 'scheduled' : (prevStatus || 'scheduled');
+  const status = out.status === 'completed' ? 'completed' : out.status === 'counting' ? 'results-pending'
+    // An election whose day has passed stays "outcome not recorded" until its article has a result:
+    // only one that is still ahead goes back to "scheduled".
+    : prevStatus === 'outcome-not-recorded' ? (String(e.attrs?.endDate || e.attrs?.date || '').slice(0, 10) >= today() ? 'scheduled' : 'outcome-not-recorded') : (prevStatus || 'scheduled');
   const contenders = out.ranked.slice(0, 10).map((c) => ({ ...c, personId: personFor(c, e, place?.id), partyId: c.party && countryId ? findParty(c.party, countryId) || (c.partyLink ? findParty(c.partyLink, countryId) : undefined) : undefined }));
   e.attrs = {
     ...(e.attrs || {}), status, article, url: wikiUrl(article),
@@ -163,14 +166,15 @@ function emitElectionChanges() {
 }
 
 // ───────────────────────── Refresh loop ─────────────────────────
-let lastDetails: { at: string; hot: number; cold: number; updated: number } | null = null;
+let lastDetails: { at: string; hot: number; cold: number; updated: number; changed: boolean } | null = null;
+let lastRevs = '';
 export async function refreshElectionDetails() {
   const hotFrom = dayOffset(-10), hotTo = dayOffset(2);
   const from = dayOffset(-150), to = dayOffset(430);
   const items = [...entities.values()].filter(isElection).map((e) => ({ e, article: articleOf(e), date: String(e.attrs?.endDate || e.attrs?.date || '') }))
     .filter((x) => x.article && x.date >= from && x.date <= to);
   const hot = items.filter((x) => x.date >= hotFrom && x.date <= hotTo), cold = items.filter((x) => !hot.includes(x));
-  let updated = 0;
+  let updated = 0; const revs: string[] = [];
   for (const [list, ttl] of [[hot, 1800], [cold, 12 * 3600]] as const) {
     if (!list.length) continue;
     const r = await wikiBatch([...new Set(list.map((x) => x.article!))], 'content', ttl);
@@ -181,11 +185,13 @@ export async function refreshElectionDetails() {
       const info = parseElectionInfobox(p.content);
       if (!info) continue;
       applyElectionInfo(x.e, p.title, info, { fetchedAt: r.fetchedAt, revTimestamp: p.revTimestamp, stale: r.stale });
-      updated++;
+      updated++; revs.push(`${x.e.id}@${p.revTimestamp || ''}`);
     }
   }
   flushCandidateRels();
-  lastDetails = { at: new Date().toISOString(), hot: hot.length, cold: cold.length, updated };
+  // Changed = an article was revised (or an election entered or left the window) since the last run.
+  const sig = revs.sort().join('|'); const changed = sig !== lastRevs; lastRevs = sig;
+  lastDetails = { at: new Date().toISOString(), hot: hot.length, cold: cold.length, updated, changed };
   return `${updated} election articles read (${hot.length} near polling day, refreshed every 30 min)`;
 }
 
@@ -310,6 +316,8 @@ export function startElectionDetails() {
     try { liveStatus['election-results'] = { ok: true, at: new Date().toISOString(), detail: await refreshElectionDetails(), sourceId: SRC }; }
     catch (e: any) { liveStatus['election-results'] = { ok: false, at: new Date().toISOString(), detail: e.message, sourceId: SRC }; }
   };
-  setInterval(() => { void run().then(() => publish('elections')); }, 30 * 60_000).unref();
+  // The first reading is part of the start-up refresh (announced as "live-data"); afterwards open
+  // pages are told only when an article was revised.
+  setInterval(() => { void run().then(() => { if (lastDetails?.changed) publish('elections'); }); }, 30 * 60_000).unref();
   return run;
 }

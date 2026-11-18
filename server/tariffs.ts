@@ -6,7 +6,7 @@
 //     API: calculated duty ÷ imports for consumption, for the latest month, year to date, the month
 //     before and the same month a year earlier.
 // Every country's own applied tariff rates come from the World Bank (providers.ts, TM.TAX.*).
-import { publish } from './live.js';
+import { publishRun } from './live.js';
 import { cached, fetchJson } from './cache.js';
 import { getEntity } from './graph.js';
 import { recordChange, kvGet, kvSet } from './changes.js';
@@ -187,8 +187,9 @@ export function tariffsStatus() {
 }
 
 export function startTariffs() {
-  setTimeout(() => { void refreshTariffs(); }, 20000).unref();
-  setInterval(() => { void refreshTariffs().then(() => publish('tariffs')); }, 6 * 3600_000).unref();
+  const run = () => { void refreshTariffs().then(() => publishRun('tariffs', true), () => publishRun('tariffs', false)); };
+  setTimeout(run, 20000).unref();
+  setInterval(run, 6 * 3600_000).unref();
 }
 
 export const _test = { setDuties: (d: DutyState | null) => { duties = d; }, setActions: (list: TariffAction[]) => { actions = { at: new Date().toISOString(), list }; }, monthsBack };

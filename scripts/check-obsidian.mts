@@ -1,4 +1,4 @@
-// Checks the Obsidian Markdown conversion and Windows-safe naming.
+// Checks the Obsidian Markdown conversion, Windows-safe naming, pasted paths and (on Linux) the sync itself.
 // Run: npm run check:obsidian   (uses a temporary data folder, never your real notes)
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 
 process.env.TERMINAL_DATA_DIR ||= path.join(os.tmpdir(), 'git-obsidian-check');
 const { _internal, safeName, normalizeVaultPath, detectVaults } = await import(pathToFileURL(path.resolve('server/obsidian.ts')).href);
-const { htmlToMarkdown, markdownToHtml, entityNames } = _internal;
+const { htmlToMarkdown, markdownToHtml, entityNames, retry, accessError } = _internal;
 const { entFile } = entityNames();
 let failed = 0;
 const check = (name: string, ok: boolean, detail?: unknown) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); if (!ok) { failed++; if (detail !== undefined) console.log('      ', detail); } };
@@ -77,6 +77,10 @@ if (process.platform === 'win32') {
 // Paths people paste on Linux and macOS
 if (process.platform !== 'win32') {
   check('file:// links from a file manager accepted', normalizeVaultPath('file:///home/me/My%20Vault') === '/home/me/My Vault', normalizeVaultPath('file:///home/me/My%20Vault'));
+  // Older GNOME Files versions copy three lines; a one-line field may join them or keep the breaks.
+  for (const [how, pasted] of [['three lines', 'x-special/nautilus-clipboard\ncopy\nfile:///home/me/My%20Vault\n'], ['joined into one line', 'x-special/nautilus-clipboardcopyfile:///home/me/My%20Vault'], ['two folders copied', 'copyfile:///home/me/My%20Vaultfile:///home/me/Other']])
+    check(`file:// link found inside what GNOME Files copies (${how})`, normalizeVaultPath(pasted) === '/home/me/My Vault', normalizeVaultPath(pasted));
+  check('a plain path with spaces is left alone', normalizeVaultPath('/home/me/My Vault') === '/home/me/My Vault');
   check('~ expands to home', normalizeVaultPath('~/Vault') === path.join(os.homedir(), 'Vault'));
   let example = ''; try { normalizeVaultPath('relative/path'); } catch (e: any) { example = e.message; }
   check('relative path rejected, with an example for this system', process.platform === 'darwin' ? /\/Users\/you\//.test(example) : /\/home\/you\//.test(example), example);
@@ -101,6 +105,75 @@ if (process.platform === 'linux') {
   check('two vaults whose names differ only in case are both kept', found.includes(path.join(home, 'notes')) && found.includes(path.join(home, 'Notes')), found);
   check('a vault in a Documents folder named in another language is found (xdg-user-dirs)', found.includes(path.join(home, 'Dokumente', 'Arbeit')), found);
   fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+// Permission errors: on Windows they are usually a passing lock (worth a retry); elsewhere they are
+// permanent and the message must not blame Windows. (Not provoked for real: tests may run as root.)
+{
+  const denied = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES', path: '/vault/Terminal/Notes/.Plan.md.1-2.tmp' });
+  let tries = 0; await retry(async () => { tries++; throw denied; }, 3).catch(() => {});
+  check('"access denied" is retried only on Windows', tries === (process.platform === 'win32' ? 3 : 1), tries);
+  tries = 0; await retry(async () => { tries++; throw Object.assign(new Error('busy'), { code: 'EBUSY' }); }, 2).catch(() => {});
+  check('a busy file is retried everywhere', tries === 2, tries);
+  const msg = accessError(denied);
+  check('the permission message fits this system', process.platform === 'win32' ? /^Windows denied access/.test(msg) : !/Windows/.test(msg) && msg.includes('/vault/Terminal/Notes (EACCES)') && !msg.includes('.tmp'), msg);
+  check('a failed rename names the file it was writing', process.platform === 'win32' || accessError({ code: 'EPERM', path: '/v/.a.md.1-2.tmp', dest: '/v/a.md' }).includes('/v/a.md (EPERM)'));
+}
+
+// The sync itself where file names are case-sensitive (Linux): files and vault folders that differ only in
+// case are different things and must not be mixed up.
+if (process.platform === 'linux') {
+  const db = await import(pathToFileURL(path.resolve('server/db.ts')).href);
+  const obs = await import(pathToFileURL(path.resolve('server/obsidian.ts')).href);
+  const notes = await import(pathToFileURL(path.resolve('server/notes.ts')).href);
+  const express = (await import('express')).default;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'git-obsidian-sync-'));
+  const users: string[] = [];
+  const mkUser = () => { const u = db.uid(); users.push(u); db.run('INSERT INTO users (id, email, password_hash, created_at) VALUES (?,?,?,?)', u, `${u}@check.test`, 'x', db.now()); return u; };
+  const connect = (u: string, v: string) => { fs.mkdirSync(v, { recursive: true }); db.run('INSERT INTO vault_config (user_id, vault_path, folder, auto_sync, entity_pages, app_url) VALUES (?,?,?,0,0,?)', u, v, 'Terminal', 'http://localhost:5180'); return path.join(v, 'Terminal', 'Notes'); };
+  const texts = (u: string) => Object.fromEntries(db.all('SELECT title, body_text FROM notes WHERE user_id = ?', u).map((n: any) => [n.title, n.body_text.trim()]));
+  try {
+    // Two new files written in Obsidian
+    let u = mkUser(); let dir = connect(u, path.join(tmp, 'A')); fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'Plan.md'), 'UPPER plan text\n'); fs.writeFileSync(path.join(dir, 'plan.md'), 'lower plan text\n');
+    let r = await obs.syncVault(u, true);
+    check('Plan.md and plan.md become two notes', r.ok && r.created === 2 && texts(u).Plan === 'UPPER plan text' && texts(u).plan === 'lower plan text', [r, texts(u)]);
+    r = await obs.syncVault(u, true);
+    check('…and the next sync changes nothing', r.ok && r.imported + r.created + r.exported + r.detached === 0 && texts(u).Plan === 'UPPER plan text', [r, texts(u)]);
+    const stamped = ['Plan.md', 'plan.md'].map((f) => /^terminal_id: (\S+)$/m.exec(fs.readFileSync(path.join(dir, f), 'utf8'))?.[1]);
+    check('…and each file carries its own id', !!stamped[0] && !!stamped[1] && stamped[0] !== stamped[1], stamped);
+
+    // A file whose name differs only in case from a synced note's file
+    u = mkUser(); dir = connect(u, path.join(tmp, 'B'));
+    notes.saveNote(u, db.uid(), { title: 'Budget', bodyHtml: '<p>APP note: the real budget analysis</p>', tags: [], entityIds: [] }, true);
+    await obs.syncVault(u, true);
+    fs.writeFileSync(path.join(dir, 'budget.md'), 'a different, unrelated scratch file\n');
+    r = await obs.syncVault(u, true);
+    check('budget.md next to Budget.md is a new note, not a replacement', r.ok && r.created === 1 && r.imported === 0 && texts(u).Budget === 'APP note: the real budget analysis' && texts(u).budget === 'a different, unrelated scratch file', [r, texts(u)]);
+    // Names the terminal chooses still avoid case-only twins, so the vault can be shared with Windows or macOS
+    notes.saveNote(u, db.uid(), { title: 'BUDGET', bodyHtml: '<p>third</p>', tags: [], entityIds: [] }, true);
+    await obs.syncVault(u, true);
+    check('a new note titled BUDGET gets a file name that is free on Windows too', fs.existsSync(path.join(dir, 'BUDGET 2.md')) && !fs.existsSync(path.join(dir, 'BUDGET.md')), fs.readdirSync(dir));
+    // A case-only rename made in Obsidian is followed through the id in the file
+    fs.renameSync(path.join(dir, 'Budget.md'), path.join(dir, 'BudgeT.md'));
+    r = await obs.syncVault(u, true);
+    check('a case-only rename in Obsidian is followed, not treated as a deletion', r.ok && r.renamed === 1 && r.detached === 0 && r.created === 0 && texts(u).BudgeT === 'APP note: the real budget analysis', [r, texts(u)]);
+
+    // Switching to a vault folder that differs only in case, through the real route
+    u = mkUser();
+    const app = express(); app.use(express.json()); app.use((req: any, _res: any, next: any) => { req.userId = u; next(); });
+    obs.registerObsidianRoutes(app);
+    const server = app.listen(0, '127.0.0.1'); await new Promise((ok) => server.once('listening', ok));
+    const put = async (vaultPath: string) => (await fetch(`http://127.0.0.1:${(server.address() as any).port}/obsidian`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vaultPath, folder: 'Terminal', autoSync: false, entityPages: false }) })).json();
+    const v1 = path.join(tmp, 'D', 'Vault'), v2 = path.join(tmp, 'D', 'vault'); fs.mkdirSync(v1, { recursive: true }); fs.mkdirSync(v2, { recursive: true });
+    notes.saveNote(u, db.uid(), { title: 'Thesis', bodyHtml: '<p>text</p>', tags: [], entityIds: [] }, true);
+    const first = await put(v1); const second = await put(v2);
+    server.close();
+    check('switching from …/Vault to …/vault writes the notes to the new vault', first.result?.exported === 1 && second.result?.exported === 1 && second.result?.detached === 0 && fs.existsSync(path.join(v2, 'Terminal', 'Notes', 'Thesis.md')), [first, second]);
+  } finally {
+    for (const u of users) { for (const t of ['vault_files', 'vault_config', 'notes']) db.run(`DELETE FROM ${t} WHERE user_id = ?`, u); db.run('DELETE FROM users WHERE id = ?', u); }
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 console.log(failed ? `\n${failed} check(s) failed` : '\nAll checks passed');

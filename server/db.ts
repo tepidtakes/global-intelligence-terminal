@@ -1,11 +1,26 @@
-// Private, per-user storage. SQLite (built into Node 24) with FTS5 for note search.
+// Private, per-user storage. SQLite (built into Node.js: node:sqlite, unflagged from 22.13) with FTS5 for note search.
 // Mirrors the private half of db/postgres-schema.sql.
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 
 export const DATA_DIR = path.resolve(process.env.TERMINAL_DATA_DIR || 'data');
-fs.mkdirSync(DATA_DIR, { recursive: true });
+// Accounts, notes, uploads and the provider cache live in this folder. On Linux and macOS a new
+// folder can be read by every user of the computer unless told otherwise, so it is kept to the user
+// who runs the terminal: created that way, and tightened if an earlier version left it open.
+// TERMINAL_DATA_MODE=750 shares it with a group instead (for a backup user, say).
+const DATA_MODE = /^[0-7]{3}$/.test(process.env.TERMINAL_DATA_MODE || '') ? parseInt(process.env.TERMINAL_DATA_MODE!, 8) : 0o700;
+fs.mkdirSync(DATA_DIR, { recursive: true, mode: DATA_MODE });
+if (process.platform !== 'win32') {
+  try {
+    const mode = fs.statSync(DATA_DIR).mode & 0o777;
+    if (mode & ~DATA_MODE) {
+      fs.chmodSync(DATA_DIR, mode & DATA_MODE);
+      const now = fs.statSync(DATA_DIR).mode & 0o777;
+      if (now !== mode) console.log(`[data] ${DATA_DIR} was open to other users of this computer (mode ${mode.toString(8)}); it is now ${now.toString(8)}`);
+    }
+  } catch { /* not ours to change (another owner, or a file system without permissions) */ }
+}
 fs.mkdirSync(path.join(DATA_DIR, 'uploads'), { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, 'cache'), { recursive: true });
 

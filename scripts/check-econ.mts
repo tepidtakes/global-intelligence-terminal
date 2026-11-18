@@ -206,7 +206,7 @@ const imf = await B.imfBudget('USA');
 const intRow = imf.rows.find((r: any) => r.key === 'interest');
 ok(imf.rows.map((r: any) => r.key).join() === 'revenue,expenditure,balance,primary,interest,debt' && near(intRow.values[String(yr)], 4.1, 1e-9), 'IMF table: revenue, spending, balances, debt; net interest = primary − overall balance', imf.rows.map((r: any) => r.key));
 seed('budget:us-debt:v1', debt); seed('budget:us-interest:v1', intr); seed('budget:us-avg-rates:v1', avg);
-const since = new Date(Date.now() - 800 * 86400_000).toISOString().slice(0, 10);
+const since = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 27, 1)).toISOString().slice(0, 10); // as budgets.ts asks FRED: a start date that moves monthly
 seed(`fred:MTSDS133FMS:${since}`, mts); seed(`fred:MTSR133FMS:${since}`, mts.map((p) => ({ ...p, v: 400000 }))); seed(`fred:MTSO133FMS:${since}`, mts.map((p) => ({ ...p, v: 400000 - p.v })));
 CH.kvSet('budget:us-debt-tn', 37);
 const usb = await B.budgetFor('country:USA');
@@ -247,7 +247,7 @@ ok(ws.rows[0].id === 'country:CHN' && ws.rows[0].share === 69.3 && ws.year === '
 seed(`wb:country:JPN:${['FI.RES.TOTL.CD', 'FI.RES.XGLD.CD', 'FI.RES.TOTL.MO'].join(',')}`, [{ code: 'FI.RES.TOTL.CD', label: 'x', unit: 'USD', series: [], latest: { period: '2024', value: 1.23e12 }, sourceId: 'world-bank-wdi' }]);
 const jp = await R.reservesFor('country:JPN');
 ok(jp.oil.latest.stocks === 85000 && jp.programme.length === 2 && jp.fx.indicators.length === 1 && !jp.us, 'Japan profile: oil stocks, reserve programme notes, FX reserves');
-const since500 = new Date(Date.now() - 500 * 86400_000).toISOString().slice(0, 10);
+const since500 = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 17, 1)).toISOString().slice(0, 10); // as reserves.ts asks FRED
 seed(`fred:WCSSTUS1:${since500}`, eia.spr); seed(`fred:WCESTUS1:${since500}`, eia.commercial);
 const us1 = await R.reservesFor('country:USA');
 ok(us1.us?.spr === 410500 && us1.us.sprYearAgo === 405000 && us1.us.via === 'FRED', 'United States: weekly SPR without a key (FRED), with the level a year earlier', us1.us);

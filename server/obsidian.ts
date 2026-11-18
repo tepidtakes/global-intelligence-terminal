@@ -25,6 +25,7 @@ import YAML from 'yaml';
 import { all, get, run, now, uid, DATA_DIR } from './db.js';
 import { entities, getEntity } from './graph.js';
 import { loadNote, saveNote, noteChangeListeners } from './notes.js';
+import { publish } from './live.js';
 import type { AuthedRequest } from './auth.js';
 import { VAULT_ACCESS } from './config.js';
 import { ENTITY_TYPE_LABEL } from '../shared/types.js';
@@ -47,9 +48,13 @@ function safeFileName(filename: string) {
   return safeName(path.basename(filename, path.extname(filename)), 100) + ext;
 }
 /** Accepts what people paste: quotes from Windows' "Copy as path", %USERPROFILE%, ~, / or \, and
- *  file:// links (what Linux file managers put on the clipboard when you copy a folder). */
+ *  file:// links (what Linux file managers put on the clipboard when you copy a folder). Some file
+ *  managers put other lines around the link ("x-special/nautilus-clipboard", "copy"), and a one-line
+ *  field joins them, so the first link is taken out of whatever surrounds it. */
 export function normalizeVaultPath(input: string) {
   let p = String(input || '').trim().replace(/^["']+|["']+$/g, '');
+  const link = /file:\/\/.+?(?=\s*file:\/\/|[\r\n]|$)/i.exec(p);
+  if (link) p = link[0];
   if (/^file:\/\//i.test(p)) { try { p = fileURLToPath(p); } catch { /* not a local file link: rejected below */ } }
   p = p.replace(/%([^%]+)%/g, (m, v) => process.env[v] ?? process.env[v.toUpperCase()] ?? m);
   if (p === '~' || /^~[\\/]/.test(p)) p = path.join(os.homedir(), p.slice(1));
@@ -69,10 +74,20 @@ function inside(root: string, target: string) {
   const rel = path.relative(root, target);
   return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
+// Errors worth a short wait. "Access denied" passes on Windows (Obsidian, OneDrive or antivirus holding the
+// file for a moment); elsewhere it means the owner or permissions are wrong, and waiting does not help.
+const RETRY_CODES = ['EBUSY', 'EMFILE', ...(process.platform === 'win32' ? ['EPERM', 'EACCES'] : [])];
+/** What to tell the user when the system refuses access to the vault. */
+function accessError(e: any) {
+  if (process.platform === 'win32') return `Windows denied access to the vault folder (${e.code}). Close any program locking it, or check the folder's permissions.`;
+  // Our own temp files are not worth naming: say which file or folder was being written.
+  const where = e.dest || (e.path && /\.tmp$/.test(e.path) ? path.dirname(e.path) : e.path) || 'the vault folder';
+  return `The terminal is not allowed to write to ${where} (${e.code}). Check who owns that folder and its permissions.`;
+}
 async function retry<T>(fn: () => Promise<T>, tries = 6): Promise<T> {
   for (let i = 0; ; i++) {
     try { return await fn(); } catch (e: any) {
-      if (i >= tries - 1 || !['EPERM', 'EBUSY', 'EACCES', 'EMFILE'].includes(e.code)) throw e;
+      if (i >= tries - 1 || !RETRY_CODES.includes(e.code)) throw e;
       await sleep(50 * 2 ** i);
     }
   }
@@ -213,6 +228,8 @@ const obsidianUri = (absFile: string) => `obsidian://open?path=${encodeURICompon
 
 // Linux (and other Unix) file systems are case-sensitive: "Notes" and "notes" are two folders there.
 const vaultKey = (p: string) => (process.platform === 'win32' || process.platform === 'darwin' ? p.toLowerCase() : p);
+/** The same rule for files inside the vault: "Plan.md" and "plan.md" are one file on Windows and macOS, two on Linux. */
+const relKey = (rel: string) => vaultKey(rel);
 /** The Documents folder, which Linux desktops may name in the user's language (xdg-user-dirs). */
 function documentsDir(home: string) {
   if (process.platform === 'linux') {
@@ -298,7 +315,7 @@ async function doSync(userId: string, full: boolean): Promise<SyncResult> {
 
     // 1. What's on disk
     const files = await scanMarkdown(root, notesDir);
-    const byRel = new Map(files.map((f) => [f.rel.toLowerCase(), f]));
+    const byRel = new Map(files.map((f) => [relKey(f.rel), f]));
     const byId = new Map<string, FileInfo>();
     for (const f of files) if (f.id && !byId.has(f.id)) byId.set(f.id, f);
 
@@ -317,13 +334,15 @@ async function doSync(userId: string, full: boolean): Promise<SyncResult> {
     // 3. Files renamed or moved inside Obsidian: follow them by terminal_id.
     const movedInObsidian = new Set<string>();
     for (const r of rows) {
-      const f = byRel.get(r.rel_path.toLowerCase());
+      const f = byRel.get(relKey(r.rel_path));
       if (f && (!f.id || f.id === r.note_id)) continue;
       const moved = byId.get(r.note_id);
       if (moved && moved.rel !== r.rel_path) { setRow(r.note_id, { rel_path: moved.rel }); movedInObsidian.add(r.note_id); result.renamed++; }
     }
 
     // 4. Choose file names for notes not yet in the vault, and rename files whose title changed in the app.
+    // Names the terminal picks never differ from an existing one only in case, on any system, so the vault
+    // stays usable when it is shared with Windows or macOS.
     const taken = new Set<string>([...files.map((f) => f.rel.toLowerCase()), ...rows.map((r) => r.rel_path.toLowerCase())]);
     const pickPath = (title: string, self?: string) => {
       const maxBase = Math.max(20, Math.min(120, 250 - notesDir.length - 10));
@@ -333,13 +352,13 @@ async function doSync(userId: string, full: boolean): Promise<SyncResult> {
         if (rel.toLowerCase() === self?.toLowerCase() || !taken.has(rel.toLowerCase())) { taken.add(rel.toLowerCase()); return rel; }
       }
     };
-    const fileChangedSince = (r: any) => { const f = byRel.get(r.rel_path.toLowerCase()); return !!f && r.hash != null && f.hash !== r.hash; };
+    const fileChangedSince = (r: any) => { const f = byRel.get(relKey(r.rel_path)); return !!f && r.hash != null && f.hash !== r.hash; };
     for (const n of noteRows.values()) {
       const r = rowOf(n.id);
       if (!r) {
         // Reconnecting to a vault that already holds this note: the newer side wins.
         const f = byId.get(n.id);
-        if (f && !rows.some((x) => x.rel_path.toLowerCase() === f.rel.toLowerCase())) {
+        if (f && !rows.some((x) => relKey(x.rel_path) === relKey(f.rel))) {
           const fileNewer = f.mtime > Date.parse(n.updated_at);
           setRow(n.id, { rel_path: f.rel, hash: fileNewer ? 'reconnect' : f.hash, note_rev: fileNewer ? n.updated_at : null });
         } else setRow(n.id, { rel_path: pickPath(n.title) });
@@ -354,8 +373,8 @@ async function doSync(userId: string, full: boolean): Promise<SyncResult> {
         const from = absOf(r.rel_path);
         if (fs.existsSync(from) && next !== r.rel_path) {
           await retry(() => fsp.rename(from, absOf(next)));
-          const f = byRel.get(r.rel_path.toLowerCase());
-          if (f) { byRel.delete(r.rel_path.toLowerCase()); f.rel = next; f.abs = absOf(next); byRel.set(next.toLowerCase(), f); }
+          const f = byRel.get(relKey(r.rel_path));
+          if (f) { byRel.delete(relKey(r.rel_path)); f.rel = next; f.abs = absOf(next); byRel.set(relKey(next), f); }
           setRow(n.id, { rel_path: next }); result.renamed++;
         }
       }
@@ -363,9 +382,9 @@ async function doSync(userId: string, full: boolean): Promise<SyncResult> {
 
     // New files written in Obsidian get ids now, so links between them resolve in this pass.
     // (A copy of a note duplicated inside Obsidian carries the same terminal_id but an untracked path: it becomes its own note.)
-    const tracked = new Set(rows.map((r) => r.rel_path.toLowerCase()));
-    const newFiles = files.filter((f) => !tracked.has(f.rel.toLowerCase()));
-    const newIds = new Map(newFiles.map((f) => [f.rel.toLowerCase(), uid()]));
+    const tracked = new Set(rows.map((r) => relKey(r.rel_path)));
+    const newFiles = files.filter((f) => !tracked.has(relKey(f.rel)));
+    const newIds = new Map(newFiles.map((f) => [relKey(f.rel), uid()]));
 
     // 5. Link maps (both directions)
     const { entFile: ef, entByName: eb } = entityNames();
@@ -401,7 +420,7 @@ async function doSync(userId: string, full: boolean): Promise<SyncResult> {
       const note = loadNote(userId, noteId); const r = rowOf(noteId);
       if (!note || !r) return;
       const abs = absOf(r.rel_path);
-      const existing = byRel.get(r.rel_path.toLowerCase());
+      const existing = byRel.get(relKey(r.rel_path));
       const extra: Record<string, any> = {};
       if (existing) for (const [k, v] of Object.entries(existing.fm)) if (!OUR_KEYS.includes(k)) extra[k] = v;
       const base = path.posix.basename(r.rel_path, '.md');
@@ -487,7 +506,7 @@ async function doSync(userId: string, full: boolean): Promise<SyncResult> {
     // 6. Reconcile every tracked note
     for (const r of [...rows]) {
       const note = noteRows.get(r.note_id);
-      let f = byRel.get(r.rel_path.toLowerCase());
+      let f = byRel.get(relKey(r.rel_path));
       if (f && f.id && f.id !== r.note_id) f = undefined;
       if (!note) {
         // Deleted in the app → move the file to Obsidian's trash (recoverable), unless it was edited in Obsidian since.
@@ -528,10 +547,12 @@ async function doSync(userId: string, full: boolean): Promise<SyncResult> {
     }
 
     // 7. Files created in Obsidian
-    for (const f of newFiles) await importNew(f, newIds.get(f.rel.toLowerCase())!);
+    for (const f of newFiles) await importNew(f, newIds.get(relKey(f.rel))!);
 
     // 8. Entity pages for everything your synced notes mention (rewritten only when their text changes)
     const changed = result.exported + result.imported + result.created + result.renamed + result.trashed > 0;
+    // Notes that changed on the Obsidian side: this account's open pages show them within seconds.
+    if (result.imported + result.created + result.renamed + result.trashed + result.conflicts + result.detached > 0) publish('notes', userId);
     if (cfg.entityPages && (full || changed)) {
       const linked = all<{ entity_id: string }>('SELECT DISTINCT ne.entity_id FROM note_entities ne JOIN vault_files vf ON vf.note_id = ne.note_id AND vf.user_id = ? AND vf.detached = 0', userId).map((r) => r.entity_id);
       for (const id of linked) {
@@ -546,7 +567,7 @@ async function doSync(userId: string, full: boolean): Promise<SyncResult> {
       }
     }
   } catch (e: any) {
-    result.ok = false; result.error = e.code === 'EACCES' || e.code === 'EPERM' ? `Windows denied access to the vault folder (${e.code}). Close any program locking it, or check the folder's permissions.` : e.message;
+    result.ok = false; result.error = e.code === 'EACCES' || e.code === 'EPERM' ? accessError(e) : e.message;
   }
   run('UPDATE vault_config SET last_sync = ?, last_result = ? WHERE user_id = ?', result.at, JSON.stringify(result), userId);
   return result;
@@ -605,7 +626,7 @@ export function registerObsidianRoutes(r: Router) {
     const folder = normalizeFolder(b.folder);
     const prev = getConfig(req.userId!);
     const appUrl = `${req.protocol}://${req.get('host')}`;
-    if (prev && (prev.vaultPath.toLowerCase() !== vaultPath.toLowerCase() || prev.folder !== folder)) run('DELETE FROM vault_files WHERE user_id = ?', req.userId!);
+    if (prev && (vaultKey(prev.vaultPath) !== vaultKey(vaultPath) || prev.folder !== folder)) run('DELETE FROM vault_files WHERE user_id = ?', req.userId!);
     run(`INSERT INTO vault_config (user_id, vault_path, folder, auto_sync, entity_pages, app_url) VALUES (?,?,?,?,?,?)
       ON CONFLICT(user_id) DO UPDATE SET vault_path = excluded.vault_path, folder = excluded.folder, auto_sync = excluded.auto_sync, entity_pages = excluded.entity_pages, app_url = excluded.app_url`,
       req.userId!, vaultPath, folder, b.autoSync === false ? 0 : 1, b.entityPages === false ? 0 : 1, appUrl);
@@ -659,4 +680,4 @@ export function registerObsidianRoutes(r: Router) {
 }
 
 // Exposed for tests.
-export const _internal = { htmlToMarkdown, markdownToHtml, splitFrontMatter, entityNames };
+export const _internal = { htmlToMarkdown, markdownToHtml, splitFrontMatter, entityNames, retry, accessError };

@@ -9,7 +9,7 @@
 //     compared with the graph. A signal reported by two or more independent trusted outlets
 //     (or by an official source) is shown on the profile as a "reported" fact and flags the
 //     record it contradicts. It never deletes or rewrites a curated record.
-import { publish } from './live.js';
+import { publishRun } from './live.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -376,8 +376,11 @@ export function retagAll() {
 
 export function startNews() {
   load();
-  setTimeout(() => { void refreshNews().then(() => publish('news')); }, 2000);
-  setInterval(() => { void refreshNews().then(() => publish('news')); }, REFRESH_MS).unref();
+  // Open pages are told when a refresh brought new headlines (and after the first one, which ends
+  // "still loading"); new signals announce themselves through the change feed.
+  const run = () => { void refreshNews().then(() => publishRun('news', (lastRun?.added || 0) > 0), () => undefined); };
+  setTimeout(run, 2000);
+  setInterval(run, REFRESH_MS).unref();
 }
 
 // ───────────────────────── Signals ─────────────────────────

@@ -86,8 +86,12 @@ export async function refreshAgreement(): Promise<State> {
   const byPair = (a: { key: string }, b: { key: string }) => order.get(a.key)! - order.get(b.key)!;
   for (const r of byIso.values()) { r.checks.sort(byPair); r.skipped.sort(byPair); }
   state = { at: new Date().toISOString(), byIso3: byIso, pairs };
-  // A new conflict is a (low-importance) change, once per country, figure and year.
-  emitNew('agreement', conflictsOf(state).filter((c) => c.severity === 'warning').map((c): Change => ({
+  // A new conflict is a (low-importance) change, once per country, figure and year. Each figure keeps
+  // its own record of what has been seen, and only figures that loaded take part: one that could not
+  // be loaded on the first run is recorded silently on the day it does load, instead of every
+  // long-standing conflict in it being announced as new.
+  const warn = conflictsOf(state).filter((c) => c.severity === 'warning');
+  for (const st of pairs) if (!st.error) emitNew(`agreement:${st.key}`, warn.filter((c) => c.key === st.key).map((c): Change => ({
     key: `agreement:${c.iso3}:${c.key}:${c.year}`, kind: 'data', entityIds: [c.id], title: `${c.country}: the World Bank and the IMF disagree on ${lower(c.label)} for ${c.year}`,
     detail: `World Bank ${c.wbText}, IMF ${c.imfText} — ${c.gapText}`, sourceId: 'terminal-audit', quality: 'estimate', importance: 2, at: state!.at,
   })));
@@ -130,6 +134,6 @@ registerConnector({
   provides: 'Compares GDP, growth, inflation, unemployment, the current account and population as the World Bank and the IMF report them, country by country — conflicts go to the audit',
   run: async () => {
     const s = await refreshAgreement(); const t = totals(s); const missing = s.pairs.filter((p) => p.error).map((p) => p.label);
-    return { detail: `${t.compared.toLocaleString()} figures in ${t.countries} countries: ${t.agree.toLocaleString()} agree, ${t.differ} differ, ${t.conflict} conflict${missing.length ? ` · not loaded: ${missing.join(', ')}` : ''}`, fetchedAt: s.pairs.map((p) => p.wbAt).filter((x): x is string => !!x).sort()[0] ?? s.at };
+    return { detail: `${t.compared.toLocaleString()} figures in ${t.countries} countries: ${t.agree.toLocaleString()} agree, ${t.differ} differ, ${t.conflict} conflict${missing.length ? ` · not loaded: ${missing.join(', ')}` : ''}`, fetchedAt: s.pairs.map((p) => p.wbAt).filter((x): x is string => !!x).sort()[0] ?? s.at, stale: missing.length > 0 || undefined }; // incomplete: the runner tries again shortly
   },
 });

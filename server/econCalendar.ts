@@ -7,15 +7,21 @@
 //                     release calendar when a free FRED_API_KEY is set)
 //   official-curated  an official published schedule, entered by hand and verified against more
 //                     than one source (central banks' meeting schedules, parliaments, summits)
+//   official-page     read from the institution's own schedule page and not in the hand-checked
+//                     list; the reading it comes from agrees with that list (central banks)
+//   page-unconfirmed  the same, with no checked date left to compare the reading with: shown,
+//                     flagged, and neither reminded about nor given a result
 //   official-rule     a published fixed rule ("the 20th of each month")
 //   usual-timing      the agency's usual timing ("usually the third Tuesday") — shown with ≈ and
 //                     never presented as a confirmed date
 //   to-verify         a single-source date; shown, flagged for checking
+//   reference-live    found in Wikidata (community-edited), read daily: meetings of organizations
 // Results: US data from FRED (BLS/BEA/Census/Fed series), euro-area inflation from Eurostat, every
 // central-bank decision from the BIS policy-rate data. Consensus forecasts are licensed data and
 // are not shown.
 import { publish } from './live.js';
-import { readSchedulePage, acceptSchedule, hasSchedulePage } from './bankSchedules.js';
+import crypto from 'node:crypto';
+import { readSchedulePage, acceptSchedule, hasSchedulePage, SCHEDULE_PAST_DAYS } from './bankSchedules.js';
 import { liveOrgEvents } from './web/events.js';
 import { cached, fetchText, fetchJson } from './cache.js';
 import { economyWeight } from './web/weights.js';
@@ -26,7 +32,7 @@ import { recordChange, emitNew, kvGet, kvSet, type Change } from './changes.js';
 import { USER_AGENT } from './config.js';
 
 export type CalKind = 'release' | 'central-bank' | 'igo' | 'budget' | 'election' | 'event';
-export type DateBasis = 'official-live' | 'official-curated' | 'official-rule' | 'usual-timing' | 'to-verify' | 'reference-live';
+export type DateBasis = 'official-live' | 'official-curated' | 'official-page' | 'page-unconfirmed' | 'official-rule' | 'usual-timing' | 'to-verify' | 'reference-live';
 export interface CalResult { headline: string; actual?: number; previous?: number; unit?: string; period?: string; sourceId: string; retrievedAt: string; url?: string; }
 export interface CalEvent {
   id: string; kind: CalKind; title: string; placeIds: string[]; start: string; end?: string; allDay: boolean; timeLabel?: string;
@@ -179,30 +185,93 @@ export const BANK_SCHEDULES: BankSchedule[] = [
   { area: 'CAN', placeIds: ['country:CAN'], bank: 'Bank of Canada', tz: 'America/Toronto', time: '09:45', timeLabel: '09:45 ET', sourceId: 'boc-schedule', url: 'https://www.bankofcanada.ca/core-functions/monetary-policy/key-interest-rate/',
     dates: ['2026-12-09', '2027-01-27', '2027-03-03', '2027-04-28', '2027-06-02', '2027-07-21', '2027-09-08', '2027-10-27', '2027-12-08'] },
 ];
-// Dates read from the banks' own schedule pages (bankSchedules.ts) when the reading agrees with the
-// checked list above; the checked list stands in for banks whose page could not be read or used.
-const liveBanks = new Map<string, { dates: string[]; at: string }>();
-function bankDates(b: BankSchedule) {
-  const from = new Date(Date.now() - 45 * 86400_000).toISOString().slice(0, 10);
-  return [...new Set([...b.dates, ...(liveBanks.get(b.area)?.dates || []).filter((d) => d >= from)])].sort();
+// Dates read from the banks' own schedule pages (bankSchedules.ts), used when the reading looks like
+// a schedule and agrees with the checked list above; the checked list stands in for banks whose
+// page could not be read or used. `confirmed` says whether anything vouches for the reading: a
+// checked date it contains, or a date an earlier vouched-for reading already had. So the checked
+// list starts the chain and the daily readings carry it on; if the chain breaks (the page was
+// unreadable for long, or changed completely) the page's dates are shown as unconfirmed until a
+// checked date matches again.
+interface PageReading { dates: string[]; at: string; confirmed: boolean; }
+const liveBanks = new Map<string, PageReading>();
+/** A checked meeting the bank's page now lists on another day: one of the two is out of date. */
+// Kept in the page memory, so the flag outlives a restart, a failed read, and the page dropping its
+// date once that day has passed; it goes when the page lists the checked date again, the checked
+// list is corrected, or the meeting leaves the look-back window.
+const movedMeetings = {
+  get(area: string) { const m = pageMemory(area).moved; return m && m.checked >= lookBack() ? m : undefined; },
+  set(area: string, moved: { checked: string; page: string } | undefined) { const mem = pageMemory(area); if (JSON.stringify(mem.moved) !== JSON.stringify(moved)) kvSet(`econ:bank-page-memory:${area}`, { ...mem, moved }); },
+};
+/** After this many days without a successful read, an old reading is no longer used. */
+const STALE_PAGE_DAYS = 7;
+// What earlier readings established, kept across restarts: the dates of the last vouched-for
+// reading (the chain), and page-only dates of meetings already held. The ECB lists upcoming
+// meetings only, so a meeting leaves its page the day after: it stays on the calendar for the
+// look-back window all the same, and gets its result.
+interface PageMemory { vouched: string[]; held: { date: string; at: string; confirmed: boolean }[]; moved?: { checked: string; page: string }; }
+const pageMemory = (area: string) => kvGet<PageMemory>(`econ:bank-page-memory:${area}`, { vouched: [], held: [] });
+const lookBack = () => new Date(Date.now() - SCHEDULE_PAST_DAYS * 86400_000).toISOString().slice(0, 10);
+function rememberReading(b: BankSchedule, r: PageReading) {
+  const mem = pageMemory(b.area); const from = lookBack(), today = new Date().toISOString().slice(0, 10);
+  // Kept: page-only dates this reading lists (also future ones, so a meeting held while the terminal
+  // was switched off is still known), and remembered ones that have passed. A remembered date still
+  // ahead that the page no longer lists was moved or cancelled: it is forgotten.
+  const held = new Map(mem.held.filter((h) => h.date >= from && h.date <= today).map((h) => [h.date, h]));
+  for (const d of r.dates) if (!b.dates.includes(d)) held.set(d, { date: d, at: r.at, confirmed: r.confirmed });
+  const next: PageMemory = { moved: pageMemory(b.area).moved, vouched: r.confirmed ? r.dates : mem.vouched.filter((d) => d >= from), held: [...held.values()].sort((x, y) => x.date.localeCompare(y.date)) };
+  if (JSON.stringify(next) !== JSON.stringify(mem)) kvSet(`econ:bank-page-memory:${b.area}`, next);
 }
-const pageNote = (b: BankSchedule, d: string) => `Read from the bank’s published schedule (${liveBanks.get(b.area)!.at.slice(0, 10)})${b.dates.includes(d) ? '; matches the checked list' : ''}`;
+// A remembered date counts as held only if a reading listed it within a week before the meeting (or
+// after it): one last seen months earlier may have been moved or cancelled since.
+const heldOnly = (b: BankSchedule) => { const from = lookBack(), today = new Date().toISOString().slice(0, 10); return pageMemory(b.area).held.filter((h) => h.date >= from && h.date <= today && Date.parse(`${h.date}T23:59:59Z`) - Date.parse(h.at) <= (STALE_PAGE_DAYS + 1) * 86400_000); };
+function bankDates(b: BankSchedule) {
+  const from = lookBack();
+  return [...new Set([...b.dates, ...(liveBanks.get(b.area)?.dates || []).filter((d) => d >= from), ...heldOnly(b).map((h) => h.date)])].sort();
+}
 async function readBankPages(errors: string[]) {
   await Promise.all(BANK_SCHEDULES.filter((b) => hasSchedulePage(b.area)).map(async (b) => {
     try {
       const r = await readSchedulePage(b.area, b.url);
       const v = acceptSchedule(r.data, b.dates);
-      if (v.ok) liveBanks.set(b.area, { dates: v.dates, at: r.fetchedAt });
-      else { liveBanks.delete(b.area); errors.push(`${b.bank}: its schedule page was read but not used (${v.reason}) — showing the checked dates`); }
-    } catch (e: any) { errors.push(`${b.bank} schedule page: ${e?.message || e} — showing the checked dates`); }
+      const read = r.fetchedAt.slice(0, 10);
+      if (!v.ok) {
+        liveBanks.delete(b.area);
+        errors.push(`${b.bank}: its schedule page was read but not used (${v.reason}) — showing the checked dates`);
+      } else if (r.stale && Date.now() - Date.parse(r.fetchedAt) > STALE_PAGE_DAYS * 86400_000) {
+        liveBanks.delete(b.area);
+        errors.push(`${b.bank}: its schedule page has not been readable since ${read} — showing the checked dates`);
+      } else {
+        const reading: PageReading = { dates: v.dates, at: r.fetchedAt, confirmed: v.confirmed > 0 || v.dates.some((d) => pageMemory(b.area).vouched.includes(d)) };
+        liveBanks.set(b.area, reading);
+        if (v.moved) { movedMeetings.set(b.area, v.moved); errors.push(`${b.bank}: its page lists ${v.moved.page} where the checked schedule has ${v.moved.checked} — one of the two is out of date; the checked date is shown as “to verify”`); }
+        else { const was = movedMeetings.get(b.area); if (was && (v.dates.includes(was.checked) || !b.dates.includes(was.checked))) movedMeetings.set(b.area, undefined); }
+        rememberReading(b, reading);
+        if (r.stale) errors.push(`${b.bank}: its schedule page could not be read today — using the reading of ${read}`);
+      }
+    } catch (e: any) { liveBanks.delete(b.area); errors.push(`${b.bank} schedule page: ${e?.message || e} — showing the checked dates`); }
   }));
 }
 function bankEvents(): CalEvent[] {
   const out: CalEvent[] = [];
-  for (const b of BANK_SCHEDULES) for (const d of bankDates(b)) {
-    const g = grade(6, 'Policy-rate decision', b.placeIds); const fromPage = !!liveBanks.get(b.area)?.dates.includes(d);
-    out.push({ id: `cb:${b.area}:${d}`, kind: 'central-bank', title: `${b.bank} rate decision`, placeIds: b.placeIds, start: zonedToUtc(d, b.time, b.tz), allDay: false, timeLabel: b.timeLabel,
-      basis: fromPage ? 'official-live' : 'official-curated', basisNote: fromPage ? pageNote(b, d) : 'Published meeting schedule (entered by hand, checked against several sources)', sourceId: b.sourceId, url: b.url, note: b.note, status: 'scheduled', indicator: `cb:${b.area}`, ...g });
+  const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  for (const b of BANK_SCHEDULES) {
+    const live = liveBanks.get(b.area), moved = movedMeetings.get(b.area), held = heldOnly(b);
+    for (const d of bankDates(b)) {
+      const g = grade(6, 'Policy-rate decision', b.placeIds);
+      const checked = b.dates.includes(d), onPage = !!live?.dates.includes(d), was = onPage ? undefined : held.find((h) => h.date === d);
+      let basis: DateBasis, basisNote: string;
+      if (checked && moved?.checked === d) { basis = 'to-verify'; basisNote = `The bank’s page now lists ${day(moved.page)} instead: one of the two is out of date — confirm on the bank’s site`; }
+      else if (checked) { basis = onPage ? 'official-live' : 'official-curated'; basisNote = onPage ? `Read from the bank’s published schedule (${live!.at.slice(0, 10)}); matches the checked list` : 'Published meeting schedule (entered by hand, checked against several sources)'; }
+      else {
+        const read = (onPage ? live!.at : was?.at || '').slice(0, 10), vouched = onPage ? live!.confirmed : !!was?.confirmed;
+        basis = vouched ? 'official-page' : 'page-unconfirmed';
+        basisNote = vouched ? `Read from the bank’s published schedule (${read}). Not in the hand-checked list; the reading it comes from agrees with that list`
+          : `Read from the bank’s published schedule (${read}), with no hand-checked date left to compare the reading with — confirm on the bank’s site`;
+      }
+      // Notes written for the hand-entered list ("only confirmed dates are listed") are about that list.
+      out.push({ id: `cb:${b.area}:${d}`, kind: 'central-bank', title: `${b.bank} rate decision`, placeIds: b.placeIds, start: zonedToUtc(d, b.time, b.tz), allDay: false, timeLabel: b.timeLabel,
+        basis, basisNote, sourceId: b.sourceId, url: b.url, note: checked ? b.note : undefined, status: 'scheduled', indicator: `cb:${b.area}`, ...g });
+    }
   }
   return out;
 }
@@ -307,22 +376,52 @@ function curatedIgoEvents(): CalEvent[] {
     sourceId: 'igo-calendars', url: d.url, note: d.note, status: 'scheduled' as const, ...grade(d.base, d.baseWhy, d.placeIds) }));
 }
 
+// Words that say what kind of event something is, not which one: they do not tell two meetings apart.
+const GENERIC_WORDS = new Set(['summit', 'summits', 'meeting', 'meetings', 'conference', 'conferences', 'session', 'sessions', 'leaders', 'annual', 'related', 'heads', 'state', 'government', 'and', 'of', 'the', 'in', 'on', 'for', 'a', 'an', 'to', 'at', 'by', 'with']);
+const tellingWords = (title: string) => new Set((title.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[’']s\b/g, '').match(/[a-z0-9]+/g) || []).filter((w) => !GENERIC_WORDS.has(w) && !/^(19|20)\d\d$/.test(w)));
+const dayNumber = (d: string) => Math.round(Date.parse(`${d.slice(0, 10)}T12:00:00Z`) / 86400_000);
+/** Whether two entries are the same meeting: an organization in common (a host country in common
+ *  says nothing), starts within three days, and titles that share two telling words — or one,
+ *  when a title has no more than that ("G7 summit"). The EU, say, holds a Council summit, a
+ *  Parliament plenary and a summit with China in one week: an organization and a date are not enough. */
+export function sameMeeting(a: { title: string; start: string; placeIds: string[] }, b: { title: string; start: string; placeIds: string[] }) {
+  if (!a.placeIds.some((p) => p.startsWith('igo:') && b.placeIds.includes(p))) return false;
+  if (Math.abs(dayNumber(a.start) - dayNumber(b.start)) > 3) return false;
+  const wa = tellingWords(a.title), wb = tellingWords(b.title);
+  let shared = 0; for (const w of wa) if (wb.has(w)) shared++;
+  return shared >= 2 || (shared === 1 && Math.min(wa.size, wb.size) <= 1);
+}
+const dateRange = (start: string, end?: string) => {
+  const f = (d: string, o: Intl.DateTimeFormatOptions) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { timeZone: 'UTC', ...o });
+  return end && end !== start ? `${f(start, start.slice(0, 7) === end.slice(0, 7) ? { day: 'numeric' } : { day: 'numeric', month: 'long' })}–${f(end, { day: 'numeric', month: 'long', year: 'numeric' })}` : f(start, { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
 /** The checked IGO dates above plus meetings of the web's organizations found in Wikidata
- *  (web/events.ts). Where both have the same meeting (same organization, start within a day) the
- *  checked entry stays and notes that Wikidata agrees. */
+ *  (web/events.ts). Where both have the same meeting (sameMeeting) the checked entry stays and says
+ *  whether Wikidata gives the same dates or others. Two Wikidata items for one meeting are listed once. */
 function igoEvents(): CalEvent[] {
   const out = curatedIgoEvents();
+  const checked = out.slice();
+  const added: { title: string; start: string; placeIds: string[] }[] = [];
   for (const e of liveOrgEvents()) {
-    const twin = IGO_EVENTS.find((d) => Math.abs(Date.parse(d.start) - Date.parse(e.start)) <= 86400_000 && d.placeIds.some((p) => e.placeIds.includes(p)));
+    const twin = checked.find((c) => sameMeeting(c, e));
     if (twin) {
-      const c = out.find((x) => x.id === `igo:${twin.id}`);
-      if (c && !/Wikidata/.test(c.basisNote || '')) c.basisNote = c.basisNote ? `${c.basisNote} · Wikidata has the same dates` : 'Wikidata has the same dates';
+      if (!/Wikidata/.test(twin.basisNote || '')) {
+        const same = twin.start.slice(0, 10) === e.start && (!e.end || (twin.end || twin.start).slice(0, 10) === e.end);
+        twin.basisNote = `${twin.basisNote ? `${twin.basisNote} · ` : ''}${same ? 'Wikidata has the same dates' : `Wikidata has ${dateRange(e.start, e.end)} — one of the two is out of date`}`;
+      }
       continue;
     }
+    if (added.some((x) => x.start === e.start && sameMeeting(x, e))) continue;
+    added.push(e);
     const base = /summit|leaders/i.test(e.title) ? 5 : /ministerial|council|assembly|conference|congress|session/i.test(e.title) ? 4 : 3;
     const why = base === 5 ? 'Summit of an organization in the web' : base === 4 ? 'Ministerial meeting, assembly or conference' : 'Meeting of an organization in the web';
+    // Graded by its title alone, without the organization's economic weight: anyone can add an item
+    // to Wikidata, and a technical meeting of a large organization is not a leaders' summit. That
+    // keeps these at 5 or below: under the reminders' threshold and never above a checked entry.
+    const g = { importance: base, importanceWhy: [`${why}: ${base}`, 'Found in Wikidata only: not weighted by the organization’s size'] };
     out.push({ id: `igo:wd-${e.qid}`, kind: 'igo', title: e.location && !e.title.includes(e.location) ? `${e.title} — ${e.location}` : e.title, placeIds: e.placeIds, start: e.start, end: e.end, allDay: true,
-      basis: 'reference-live', basisNote: 'From Wikidata (community-edited, read daily) — confirm on the organizer’s site', sourceId: 'wikidata', url: e.url, status: 'scheduled', ...grade(base, why, e.placeIds) });
+      basis: 'reference-live', basisNote: 'From Wikidata (community-edited, read daily) — confirm on the organizer’s site', sourceId: 'wikidata', url: e.url, status: 'scheduled', ...g });
   }
   return out;
 }
@@ -396,7 +495,10 @@ async function usResult(ev: CalEvent): Promise<CalResult | undefined> {
   const def = US_RELEASES.find((r) => r.indicator === ev.indicator); if (!def?.series) return undefined;
   const parts: string[] = []; let first: ReturnType<typeof seriesResult> | undefined; let at = '';
   for (const spec of def.series) {
-    const r = await fredSeries(spec.fred, new Date(Date.now() - 800 * 86400_000).toISOString().slice(0, 10));
+    // Asked from a start date that moves monthly (one cached copy, not one a day), and again every
+    // quarter of an hour while the figure is awaited: a release shows within minutes of FRED having it.
+    const since = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 27, 1)).toISOString().slice(0, 10);
+    const r = await fredSeries(spec.fred, since, 14 * 60, { grace: 0 }); // a little under the 15-minute round, and awaited: each round uses what it fetched
     const res = seriesResult(r.data, spec, ev.start);
     if (!res) return undefined; // not published yet
     first ||= res; at = r.fetchedAt;
@@ -435,6 +537,14 @@ async function bankResult(area: string, decisionDate: string): Promise<CalResult
 // ───────────────────────── Build & refresh ─────────────────────────
 let calendar: CalEvent[] = [];
 let lastBuild: { at: string; errors: string[]; counts: Record<string, number> } | null = null;
+let toldSig = '';
+/** Tell open pages when the calendar reads differently from the last time they were told. It is
+ *  rebuilt several times a day and after connector runs, and results are checked every 15 minutes;
+ *  most of those find nothing new. */
+function announce() {
+  const sig = crypto.createHash('sha1').update(JSON.stringify([calendar, lastBuild?.errors])).digest('hex');
+  if (sig !== toldSig) { toldSig = sig; publish('calendar'); }
+}
 const resultsStore = () => kvGet<Record<string, CalResult>>('econ:results', {});
 
 export async function buildCalendar() {
@@ -460,36 +570,39 @@ export async function buildCalendar() {
   lastBuild = { at: new Date().toISOString(), errors, counts };
   await updateResults();
   emitUpcoming();
-  publish('calendar');
+  announce();
   return lastBuild;
 }
 
-/** Fetch results for events that have happened (up to 10 days back) and record them as changes. */
+/** Fetch results for events that have happened (up to 10 days back) and record them as changes.
+ *  Returns whether anything the calendar shows changed (a result arrived, or one became overdue). */
 export async function updateResults() {
-  const nowMs = Date.now(); const stored = resultsStore(); let changed = false;
+  const nowMs = Date.now(); const stored = resultsStore(); let changed = false, overdue = false;
   for (const e of calendar) {
     const t = Date.parse(e.start.length === 10 ? `${e.start}T23:59:00Z` : e.start);
-    if (t > nowMs - 10 * 60_000 || t < nowMs - 10 * 86400_000 || stored[e.id] || e.kind === 'igo' || e.kind === 'election' || e.kind === 'event' || e.kind === 'budget') continue;
+    // A date nothing vouches for gets no result either: "held at 4%" would state as fact a meeting that may not have taken place.
+    if (t > nowMs - 10 * 60_000 || t < nowMs - 10 * 86400_000 || stored[e.id] || e.kind === 'igo' || e.kind === 'election' || e.kind === 'event' || e.kind === 'budget' || e.basis === 'page-unconfirmed' || (e.kind === 'central-bank' && e.basis === 'to-verify')) continue;
     let res: CalResult | undefined;
     try {
       if (e.kind === 'central-bank') res = await bankResult(e.id.startsWith('cb:') ? e.id.split(':')[1] : USUAL.find((u) => e.id.startsWith(`usual:${u.id}:`))?.area || '', e.start.slice(0, 10));
       else if (e.indicator?.startsWith('us-')) res = await usResult(e);
       else if (e.indicator === 'ea-hicp-flash') res = await eaHicpResult(e);
     } catch { /* provider down: try again next round */ }
-    if (!res) { if (t < nowMs) e.status = 'result-pending'; continue; }
+    if (!res) { if (t < nowMs && e.status !== 'result-pending') { e.status = 'result-pending'; overdue = true; } continue; }
     stored[e.id] = res; e.result = res; e.status = 'released'; changed = true;
-    recordChange({ key: `econ:${e.id}`, kind: 'econ', entityIds: e.placeIds, title: `${e.title.replace(/^≈ /, '')}: ${res.headline}`, detail: `Importance ${e.importance}/10 · ${e.importanceWhy.join(' · ')}`,
+    recordChange({ key: `econ:${e.id}`, kind: 'econ', entityIds: e.placeIds, title: `${e.title.replace(/^≈ /, '')}: ${res.headline}`, detail: `Importance ${e.importance}/10 · ${e.importanceWhy.join(' · ')}${e.basis === 'official-page' ? ' · Meeting date as read from the bank’s page (not in the hand-checked list)' : ''}`,
       url: res.url || e.url, sourceId: res.sourceId, quality: 'official', importance: e.importance, at: e.start });
   }
   if (changed) kvSet('econ:results', Object.fromEntries(Object.entries(stored).filter(([k]) => calendar.some((e) => e.id === k)).slice(-2000)));
+  return changed || overdue;
 }
 
 /** Reminders: events of importance ≥ 6 starting within the next 24 hours. */
 function emitUpcoming() {
   const nowMs = Date.now();
-  emitNew('econ-upcoming', calendar.filter((e) => e.importance >= 6 && e.basis !== 'usual-timing').filter((e) => { const t = Date.parse(e.start); return t > nowMs && t < nowMs + 24 * 3600_000; })
-    .map((e): Change => ({ key: `upcoming:${e.id}`, kind: e.kind === 'igo' ? 'igo' : 'econ-upcoming', entityIds: e.placeIds, title: `Within 24 h: ${e.title}${e.timeLabel ? ` (${e.timeLabel})` : ''}`, detail: e.importanceWhy.join(' · '),
-      url: e.url, sourceId: e.sourceId, quality: 'official', importance: Math.max(1, e.importance - 1), at: e.start })));
+  emitNew('econ-upcoming', calendar.filter((e) => e.importance >= 6 && e.basis !== 'usual-timing' && e.basis !== 'page-unconfirmed' && !(e.kind === 'central-bank' && e.basis === 'to-verify')).filter((e) => { const t = Date.parse(e.start); return t > nowMs && t < nowMs + 24 * 3600_000; })
+    .map((e): Change => ({ key: `upcoming:${e.id}`, kind: e.kind === 'igo' ? 'igo' : 'econ-upcoming', entityIds: e.placeIds, title: `Within 24 h: ${e.title}${e.timeLabel ? ` (${e.timeLabel})` : ''}${e.basis === 'official-page' ? ' — date as read from the bank’s page' : ''}`, detail: e.importanceWhy.join(' · '),
+      url: e.url, sourceId: e.sourceId, quality: e.basis === 'reference-live' ? 'community' : 'official', importance: Math.max(1, e.importance - 1), at: e.start })));
 }
 
 /** Events for a place: a euro-area member also sees ECB decisions and euro-area releases. */
@@ -503,7 +616,8 @@ export function calendarFor(o: { from?: string; to?: string; place?: string; min
   if (o.place) { places.add(o.place); const iso3 = o.place.startsWith('country:') ? o.place.slice(8) : ''; if (EURO_AREA.includes(iso3)) places.add('igo:eu'); }
   // Elections and curated events come from the live graph at query time (results update every 30 min).
   const fromD = new Date(Date.now() - 45 * 86400_000), toD = new Date(Date.now() + 120 * 86400_000);
-  const graph = graphEvents(fromD, toD).filter((g) => !calendar.some((c) => c.id === g.id));
+  // A summit that is both a curated event in the web and a checked calendar entry is listed once.
+  const graph = graphEvents(fromD, toD).filter((g) => !calendar.some((c) => c.id === g.id || (g.kind === 'igo' && c.kind === 'igo' && sameMeeting(c, g))));
   return [...calendar, ...graph].sort((a, b) => a.start.localeCompare(b.start)).filter((e) => (!o.from || (e.end || e.start).slice(0, 10) >= o.from) && (!o.to || e.start.slice(0, 10) <= o.to) && e.importance >= (o.minImportance || 1)
     && (!o.kinds?.length || o.kinds.includes(e.kind)) && (!places.size || e.placeIds.some((p) => places.has(p))));
 }
@@ -517,10 +631,31 @@ export function calendarStatus() { return lastBuild; }
 /** Hand-entered schedules that run out soon (checked by the data audit). */
 export function scheduleWarnings(days = 90) {
   const horizon = new Date(Date.now() + days * 86400_000).toISOString().slice(0, 10);
-  const out: { message: string; entityId?: string }[] = [];
+  const out: { message: string; entityId?: string; severity: 'warning' | 'info' }[] = [];
   for (const b of BANK_SCHEDULES) {
-    const last = bankDates(b).at(-1) || '';
-    if (last < horizon) out.push({ entityId: b.placeIds[0], message: `${b.bank}: the meeting schedule ends ${last || '(no dates)'} (checked list${hasSchedulePage(b.area) ? ', not extended by the bank’s page' : ''}) — add the next dates from ${b.url}` });
+    // Judged by the hand-checked list: it is what vouches for the page reading in the first place.
+    const lastChecked = [...b.dates].sort().at(-1) || '';
+    if (lastChecked >= horizon) continue;
+    const live = liveBanks.get(b.area), lastPage = live?.dates.at(-1) || '';
+    if (lastPage > lastChecked && live!.confirmed) out.push({ entityId: b.placeIds[0], severity: 'info', message: `${b.bank}: the hand-checked schedule ends ${lastChecked || '(no dates)'}; later dates, to ${lastPage}, are read from the bank’s page — add a date or two from ${b.url} to keep the cross-check fresh` });
+    else if (lastPage > lastChecked) out.push({ entityId: b.placeIds[0], severity: 'warning', message: `${b.bank}: the hand-checked schedule ends ${lastChecked || '(no dates)'}; later dates, to ${lastPage}, are read from the bank’s page with nothing left to compare the reading with — add the next dates from ${b.url}` });
+    else out.push({ entityId: b.placeIds[0], severity: 'warning', message: `${b.bank}: the meeting schedule ends ${lastChecked || '(no dates)'}${hasSchedulePage(b.area) ? ' and the bank’s page does not extend it' : ''} — add the next dates from ${b.url}` });
+  }
+  return out;
+}
+/** Hand-entered lists that are about to leave the calendar empty (checked by the data audit): the
+ *  list of summits, assemblies and votes ending within 60 days, a bank's checked dates with a gap no
+ *  meeting schedule has and no page reading to fill it, and a meeting a bank's page has moved. */
+export function listWarnings() {
+  const out: { message: string; entityId?: string }[] = [];
+  const soon = new Date(Date.now() + 60 * 86400_000).toISOString().slice(0, 10), today = new Date().toISOString().slice(0, 10);
+  const lastIgo = IGO_EVENTS.map((d) => d.start).sort().at(-1) || '';
+  if (lastIgo < soon) out.push({ message: `The hand-checked list of summits, assemblies and votes ends ${lastIgo || '(empty)'}: after that the calendar shows only what Wikidata has for them — add the next meetings to IGO_EVENTS in server/econCalendar.ts` });
+  for (const b of BANK_SCHEDULES) {
+    const dates = bankDates(b).filter((d) => d >= today);
+    for (let i = 1; i < dates.length; i++) if (dayNumber(dates[i]) - dayNumber(dates[i - 1]) > 100) { out.push({ entityId: b.placeIds[0], message: `${b.bank}: no meeting is listed between ${dates[i - 1]} and ${dates[i]} — the checked list is incomplete; add the missing dates from ${b.url}` }); break; }
+    const moved = movedMeetings.get(b.area);
+    if (moved) out.push({ entityId: b.placeIds[0], message: `${b.bank}: its page lists ${moved.page} where the checked schedule has ${moved.checked} — correct whichever is out of date (${b.url})` });
   }
   return out;
 }
@@ -531,12 +666,12 @@ export function calendarSourceIds() {
 }
 
 // Rebuild when weights or organizations change, so importance reflects the latest data.
-onConnectorRun((id) => { if (id === 'economy-weights' || id === 'wikidata-organizations' || id === 'wikidata-events') void buildCalendar().catch(() => undefined); });
+onConnectorRun((id, ok, changed) => { if (ok && changed && (id === 'economy-weights' || id === 'wikidata-organizations' || id === 'wikidata-events')) void buildCalendar().catch(() => undefined); });
 export function startCalendar() {
   setTimeout(() => { void buildCalendar().catch((e) => console.warn('[calendar]', e.message)); }, 8000).unref();
   setInterval(() => { void buildCalendar().catch(() => {}); }, 6 * 3600_000).unref();
   // Results: every 15 minutes (a release's figures appear in the sources within minutes to hours).
-  setInterval(() => { void updateResults().then(emitUpcoming).then(() => publish('calendar')).catch(() => {}); }, 15 * 60_000).unref();
+  setInterval(() => { void updateResults().then(() => { emitUpcoming(); announce(); }).catch(() => {}); }, 15 * 60_000).unref();
 }
 
 export const _test = { bankEvents, usualEvents, igoEvents, budgetEvents };

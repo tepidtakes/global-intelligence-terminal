@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { api, invalidate } from './api';
+import { api, invalidate, onSessionChange, sessionChanged } from './api';
 
 // ───────── storage helpers (per-viewer conveniences only) ─────────
 export function load<T>(key: string, d: T): T { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : d; } catch { return d; } }
@@ -7,7 +7,7 @@ export function save(key: string, v: any) { try { localStorage.setItem(key, JSON
 
 // ───────── Auth ─────────
 interface User { id: string; email: string; }
-const AuthCtx = createContext<{ user: User | null | undefined; refresh: () => Promise<void>; logout: () => Promise<void> }>({ user: undefined, refresh: async () => {}, logout: async () => {} });
+const AuthCtx = createContext<{ user: User | null | undefined; refresh: () => Promise<User | null>; logout: () => Promise<void> }>({ user: undefined, refresh: async () => null, logout: async () => {} });
 export const useAuth = () => useContext(AuthCtx);
 
 // ───────── Map config (survives navigation, persisted per viewer) ─────────
@@ -38,9 +38,18 @@ export const useApp = () => useContext(AppCtx);
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null | undefined>(undefined);
-  const refresh = useCallback(async () => { try { setUser(await api('/auth/me')); } catch { setUser(null); } }, []);
-  const logout = useCallback(async () => { await api('/auth/logout', { method: 'POST' }); setUser(null); invalidate(''); }, []);
+  const refresh = useCallback(async () => { let u: User | null = null; try { u = await api<User | null>('/auth/me'); } catch { /* treated as signed out */ } setUser(u); return u; }, []);
+  const userRef = useRef(user);
+  userRef.current = user;
+  const logout = useCallback(async () => { await api('/auth/logout', { method: 'POST' }); setUser(null); invalidate(''); sessionChanged(); }, []);
   useEffect(() => { refresh(); }, [refresh]);
+  // Signed in or out in another window of this browser, or the server no longer knows this session:
+  // check who is signed in and, if that changed, drop what the page holds, so nothing private
+  // outlives its session.
+  useEffect(() => onSessionChange(() => {
+    const before = userRef.current?.id || null;
+    void refresh().then((u) => { if ((u?.id || null) !== before) invalidate(''); });
+  }), [refresh]);
 
   const [map, setMapState] = useState<MapConfig>(() => ({ ...DEFAULT_MAP, ...load('git.map', {}) }));
   const setMap = useCallback((p: Partial<MapConfig>) => setMapState((m) => { const n = { ...m, ...p }; save('git.map', n); return n; }), []);

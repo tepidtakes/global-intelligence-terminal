@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, invalidate } from '../api';
+import { api, invalidate, sessionChanged } from '../api';
 import { useAuth } from '../state';
 
 export function LoginPage() {
@@ -13,7 +13,7 @@ export function LoginPage() {
   const nav = useNavigate();
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr(''); setBusy(true);
-    try { await api(`/auth/${mode}`, { body: { email, password } }); await refresh(); invalidate(''); nav(-1); }
+    try { await api(`/auth/${mode}`, { body: { email, password } }); await refresh(); invalidate(''); sessionChanged(); nav(-1); }
     catch (x: any) { setErr(x.message); } finally { setBusy(false); }
   };
   return (

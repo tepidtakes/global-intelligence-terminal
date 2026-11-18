@@ -20,9 +20,10 @@ type NewRel = Omit<Relationship, 'id' | 'origin'>;
  *  means the source failed and the previous copy was used (so "ok" never hides an outage). */
 export const liveStatus: Record<string, { ok: boolean; at: string; detail: string; fetchedAt?: string; stale?: boolean; sourceId?: string }> = {};
 type LoadResult = { detail: string; fetchedAt: string; stale: boolean };
-const listeners: (() => void)[] = [];
-/** Run after every background refresh (e.g. re-tag news against new leaders). */
-export const onLiveRefresh = (fn: () => void) => { listeners.push(fn); };
+const listeners: ((r: { ok: number; failed: number }) => void)[] = [];
+/** Run after every background refresh (e.g. re-tag news against new leaders), with how many of its
+ *  loaders succeeded and failed. */
+export const onLiveRefresh = (fn: (r: { ok: number; failed: number }) => void) => { listeners.push(fn); };
 let retrieved = ''; // fetch time of the batch being loaded, stamped on its facts
 const VERIFIED_THROUGH = `${AS_OF}-30`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -314,15 +315,16 @@ export function refreshLiveData() {
     const details = async (): Promise<LoadResult> => ({ detail: await refreshElectionDetails(), fetchedAt: new Date().toISOString(), stale: false });
     const steps: [string, string, () => Promise<LoadResult>][] = [['congress', 'congress-legislators', loadCongress], ['leaders', 'wikidata', loadLeaders], ['mayors', 'wikidata-local', loadMayors],
       ['conflicts', 'wikipedia-conflicts', loadConflicts], ['elections', 'wikipedia-elections', loadElections], ['local-elections', 'wikipedia-election-results', loadLocalElections], ['election-results', 'wikipedia-election-results', details]];
+    let ok = 0, failed = 0;
     for (const [name, sourceId, fn] of steps) {
       retrieved = '';
-      try { const r = await fn(); liveStatus[name] = { ok: true, at: new Date().toISOString(), ...r, sourceId }; }
-      catch (e: any) { liveStatus[name] = { ok: false, at: new Date().toISOString(), detail: e.message, fetchedAt: liveStatus[name]?.fetchedAt, sourceId }; console.warn(`[live] ${name} failed: ${e.message}`); }
+      try { const r = await fn(); liveStatus[name] = { ok: true, at: new Date().toISOString(), ...r, sourceId }; ok++; }
+      catch (e: any) { liveStatus[name] = { ok: false, at: new Date().toISOString(), detail: e.message, fetchedAt: liveStatus[name]?.fetchedAt, sourceId }; failed++; console.warn(`[live] ${name} failed: ${e.message}`); }
     }
     retrieved = '';
     normalizeEventStatus();
     console.log(`[live] ${Object.entries(liveStatus).map(([k, v]) => `${k}: ${v.ok ? v.detail + (v.stale ? ' (STALE copy)' : '') : 'FAILED'}`).join(' · ')}`);
-    for (const fn of listeners) { try { fn(); } catch (e: any) { console.warn('[live] listener failed:', e.message); } }
+    for (const fn of listeners) { try { fn({ ok, failed }); } catch (e: any) { console.warn('[live] listener failed:', e.message); } }
   })().finally(() => { running = null; });
   return running;
 }

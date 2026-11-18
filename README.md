@@ -56,7 +56,10 @@ five minutes, once.
 checks Node.js, installs what is needed on the first run, starts the terminal and opens your
 browser. `bash start.sh --desktop` also adds the terminal to your applications menu, and
 `bash start.sh --service` runs it in the background whenever you log in (a systemd user service;
-the script prints how to stop it).
+the script prints how to stop it). The menu entry and the service remember the folder they were
+set up from. Behind a proxy (`HTTPS_PROXY` set) the script also tells
+Node.js to use it for the terminal's own data requests (Node.js 22.21 or newer); if you start
+with `npm run dev` instead, set `NODE_USE_ENV_PROXY=1` yourself.
 
 **If something goes wrong:** "running scripts is disabled" → you are in PowerShell; use `cmd`
 as in step 3 (or type `npm.cmd` instead of `npm`). "Could not read package.json" / "ENOENT" →
@@ -65,14 +68,19 @@ the terminal is not in the project folder; redo step 3 from the folder that cont
 opened before installing it — close it and open a new one.
 
 Next time, only steps 3, the second line of 4 (`npm run dev`) and 5 are needed. To update,
-download the ZIP again and copy your old `data` folder into the new one to keep your notes.
+download the ZIP again and copy your old `data` folder into the new one to keep your notes. If
+you used `bash start.sh --service` or `--desktop`, run that command again from the new folder
+(and stop using the old one): until then the background service and the menu entry still start
+the old copy, with the old `data` folder. After updating in place (`git pull`), run
+`bash start.sh --service` again as well, so the background copy is rebuilt and restarted.
 
 ## Run it (developers)
 
 Requires Node 22.13+ (24 recommended; uses the built-in `node:sqlite`); runs on Linux, macOS and Windows. `npm install` then `npm run dev`, and
 open http://localhost:5180. Public data works signed out; create an account (Sign in →
 Create account) for notes, positions, watchlists, saved views and catalysts. Accounts and
-everything you write stay in `data/` on your computer. (`seed/test-account.example.json`
+everything you write stay in `data/` on your computer (on Linux and macOS that folder is
+readable by your user only). (`seed/test-account.example.json`
 is a throwaway login used for local testing — not a real credential.)
 
 Production: `npm run build` then `npm start` (serves `dist/` from the same server).
@@ -306,11 +314,15 @@ data/            runtime: SQLite DB, provider cache, uploads (git-ignored)
 ## Live updates
 
 What you see updates by itself. The server tells open pages when its data changes (a provider
-answered with new figures, a connector refreshed the knowledge web, a calendar result came in, a
-change reached the feed) and each page fetches what it shows again, keeping the current numbers on
-screen meanwhile. Pages also refresh anything older than its normal lifetime while the tab is
-visible. The **Live** dot in the top bar shows the connection (hover it for the last update);
-hidden tabs pause and catch up when you return. The Data page's *Network* card counts the updates sent.
+answered with different figures, a connector changed the knowledge web, a calendar result came in,
+a change reached the feed) and each page fetches what it shows again, keeping the current numbers
+on screen meanwhile. Your own notes, watchlists and alerts follow the same way: change them in one
+window, on another device or in Obsidian, and your other windows show it within seconds. Pages also
+refresh anything older than its normal lifetime while the tab is visible.
+
+The **Live** dot in the top bar shows the connection (hover it for the last update). However many
+windows you open, a browser keeps one connection to the terminal; hidden tabs pause and catch up
+when you return. The Data page's *Network* card counts the updates sent.
 
 ## Speed and screen sizes
 

@@ -5,7 +5,6 @@
 //   • every central-bank policy-rate change reported to the BIS (all ~40 banks, not just watched ones).
 // A move is recorded once per threshold it crosses (e.g. 2 %, 3 %, 5 % …); each rule picks the
 // threshold it asked for, and views show only the largest version of the same move.
-import { publish } from './live.js';
 import { getEntity, listByType, geoChain, stub } from './graph.js';
 import { getQuote } from './providers.js';
 import { fxFor, yieldCurve, policyRates, EURO_AREA, mapLimit, currencyUsers } from './markets.js';
@@ -99,7 +98,9 @@ export async function checkPolicyRates() {
 }
 
 export function startMarketWatch() {
+  // Nothing is published here: a move that crosses a threshold enters the change feed, and changed
+  // quotes are announced by the cache, each when it happens.
   const run = () => { void checkMarkets().catch((e) => console.warn('[markets-watch]', e.message)); };
   setTimeout(run, 60_000).unref();
-  setInterval(() => { void Promise.resolve(run()).then(() => publish('markets')); }, 10 * 60_000).unref();
+  setInterval(run, 10 * 60_000).unref();
 }

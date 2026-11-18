@@ -2,7 +2,7 @@ import { SUBSCRIPTION_OUTLETS } from '../../shared/newsSources';
 import { useSubscriptions, saveSubscriptions } from '../components/newsBits';
 import { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { api, invalidate, useApi } from '../api';
+import { api, invalidate, useApi, REFERENCE_TTL_MS } from '../api';
 import { useApp, useAuth, DEFAULT_MAP } from '../state';
 import { Card, Loading } from '../components/common';
 import { fmtDate, ago } from '../format';
@@ -12,6 +12,12 @@ function ObsidianSettings() {
   const { toast } = useApp();
   const { data, reload } = useApi<any>('/obsidian', 0);
   const [vaultPath, setVaultPath] = useState('');
+  // A folder copied in a Linux file manager can arrive as several lines ("x-special/nautilus-clipboard",
+  // "copy", "file:///…"), and browsers differ in what a one-line field keeps of that: take the link itself.
+  const pasteVaultPath = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const link = /file:\/\/.+?(?=\s*file:\/\/|[\r\n]|$)/i.exec(e.clipboardData.getData('text') || e.clipboardData.getData('text/uri-list'));
+    if (link) { e.preventDefault(); setVaultPath(link[0]); }
+  };
   const [folder, setFolder] = useState('Terminal');
   const [autoSync, setAutoSync] = useState(true);
   const [entityPages, setEntityPages] = useState(true);
@@ -70,7 +76,7 @@ function ObsidianSettings() {
         </div>
       )}
       <label className="field">Vault folder
-        <input className="input codeish" value={vaultPath} onChange={(e) => setVaultPath(e.target.value)} placeholder={win ? 'C:\\Users\\you\\Documents\\My Vault' : mac ? '/Users/you/Documents/My Vault' : '/home/you/Documents/My Vault'} spellCheck={false} />
+        <input className="input codeish" value={vaultPath} onChange={(e) => setVaultPath(e.target.value)} onPaste={pasteVaultPath} placeholder={win ? 'C:\\Users\\you\\Documents\\My Vault' : mac ? '/Users/you/Documents/My Vault' : '/home/you/Documents/My Vault'} spellCheck={false} />
         <span className="tiny muted">{win ? 'Tip: in File Explorer, Shift + right-click the vault folder → “Copy as path”, then paste here. OneDrive folders work too.' : mac ? 'The folder you opened as a vault in Obsidian. Tip: select it in Finder and press ⌥⌘C to copy its path.' : 'The folder you opened as a vault in Obsidian. Tip: in your file manager select the folder, press Ctrl+C and paste here (a file:// link works too).'}{!data.detected.length && ' No vaults were found automatically.'}</span>
       </label>
       <label className="field">Folder inside the vault
@@ -94,7 +100,7 @@ export function SettingsPage() {
   const nav = useNavigate();
   const loc = useLocation();
   useEffect(() => { if (loc.hash) setTimeout(() => document.getElementById(loc.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); }, [loc.hash]);
-  const sources = useApi<Source[]>('/sources', 3600_000);
+  const sources = useApi<Source[]>('/sources', REFERENCE_TTL_MS);
   const stats = useApi<any>('/stats', 3600_000);
   const reports = useApi<any[]>(user ? '/reports' : null);
   return (

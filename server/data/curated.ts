@@ -663,7 +663,7 @@ P({ slug: 'antonio-costa', name: 'António Costa', aliases: ['Costa'], nationali
 P({ slug: 'haitham-al-ghais', name: 'Haitham Al Ghais', aliases: ['Al Ghais'], nationality: 'Kuwait', sourceId: 'opec',
   summary: 'OPEC Secretary General since August 2022; previously Kuwait’s OPEC governor.', roles: [{ type: 'leads', to: 'igo:opec', role: 'Secretary General', from: '2022-08-01', sourceId: 'opec' }] });
 P({ slug: 'antonio-guterres', name: 'António Guterres', aliases: ['Guterres'], nationality: 'Portugal', sourceId: 'un',
-  summary: 'Secretary-General of the United Nations since 1 January 2017; second term ends 31 December 2026. Prime Minister of Portugal 1995–2002 and UN High Commissioner for Refugees 2005–2015.', roles: [{ type: 'leads', to: 'igo:un', role: 'Secretary-General', from: '2017-01-01', until: undefined, sourceId: 'un' }] });
+  summary: 'Secretary-General of the United Nations since 1 January 2017; second term ends 31 December 2026. Prime Minister of Portugal 1995–2002 and UN High Commissioner for Refugees 2005–2015.', roles: [{ type: 'leads', to: 'igo:un', role: 'Secretary-General', from: '2017-01-01', until: '2026-12-31', sourceId: 'un' }] });
 P({ slug: 'kristalina-georgieva', name: 'Kristalina Georgieva', aliases: ['Georgieva'], nationality: 'Bulgaria', sourceId: 'imf',
   summary: 'Managing Director of the IMF since October 2019 (second term from October 2024).', roles: [{ type: 'leads', to: 'igo:imf', role: 'Managing Director', from: '2019-10-01', sourceId: 'imf' }] });
 P({ slug: 'ngozi-okonjo-iweala', name: 'Ngozi Okonjo-Iweala', aliases: ['Okonjo-Iweala'], nationality: 'Nigeria', sourceId: 'wto',

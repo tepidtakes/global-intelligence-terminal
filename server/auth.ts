@@ -39,12 +39,22 @@ function startSession(res: Response, userId: string) {
 
 export interface AuthedRequest extends Request { userId?: string; userEmail?: string; }
 
-export function sessionMiddleware(req: AuthedRequest, _res: Response, next: NextFunction) {
+export function sessionMiddleware(req: AuthedRequest, res: Response, next: NextFunction) {
   const token = readCookie(req, COOKIE);
   if (token) {
     const row = get<{ user_id: string; expires_at: string; email: string }>(
       'SELECT s.user_id, s.expires_at, u.email FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?', sha(token));
-    if (row && row.expires_at > now()) { req.userId = row.user_id; req.userEmail = row.email; }
+    if (row && row.expires_at > now()) {
+      // A handler that looks at who is signed in may put that account's data in its answer: the
+      // answer says so, and the page refreshes such views (and only those) when the account's
+      // private data changes (src/api.ts).
+      let marked = false;
+      Object.defineProperty(req, 'userId', { enumerable: true, configurable: true, get() {
+        if (!marked) { marked = true; if (!res.headersSent) res.setHeader('X-Account-Data', '1'); }
+        return row.user_id;
+      } });
+      req.userEmail = row.email;
+    }
   }
   next();
 }
