@@ -322,7 +322,7 @@ country code or ticker).
 
 ## Cross-checks between sources
 
-The World Bank and the IMF are compared country by country for GDP, real growth, inflation, unemployment, the current account and population (the World Bank's latest year, against the IMF's figure for the same year). Figures that conflict are listed in the audit on the Data page and marked on the country's profile, with both values side by side. Tolerances and rules: *Cross-source agreement* in `docs/ARCHITECTURE.md`.
+The World Bank and the IMF are compared country by country for GDP, real growth, inflation, unemployment, the current account and population (the World Bank's latest year, against the IMF's figure for the same year). Figures that conflict are listed in the audit on the Data page and marked on the country's profile, with both values side by side. Tolerances and rules: *Cross-source agreement* in `docs/ARCHITECTURE.md`. For countries the IMF reports by fiscal year (Egypt, Pakistan, Iran, Bangladesh, Ethiopia, Nepal and a few others) flows and averages cover different twelve months, so their gaps are shown as information, not as conflicts.
 
 Every request to the sources on this page goes through one network gate per host: rate-limited services (Wikidata, UN Comtrade, the SEC) get one or a few requests at a time with pauses between them, `Retry-After` is honoured, and a source that keeps failing is skipped for a while instead of slowing every page down. The Data page's *Network* card shows each host's state.
 
