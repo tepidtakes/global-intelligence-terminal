@@ -2,8 +2,13 @@ import React, { lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import './styles.css';
+import './styles/terminal.css';
+import './styles/board.css';
+import './styles/monitors.css';
 import { Providers } from './state';
 import { Shell } from './components/Shell';
+import { PaneShell } from './components/PaneShell';
+import { IS_PANE } from './pane';
 
 // Every page is its own chunk, loaded when first visited: opening a profile no longer downloads
 // the map engine, and the map no longer waits for the note editor.
@@ -30,6 +35,9 @@ const ElectionsPage = page(() => import('./pages/ElectionsPage'), 'ElectionsPage
 const AlertsPage = page(() => import('./pages/AlertsPage'), 'AlertsPage');
 const TradePage = page(() => import('./pages/TradePage'), 'TradePage');
 const WebPage = page(() => import('./pages/WebPage'), 'WebPage');
+const HelpPage = page(() => import('./pages/HelpPage'), 'HelpPage');
+const FindPage = page(() => import('./pages/FindPage'), 'FindPage');
+const BoardPage = page(() => import('./pages/BoardPage'), 'BoardPage');
 
 // Once the first page is up, fetch the two most-visited pages in the background so moving
 // between the map and a profile never waits on a download.
@@ -46,7 +54,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <Providers>
         <Routes>
-          <Route element={<Shell />}>
+          {/* Inside a workspace pane (an iframe of the workspace page) the same pages run under a slim pane frame. */}
+          <Route element={IS_PANE ? <PaneShell /> : <Shell />}>
             <Route path="/" element={<MapPage />} />
             <Route path="/entity/:id" element={<ProfilePage />} />
             <Route path="/research" element={<ResearchPage />} />
@@ -64,6 +73,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/web" element={<WebPage />} />
             <Route path="/data" element={<DataPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/help" element={<HelpPage />} />
+            <Route path="/find" element={<FindPage />} />
+            <Route path="/board" element={<BoardPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="*" element={<div className="page"><h1>Page not found</h1></div>} />
           </Route>

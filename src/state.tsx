@@ -32,7 +32,11 @@ interface AppState {
   compare: string[]; toggleCompare: (id: string) => void; clearCompare: () => void;
   theme: 'system' | 'light' | 'dark'; setTheme: (t: 'system' | 'light' | 'dark') => void;
   toast: (msg: string) => void;
+  /** The loaded entity: the last one opened in this window (or pane). A function code typed alone
+   *  acts on it, as in "DEU DES" then just "BUDG". */
+  loaded: LoadedEntity | null; load: (e: LoadedEntity | null) => void;
 }
+export interface LoadedEntity { id: string; type: string; name: string; flag?: string; iso3?: string; }
 const AppCtx = createContext<AppState>(null as any);
 export const useApp = () => useContext(AppCtx);
 
@@ -81,12 +85,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // Kept per window: each workspace pane (an iframe with its own name) has its own.
+  const loadedKey = `git.loaded.${typeof window !== 'undefined' && window.name ? window.name : 'main'}`;
+  const [loaded, setLoaded] = useState<LoadedEntity | null>(() => { try { return JSON.parse(sessionStorage.getItem(loadedKey) || 'null'); } catch { return null; } });
+  const loadEntity = useCallback((e: LoadedEntity | null) => {
+    setLoaded((cur) => (cur?.id === e?.id ? cur : e));
+    try { if (e) sessionStorage.setItem(loadedKey, JSON.stringify(e)); else sessionStorage.removeItem(loadedKey); } catch { /* private mode */ }
+  }, [loadedKey]);
+
   const [toastMsg, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number>();
   const toast = useCallback((m: string) => { setToast(m); clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(null), 2600); }, []);
 
-  const value = useMemo(() => ({ map, setMap, selected, select, flyRequest, viewRef, compare, toggleCompare, clearCompare, theme, setTheme, toast }),
-    [map, setMap, selected, select, flyRequest, compare, toggleCompare, clearCompare, theme, setTheme, toast]);
+  const value = useMemo(() => ({ map, setMap, selected, select, flyRequest, viewRef, compare, toggleCompare, clearCompare, theme, setTheme, toast, loaded, load: loadEntity }),
+    [map, setMap, selected, select, flyRequest, compare, toggleCompare, clearCompare, theme, setTheme, toast, loaded, loadEntity]);
   return (
     <AuthCtx.Provider value={{ user, refresh, logout }}>
       <AppCtx.Provider value={value}>
