@@ -7,6 +7,7 @@ import { useApp, useAuth, DEFAULT_MAP } from '../state';
 import { Card, Loading } from '../components/common';
 import { fmtDate, ago } from '../format';
 import type { Source } from '../../shared/types';
+import { DENSITIES, MOVES, setAppearance, useAppearance } from '../appearance';
 
 function ObsidianSettings() {
   const { toast } = useApp();
@@ -94,6 +95,22 @@ function ObsidianSettings() {
   );
 }
 
+/** Density and the colours of rises and falls (src/appearance.ts). */
+function AppearanceRows() {
+  const a = useAppearance();
+  const { user } = useAuth();
+  return (
+    <>
+      <div className="row wrap"><span style={{ width: 120 }}>Density</span>
+        <div className="seg">{DENSITIES.map((d) => <button key={d.id} className={a.density === d.id ? 'on' : ''} aria-pressed={a.density === d.id} title={d.about} onClick={() => setAppearance({ density: d.id }, !!user)}>{d.label}</button>)}</div>
+        <span className="tiny muted">{DENSITIES.find((d) => d.id === a.density)?.about}</span></div>
+      <div className="row wrap"><span style={{ width: 120 }}>Rises and falls</span>
+        <div className="seg">{MOVES.map((m) => <button key={m.id} className={a.moves === m.id ? 'on' : ''} aria-pressed={a.moves === m.id} title={m.about} onClick={() => setAppearance({ moves: m.id }, !!user)}>{m.label}</button>)}</div>
+        <span className="tiny muted"><span className="up">+1.2% ▲</span> <span className="down">−0.8% ▼</span> · {MOVES.find((m) => m.id === a.moves)?.about} The sign and arrows always say it too.</span></div>
+    </>
+  );
+}
+
 export function SettingsPage() {
   const { user, logout } = useAuth();
   const { theme, setTheme, setMap, toast } = useApp();
@@ -112,7 +129,8 @@ export function SettingsPage() {
       </Card>
       <Card title="Appearance & map">
         <div className="stack">
-          <div className="row"><span style={{ width: 120 }}>Theme</span><div className="seg">{(['system', 'light', 'dark'] as const).map((t) => <button key={t} className={theme === t ? 'on' : ''} onClick={() => setTheme(t)}>{t}</button>)}</div></div>
+          <div className="row"><span style={{ width: 120 }}>Theme</span><div className="seg">{(['system', 'light', 'dark'] as const).map((t) => <button key={t} className={theme === t ? 'on' : ''} aria-pressed={theme === t} onClick={() => setTheme(t)}>{t}</button>)}</div></div>
+          <AppearanceRows />
           <div className="row"><span style={{ width: 120 }}>Map layers</span><button className="btn sm" onClick={() => { setMap(DEFAULT_MAP); toast('Map layers reset'); }}>Reset to default</button></div>
         </div>
       </Card>
@@ -120,16 +138,8 @@ export function SettingsPage() {
       <Card title="Obsidian" id="obsidian">
         {user ? <ObsidianSettings /> : <span className="small muted"><Link to="/login">Sign in</Link> to sync your notes with an Obsidian vault.</span>}
       </Card>
-      <Card title="Keyboard shortcuts">
-        <table className="data"><tbody>
-          <tr><td><span className="kbd">Ctrl K</span> or <span className="kbd">/</span></td><td>Focus global search</td></tr>
-          <tr><td><span className="kbd">↑</span> <span className="kbd">↓</span> <span className="kbd">Enter</span></td><td>Choose a search result and open its profile</td></tr>
-          <tr><td><span className="kbd">Shift Enter</span></td><td>Show the search result on the map</td></tr>
-          <tr><td><span className="kbd">Esc</span></td><td>Close search or dialogs</td></tr>
-          <tr><td><span className="kbd">[[</span></td><td>In a note: link another note or an entity</td></tr>
-          <tr><td><span className="kbd">Ctrl</span>-click</td><td>In a note: follow a link (a dashed link creates that note)</td></tr>
-          <tr><td><span className="kbd">[ ]</span> + space</td><td>In a note: start a checklist</td></tr>
-        </tbody></table>
+      <Card title="Keyboard and functions">
+        <p className="small" style={{ margin: 0 }}>Type a function code in the command line (<span className="kbd">Ctrl K</span> or <span className="kbd">/</span>, or just start typing): <code>DEU BUDG</code>, <code>USA CHN TRADE</code>, <code>TOP</code>. <Link to="/help">Every function</Link> · <Link to="/help?view=keys">every key</Link> (both lists are generated from the code that runs them).</p>
       </Card>
       <Card title="Data coverage">
         {stats.data && <p className="small">{stats.data.entities.toLocaleString()} entities and {stats.data.relationships.toLocaleString()} relationships loaded: {Object.entries(stats.data.byType).map(([k, v]) => `${v} ${k}`).join(', ')}.</p>}

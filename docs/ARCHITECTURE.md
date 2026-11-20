@@ -388,12 +388,28 @@ The top bar's **Live** indicator (`LiveBadge`) shows the connection: "Connecting
   - The audit's "schedule ends" check looks at the hand-checked list: a note when the page extends it, a warning when nothing does. The Bank of Japan and the Bank of Canada keep their checked lists.
 - **Meetings of organizations.** `server/web/events.ts` (connector `wikidata-events`: after each successful organizations run, and daily) asks Wikidata for events organized by an organization in the web, in a series one of them organizes, or part of one, from 45 days ago to 400 days ahead, with the precision of each date; only dates known to the day are used. Nothing names a summit or an organization: the list follows the web. The calendar merges these with its hand-checked IGO dates (`sameMeeting`: an organization in common, starts within three days, titles sharing two telling words): the checked entry stays and says whether Wikidata has the same dates or others; two Wikidata items for one meeting are listed once, and a curated summit event that is also a checked entry is listed once. Wikidata-only events are labelled "Wikidata" (community-edited, confirm with the organizer) and graded by their title alone (summit 5, ministerial meeting, assembly or conference 4, other 3), which keeps them under the reminders' threshold.
 
+### Function codes, command line and workspace
+
+How professional terminals are operated, and what this product takes from them, is in [TERMINAL_RESEARCH.md](TERMINAL_RESEARCH.md). In the code:
+
+- **One registry of functions**: `shared/functions.ts`. Each function has a code, a title, what it shows, examples, related codes, the entity types it acts on, and where it lives (a page with fixed query parameters, a page that takes the entity as a parameter, or a section of the profile). `parseCommand` splits typed words into entity words, a code and parameters; `commandUrl` turns a function and resolved entities into an address (or a plain error saying what does apply); `fnAt` reads back which function an address shows. The command line, the function bar, help, search, the workspace and the checks all use it; nothing else lists functions. `npm run check:terminal` runs every example in the registry and checks that codes never collide with country codes.
+- **Entity resolution**: `server/command.ts`, `GET /api/resolve?q=&max=`: three- and two-letter country codes, exact names, aliases and tickers, then strong partial matches; for two entities every split of the words is tried ("south korea japan"). Ambiguous names come back with alternatives, and the client takes the alternative the function can act on (Georgia the country for `GOV`, not the state when the function wants a country).
+- **Running a command**: `src/command.ts` parses, resolves, falls back to the loaded entity for a bare code, navigates, keeps the history (localStorage, 50) and sets the message the status line shows. Input never dead-ends: an entity opens its profile, anything else goes to `/find`.
+- **The loaded entity**: `AppCtx.loaded` in `src/state.tsx`, per window (and per workspace pane), set by the profile and by any address that names an entity.
+- **Keys**: `src/keys.ts` holds every shortcut with a test for the key event; the code that handles a key asks the registry, and the key page (`KEYS`, `/help?view=keys`) lists the same entries. Single keys never fire while typing in a field or a note.
+- **Workspace** (`BOARD`, `src/pages/BoardPage.tsx`, `src/board.ts`): each pane is an iframe of the app named `git-pane-N`, where `src/main.tsx` renders `PaneShell` instead of the full shell, so router, scroll, state and the map are isolated per pane. The page and its panes talk with `postMessage` (same origin, parent ↔ frame only, so two workspace tabs never cross-talk): a pane reports its address, its loaded entity and focus; the page tells a pane its link group, whether it is active, and the entity its group moved to, which the pane follows by re-running its own function for that entity (`fnAt` + `commandUrl`; a function that does not apply to the new entity stays). The live-update stream stays one per browser however many panes are open. Workspaces are kept in this browser, and saved ones with the account (`/api/prefs` key `boards`).
+- **Monitors**: `src/components/Tick.tsx` flashes a number that changed while on screen (never on first paint, an arrow as well as a tint, no animation under reduced motion). `server/marketBoards.ts` builds the share-index board (the largest economies by GDP from the economy weights, a small typed table from country to index symbol, and a `missing` list for symbols that returned nothing) and the currency cross table (from the per-dollar rates the currency board already loads; yesterday's rates are derived from the day's change, so no further requests).
+- **Export**: `src/components/TableTools.tsx` finds the data tables on the page when its menu opens; `src/tableExport.ts` turns rows into tab-separated text or CSV with the page address and time (tested offline in `npm run check:monitors`).
+- **Appearance**: `src/appearance.ts` sets `data-density` and `data-moves` on `<html>`; `--up` and `--down` colour every price move (status colours `--good`/`--bad` stay for ok and failed), and `[data-density="compact"]` tightens tables, cards and gutters (`src/styles/monitors.css`).
+
 ## 4. Major UI components
 
-* `TopNav` — global search, Map, Research, Watchlists, Portfolio, Calendar, Settings, theme.
-* `GlobalSearch` — ⌘K / Ctrl-K / `/`, keyboard navigable, typed results with preview and
-  position badge; searches entities and the user's notes.
-* `MarketsPage` (commodities, currencies, rates & yield curves) and `ConflictsPage`.
+* `Shell` — top bar (command line, navigation, live indicator, theme, alerts), `FunctionBar`
+  under it, the page, and `StatusLine` at the bottom. Inside a workspace pane, `PaneShell`.
+* `CommandLine` — function codes and search in one input: ⌘K / Ctrl-K / `/` or any letter,
+  grouped results (functions, entities, notes), Tab completion, history, Shift+Enter shows an
+  entity on the map. `HelpPage` and `FindPage` are generated from the registries.
+* `MarketsPage` (commodities, share indices, currencies, cross table, rates & yield curves) and `ConflictsPage`.
 * Profile sections in `profile/LiveSections.tsx`: currency, rates & curve, IMF/Fed outlook,
   armed conflicts, analyst consensus, top exporters/importers of a commodity.
 * `MapPage` = `LayerPanel` (tabs Layers / Places / Saved: active-layer card with options,

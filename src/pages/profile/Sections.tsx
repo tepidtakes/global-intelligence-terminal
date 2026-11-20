@@ -7,6 +7,7 @@ import { LineChart, Sparkline, BarList } from '../../components/Charts';
 import { perf } from '../../components/entityBits';
 import { compact, fmtUnit, money, pct, fmtDate, ago, TYPE_ICON } from '../../format';
 import type { Entity, Indicator, Quote, RelView } from '../../../shared/types';
+import { Tick } from '../../components/Tick';
 
 const HS_TO_COMMODITY: Record<string, string> = { '27': 'commodity:crude-oil', '71': 'commodity:gold', '74': 'commodity:copper', '26': 'commodity:iron-ore', '10': 'commodity:wheat', '12': 'commodity:soybeans', '09': 'commodity:coffee', '18': 'commodity:cocoa', '17': 'commodity:sugar', '85': 'commodity:semiconductors', '87': 'commodity:automobiles' };
 
@@ -275,8 +276,8 @@ export function QuoteSection({ id, label = 'Market data' }: { id: string; label?
       {loading && !data ? <Loading lines={4} /> : error && !data ? <Unavailable>Quote unavailable ({error.message}). No price is shown rather than an estimate.</Unavailable> : data && (
         <div className="quote">
           <div className="row wrap" style={{ alignItems: 'baseline', gap: 12 }}>
-            <span className="px">{money(data.price, data.currency)}</span>
-            {data.changePct != null && <span className={`num ${data.changePct >= 0 ? 'good' : 'bad'}`} style={{ fontWeight: 600 }}>{data.change != null ? `${data.change >= 0 ? '+' : ''}${data.change.toFixed(2)} ` : ''}({pct(data.changePct)})</span>}
+            <span className="px"><Tick value={data.price} format={(v) => money(v, data.currency)} /></span>
+            {data.changePct != null && <span className={`num ${data.changePct >= 0 ? 'up' : 'down'}`} style={{ fontWeight: 600 }}>{data.change != null ? `${data.change >= 0 ? '+' : ''}${data.change.toFixed(2)} ` : ''}({pct(data.changePct)})</span>}
             <Quality q={data.quality} />
           </div>
           <div className="small muted">{data.symbol} · {data.exchange} · {data.currency} · as of {fmtDate(data.marketTime, true)}{data.stale ? ' · cached copy (provider unreachable)' : ''}</div>
@@ -388,7 +389,7 @@ function PositionDetail({ p, e, quote, currency, onChange }: { p: any; e: Entity
       {pf ? (
         <div className="stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)', margin: '10px 0' }}>
           <div className="stat"><div className="k">Last price ({fmtDate(quote!.marketTime)})</div><div className="v">{money(quote!.price, currency)}</div><div className="m">delayed</div></div>
-          <div className="stat"><div className="k">Price return</div><div className={`v ${pf.r >= 0 ? 'good' : 'bad'}`}>{pct(pf.r)}</div><div className="m">{pf.pnl != null ? `${money(pf.pnl, currency)} unrealized` : 'add quantity for P/L'}</div></div>
+          <div className="stat"><div className="k">Price return</div><div className={`v ${pf.r >= 0 ? 'up' : 'down'}`}>{pct(pf.r)}</div><div className="m">{pf.pnl != null ? `${money(pf.pnl, currency)} unrealized` : 'add quantity for P/L'}</div></div>
           <div className="stat" title="Price change plus cash dividends per share paid since first entry, not reinvested. Short positions owe dividends."><div className="k">Total return</div><div className={`v ${total != null && total >= 0 ? 'good' : 'bad'}`}>{total != null ? pct(total) : '—'}</div><div className="m">{divPerShare != null ? `incl. ${money(divPerShare, currency)}/sh dividends` : divs.loading ? 'loading dividends…' : 'dividends unavailable'}</div></div>
         </div>
       ) : p.status === 'open' ? <div className="small muted" style={{ margin: '8px 0' }}>Quote unavailable — performance not calculated.</div> : null}

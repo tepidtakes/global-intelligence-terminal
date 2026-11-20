@@ -326,6 +326,11 @@ The World Bank and the IMF are compared country by country for GDP, real growth,
 
 Every request to the sources on this page goes through one network gate per host: rate-limited services (Wikidata, UN Comtrade, the SEC) get one or a few requests at a time with pauses between them, `Retry-After` is honoured, and a source that keeps failing is skipped for a while instead of slowing every page down. The Data page's *Network* card shows each host's state.
 
+## Market boards built from data already loaded
+
+- **World share indices** (`EQ`): the main share index of each of the 45 largest economies by GDP (the economy weights from the IMF and the World Bank), quoted from Yahoo Finance (delayed, personal use). Which index stands for which country is the one typed table (`server/marketBoards.ts`): no free machine-readable source maps a country to its benchmark index. A symbol that returns nothing is listed under the board, and large economies without an index are named, so a gap is visible rather than hidden.
+- **Currency cross table** (`FXM`): the currencies of the largest economies against each other, computed from the per-dollar rates the currency board already loads; no further requests.
+
 ## Calendar dates read live
 
 Central-bank decision days come from the banks' own schedule pages where the terminal can read them (Federal Reserve, ECB, Bank of England), cross-checked against a hand-checked list that stays in use whenever a page cannot be read or disagrees. Summits, conferences and assemblies of the organizations in the knowledge web come from Wikidata and are labelled as such. Details: *Calendar dates read live instead of typed in* in `docs/ARCHITECTURE.md`.

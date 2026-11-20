@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, invalidate, onSessionChange, sessionChanged } from './api';
+import { adoptAppearance } from './appearance';
 
 // ───────── storage helpers (per-viewer conveniences only) ─────────
 export function load<T>(key: string, d: T): T { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : d; } catch { return d; } }
@@ -81,7 +82,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // Pull persisted preferences once signed in.
   useEffect(() => {
     if (!user) return;
-    api('/prefs').then((p) => { if (p?.theme && p.theme !== theme) { setThemeState(p.theme); save('git.theme', p.theme); } if (p?.map) setMap(p.map); }).catch(() => {});
+    api('/prefs').then((p) => { if (p?.theme && p.theme !== theme) { setThemeState(p.theme); save('git.theme', p.theme); } if (p?.map) setMap(p.map); if (p?.appearance) adoptAppearance(p.appearance); }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 

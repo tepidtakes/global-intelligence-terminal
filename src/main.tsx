@@ -9,6 +9,9 @@ import { Providers } from './state';
 import { Shell } from './components/Shell';
 import { PaneShell } from './components/PaneShell';
 import { IS_PANE } from './pane';
+import { applyAppearance } from './appearance';
+
+applyAppearance();
 
 // Every page is its own chunk, loaded when first visited: opening a profile no longer downloads
 // the map engine, and the map no longer waits for the note editor.

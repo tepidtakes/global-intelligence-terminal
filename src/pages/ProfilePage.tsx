@@ -30,10 +30,13 @@ const MAPPABLE = new Set(['country', 'state', 'county', 'city', 'region', 'igo',
 export function ProfilePage() {
   const id = decodeURIComponent(useParams().id!);
   const { data, error, loading, reload } = useApi<any>(`/entity/${encodeURIComponent(id)}`, 30_000);
-  const { select } = useApp();
+  const { select, load } = useApp();
   const nav = useNavigate();
   const loc = useLocation();
   const [report, setReport] = useState(false);
+  // The profile on screen is the loaded entity: a function code typed alone now acts on it.
+  const shown = data?.entity?.id === id ? data.entity : undefined;
+  useEffect(() => { if (shown) load({ id: shown.id, type: shown.type, name: shown.name, flag: shown.flag, iso3: shown.iso3 }); }, [shown?.id, load]);
 
   useEffect(() => { if (loc.hash) setTimeout(() => document.getElementById(loc.hash.slice(1))?.scrollIntoView({ behavior: 'smooth' }), 300); }, [loc.hash, data?.entity?.id]);
   useEffect(() => { if (data?.entity) document.title = `${data.entity.name} — Global Intelligence Terminal`; return () => { document.title = 'Global Intelligence Terminal'; }; }, [data?.entity?.name]);

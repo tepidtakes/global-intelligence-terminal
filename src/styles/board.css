@@ -1,1 +1,81 @@
-/* board styles */
+/* ───────── Workspace (function BOARD) ─────────
+   Two halves: the workspace page that holds the panes (.board…), and the slim frame each pane draws
+   around its own page (.pane…). A pane is this app in an iframe, so inside it the "viewport" is the
+   pane: the media queries at the end are about the pane's width, not the window's. */
+
+/* ── The workspace page ── */
+.board { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.boardBar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 5px 10px; min-height: 38px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.boardName { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 4px; }
+.boardBar .seg button { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; }
+.boardBar .seg button.on { box-shadow: inset 0 -2px 0 var(--accent); } /* the choice is marked by more than its colour */
+.boardOpen { width: auto; max-width: 170px; height: 26px; font-size: 12.5px; }
+.boardSave .input { width: 210px; height: 26px; font-size: 12.5px; }
+.boardPane { display: inline-flex; align-items: center; gap: 6px; }
+.boardGroup::before { content: ''; flex: none; width: 8px; height: 8px; margin-right: 5px; border-radius: 2px; background: var(--g, transparent); border: 1px solid var(--g, var(--border-strong)); }
+.boardKeys { white-space: nowrap; }
+
+.boardTabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); }
+.boardTabs button { flex: 1; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-2); cursor: pointer; font: 12.5px var(--mono); }
+.boardTabs button + button { border-left: 1px solid var(--border); }
+.boardTabs button.on { border-bottom-color: var(--accent); color: var(--text); font-weight: 700; background: var(--accent-wash); }
+.boardTabs .n, .paneNo { flex: none; min-width: 20px; height: 20px; display: inline-grid; place-items: center; border-radius: 4px; border: 1px solid var(--border-strong); font: 600 12px var(--mono); color: var(--text-2); }
+.boardTabs .g { padding: 0 5px; border-radius: 999px; border: 1px solid var(--g); background: color-mix(in srgb, var(--g) 18%, var(--surface)); color: var(--text); font-weight: 600; }
+
+.boardGrid { position: relative; flex: 1; min-height: 0; margin: 6px; display: grid; gap: 6px; }
+.boardGrid.narrow { display: block; margin: 0; }
+.boardWait { display: grid; place-items: center; }
+.boardCell { position: relative; min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); }
+.boardCell[hidden] { display: none; }
+.boardCell.active { border-color: var(--accent); outline: 2px solid var(--accent); }
+.boardGrid.narrow .boardCell { height: 100%; border: 0; border-radius: 0; outline: 0; }
+.boardCell iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--page); }
+/* Dividers sit in the gap between panes. While one is dragged the frames let the pointer through. */
+.boardSplit { position: absolute; z-index: 2; border-radius: 3px; touch-action: none; }
+.boardSplit.v { top: 0; bottom: 0; width: 6px; cursor: col-resize; }
+.boardSplit.h { right: 0; height: 6px; cursor: row-resize; }
+.boardSplit:hover, .boardSplit:focus-visible, .boardGrid.dragging .boardSplit:active { background: var(--border-strong); }
+.boardGrid.dragging { user-select: none; }
+.boardGrid.dragging iframe { pointer-events: none; }
+
+@media (max-width: 1300px) { .boardKeys { display: none; } }
+@media (max-width: 899px) {
+  .boardBar { padding: 5px 8px; }
+  .boardName { max-width: 130px; }
+  .boardPane > .small { display: none; }
+  .boardSave { flex: 1 1 100%; }
+  .boardSave .input { flex: 1; width: auto; }
+}
+
+/* ── Inside a pane: the slim bar ── */
+.paneApp { display: grid; grid-template-rows: 36px minmax(0, 1fr); height: 100%; max-width: 100vw; overflow-x: hidden; }
+.paneBar { display: flex; align-items: center; gap: 4px; padding: 0 6px; min-width: 0; background: var(--surface); border-bottom: 1px solid var(--border); position: relative; z-index: 20; }
+.paneApp.active .paneNo { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 2px var(--accent-wash); }
+.paneLink { flex: none; display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 7px 0 5px; border-radius: 999px; border: 1px dashed var(--border-strong); background: transparent; color: var(--muted); cursor: pointer; font: 600 12px var(--mono); }
+.paneLink:hover { background: var(--surface-2); color: var(--text); }
+.paneLink.on { border-style: solid; border-color: var(--g); background: color-mix(in srgb, var(--g) 18%, var(--surface)); color: var(--text); }
+.paneFn { flex: 0 1 auto; min-width: 0; max-width: 38%; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; color: var(--text-2); }
+.paneFn b { font-family: var(--mono); color: var(--text); }
+.paneCmd { flex: 1 1 150px; min-width: 100px; display: flex; }
+.paneCmd > * { flex: 1 1 auto; min-width: 0; max-width: none; margin: 0; }
+.paneCmd input { height: 26px; }
+.paneCmd .search .icon { top: 5px; }
+.paneCmd .search .kbd { display: none; }
+.paneBar .btn.sm { flex: none; padding: 0 6px; }
+.paneBar .liveBadge { flex: none; margin-right: 0; }
+@media (max-width: 640px) { .paneFn .ent { display: none; } }
+@media (max-width: 480px) { .paneFn .ttl { display: none; } .paneBar .liveBadge { border: 0; padding: 4px 2px; } }
+
+/* ── Inside a pane: pages were laid out for full windows ── */
+.paneApp .page, .paneApp .profile, .paneApp .editorPage { padding: 12px 12px 40px; }
+.paneApp h1 { font-size: 22px; }
+/* A wide table scrolls sideways inside its card instead of pushing the whole pane wide. */
+.paneApp .card > .bd:has(> table.data), .paneApp .card > .bd:has(> .stack > table.data) { overflow-x: auto; }
+@media (max-width: 1100px) {
+  /* The profile's side column is already below the main one at this width; its section links stay on one line. */
+  .paneApp .toc { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .paneApp .toc a { white-space: nowrap; }
+}
+/* Panels that the map lays over itself start under the pane's bar (36px), not under the top bar (48px). */
+@media (min-width: 761px) and (max-width: 1100px) { .paneApp .mapPage.hasPreview .preview { top: 36px; } }
+@media (max-width: 760px) { .paneApp .mapPage.showSidebar .sidebar { top: 36px; } }

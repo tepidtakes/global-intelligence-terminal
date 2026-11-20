@@ -1,1 +1,75 @@
-/* monitors styles */
+/* Live monitors: rise/fall colours, cells that flash on change, the currency cross table, the export
+   menu, and the compact density. Colours come from the product's variables, in both themes. */
+
+/* ───────── Rises and falls ─────────
+   --up and --down colour price moves everywhere (status colours --good / --bad stay for "ok" and
+   "failed"). Settings › Appearance picks the pair; the sign or an arrow always says it as well. */
+:root { --up: var(--good); --down: var(--bad); --cvd-up: #1a66c9; --cvd-down: #b85000; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --cvd-up: #5aa2ff; --cvd-down: #ff9a3d; } }
+:root[data-theme="dark"] { --cvd-up: #5aa2ff; --cvd-down: #ff9a3d; }
+:root[data-moves="blue-orange"] { --up: var(--cvd-up); --down: var(--cvd-down); }
+:root[data-moves="red-green"] { --up: var(--bad); --down: var(--good); }
+.up, .chgUp { color: var(--up); }
+.down, .chgDown { color: var(--down); }
+
+/* ───────── A value that just changed ───────── */
+.tick { position: relative; border-radius: 3px; padding: 0 2px; margin: 0 -2px; }
+.tick.flash.up { animation: tickUp 1.2s ease-out; }
+.tick.flash.down { animation: tickDown 1.2s ease-out; }
+@keyframes tickUp { from { background: color-mix(in srgb, var(--up) 30%, transparent); } to { background: transparent; } }
+@keyframes tickDown { from { background: color-mix(in srgb, var(--down) 30%, transparent); } to { background: transparent; } }
+/* The arrow sits outside the number, so nothing moves when it appears. */
+.tickArrow { position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 2px; font-size: 0.7em; line-height: 1; }
+.tick.up .tickArrow { color: var(--up); }
+.tick.down .tickArrow { color: var(--down); }
+@media (prefers-reduced-motion: reduce) {
+  .tick.flash.up, .tick.flash.down { animation: none; }
+  .tick.flash.up { background: color-mix(in srgb, var(--up) 18%, transparent); }
+  .tick.flash.down { background: color-mix(in srgb, var(--down) 18%, transparent); }
+}
+
+/* ───────── Currency cross table ───────── */
+table.matrix th, table.matrix td { text-align: right; white-space: nowrap; }
+table.matrix thead th { font-family: var(--mono); text-transform: none; letter-spacing: 0; }
+table.matrix tbody th { text-align: left; font-family: var(--mono); font-weight: 600; position: sticky; left: 0; z-index: 1; background: var(--surface); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+table.matrix td.diag { background: var(--surface-2); }
+table.matrix td.mx { font-variant-numeric: tabular-nums; }
+table.matrix td.mx.up { background: color-mix(in srgb, var(--up) calc(var(--mx, 0) * 24%), transparent); }
+table.matrix td.mx.down { background: color-mix(in srgb, var(--down) calc(var(--mx, 0) * 24%), transparent); }
+table.matrix .mxd { font-size: 10.5px; color: var(--text-2); }
+table.matrix td.mx.up .mxd { color: var(--up); }
+table.matrix td.mx.down .mxd { color: var(--down); }
+
+/* ───────── Export ───────── */
+button.fnHelp { border: 0; background: transparent; font: inherit; cursor: pointer; }
+.exportList { position: fixed; z-index: 60; min-width: 300px; max-width: min(460px, calc(100vw - 16px)); max-height: 60vh; overflow: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow); padding: 6px; white-space: normal; }
+.exportRow { display: flex; align-items: center; gap: 6px; padding: 4px; }
+.exportRow .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.exportRow.foot { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; }
+.exportEmpty { padding: 6px 4px; }
+
+/* ───────── A profile opened at a section: the heading clears the sticky section strip ───────── */
+.main section[id] { scroll-margin-top: 96px; }
+
+/* ───────── Compact density ─────────
+   Tighter tables, cards and gutters: about a quarter more rows on a screen. Type never goes below
+   12px for text, and numbers keep their tabular figures. */
+[data-density="compact"] body { font-size: 13px; line-height: 1.35; }
+[data-density="compact"] h1 { font-size: 20px; }
+[data-density="compact"] h2 { font-size: 14.5px; }
+[data-density="compact"] .page, [data-density="compact"] .profile { padding: 10px 12px 40px; gap: 10px; }
+[data-density="compact"] .page.wide > .card { margin-bottom: 8px; }
+[data-density="compact"] .card > .hd { padding: 6px 10px; }
+[data-density="compact"] .card > .bd { padding: 8px 10px; }
+[data-density="compact"] table.data th { padding: 3px 6px; font-size: 11px; }
+[data-density="compact"] table.data td { padding: 2px 6px; }
+[data-density="compact"] table.matrix tbody th { padding: 2px 6px; }
+[data-density="compact"] .kpis { gap: 6px; margin: 6px 0 8px; }
+[data-density="compact"] .kpi { padding: 6px 8px; }
+[data-density="compact"] .kpi .v { font-size: 17px; }
+[data-density="compact"] .stats { gap: 6px 10px; }
+[data-density="compact"] .stat .v { font-size: 15px; }
+[data-density="compact"] .toc a { padding: 3px 8px; font-size: 12.5px; }
+[data-density="compact"] .btn { height: 26px; padding: 0 9px; }
+[data-density="compact"] .btn.sm { height: 22px; padding: 0 7px; font-size: 12px; }
+[data-density="compact"] .main section[id] { scroll-margin-top: 76px; }

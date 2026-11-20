@@ -1,7 +1,9 @@
 import { Suspense, useEffect, useState } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth, useApp } from '../state';
-import { GlobalSearch } from './GlobalSearch';
+import { CommandLine } from './CommandLine';
+import { FunctionBar } from './FunctionBar';
+import { StatusLine } from './StatusLine';
 import { ErrorBoundary } from './ErrorBoundary';
 import { AlertBell } from './alertBits';
 import { LiveBadge } from './LiveBadge';
@@ -19,6 +21,7 @@ const NAV = [
   { to: '/portfolio', label: 'Portfolio', icon: '▤' },
   { to: '/calendar', label: 'Calendar', icon: '◷' },
   { to: '/compare', label: 'Compare', icon: '⇄' },
+  { to: '/board', label: 'Workspace', icon: '▥' },
 ];
 
 export function Shell() {
@@ -42,12 +45,13 @@ export function Shell() {
           <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden><circle cx="16" cy="16" r="13" fill="none" stroke="var(--accent)" strokeWidth="2.5" /><path d="M3 16h26M16 3c-6 7-6 19 0 26M16 3c6 7 6 19 0 26" fill="none" stroke="var(--accent)" strokeWidth="1.8" /></svg>
           <span>GIT</span><small>Global Intelligence Terminal</small>
         </Link>
-        <GlobalSearch />
+        <CommandLine />
         <nav id="mainnav" className={`navLinks${menu ? ' open' : ''}`} aria-label="Main">
           {NAV.map((n) => link(n.to, n.label, n.icon, undefined, n.end))}
           {user && link('/alerts', 'Alerts', '🔔', 'menuOnly')}
           {link('/data', 'Data', '◇', 'menuOnly', false, 'Data sources, freshness and consistency audit')}
           {link('/settings', 'Settings', '⚙', 'menuOnly')}
+          {link('/help', 'Functions and help', '?', 'menuOnly')}
         </nav>
         <div className="spacer" />
         <LiveBadge />
@@ -57,12 +61,15 @@ export function Shell() {
         <AlertBell />
         {link('/data', 'Data', '◇', 'barOnly', false, 'Data sources, freshness and consistency audit')}
         {link('/settings', 'Settings', '⚙', 'barOnly')}
+        {link('/help', 'Help', '?', 'barOnly', false, 'Every function, with examples, and the keyboard (F1)')}
         {user === null && <Link to="/login" className="btn primary sm signIn" style={{ marginLeft: 6 }}>Sign in</Link>}
         {user && <span className="tiny muted userEmail" style={{ marginLeft: 8, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={user.email}>{user.email}</span>}
         <button className="btn ghost sm navToggle" aria-expanded={menu} aria-controls="mainnav" aria-label={menu ? 'Close menu' : 'Open menu'} onClick={() => setMenu((m) => !m)}>{menu ? '✕' : '☰'}</button>
       </header>
       {menu && <div className="navScrim" onClick={() => setMenu(false)} aria-hidden />}
+      <FunctionBar />
       <main className="main"><ErrorBoundary resetKey={loc.pathname} label="this page"><Suspense fallback={<div className="page" aria-busy="true"><div className="skeleton" style={{ height: 28, width: '40%' }} /><div className="skeleton" style={{ height: 14, width: '70%' }} /><div className="skeleton" style={{ height: 220 }} /></div>}><Outlet /></Suspense></ErrorBoundary></main>
+      <StatusLine />
     </div>
   );
 }

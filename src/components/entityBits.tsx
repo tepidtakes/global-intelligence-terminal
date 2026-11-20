@@ -77,7 +77,7 @@ export function PositionCompact({ entityId, position }: { entityId: string; posi
     <div className={`posBox ${position.side}`}>
       <div className="row"><span className={`badge ${position.side}`}>{position.side.toUpperCase()}</span><strong>{money(position.avgEntry, cur)}</strong><span className="small muted">since {fmtDate(position.firstEntryDate)}</span><div className="spacer" /><span className="badge private">Private</span></div>
       <div className="row small" style={{ marginTop: 4 }}>
-        {q.data ? <>Last {money(q.data.price, cur)} · Price return <strong className={pf!.r >= 0 ? 'good' : 'bad'}>{pct(pf!.r)}</strong>{pf!.pnl != null && <> · {money(pf!.pnl, cur)}</>}</> : q.error ? <span className="muted">Quote unavailable — return not calculated</span> : <span className="muted">Loading quote…</span>}
+        {q.data ? <>Last {money(q.data.price, cur)} · Price return <strong className={pf!.r >= 0 ? 'up' : 'down'}>{pct(pf!.r)}</strong>{pf!.pnl != null && <> · {money(pf!.pnl, cur)}</>}</> : q.error ? <span className="muted">Quote unavailable — return not calculated</span> : <span className="muted">Loading quote…</span>}
       </div>
     </div>
   );

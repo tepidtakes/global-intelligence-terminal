@@ -6,6 +6,7 @@ import { Card, EntityChip, Loading } from '../components/common';
 import { perf } from '../components/entityBits';
 import { money, pct, fmtDate } from '../format';
 import type { Quote } from '../../shared/types';
+import { Tick } from '../components/Tick';
 
 function Row({ p }: { p: any }) {
   const q = useApi<Quote>(`/quote/${encodeURIComponent(p.entityId)}?range=1mo`, 300_000);
@@ -20,8 +21,8 @@ function Row({ p }: { p: any }) {
       <td className="tab">{fmtDate(s.firstEntryDate)}</td>
       <td className="r">{money(s.avgEntry, cur)}</td>
       <td className="r">{s.quantity ?? '—'}</td>
-      <td className="r">{q.data ? money(q.data.price, cur) : q.error ? <span className="muted">n/a</span> : '…'}</td>
-      <td className={`r ${pf ? (pf.r >= 0 ? 'good' : 'bad') : ''}`}>{pf ? pct(pf.r) : '—'}</td>
+      <td className="r">{q.data ? <Tick value={q.data.price} format={(v) => money(v, cur)} /> : q.error ? <span className="muted">n/a</span> : '…'}</td>
+      <td className={`r ${pf ? (pf.r >= 0 ? 'up' : 'down') : ''}`}>{pf ? pct(pf.r) : '—'}</td>
       <td className="r">{pf?.pnl != null ? money(pf.pnl, cur) : '—'}</td>
     </tr>
   );

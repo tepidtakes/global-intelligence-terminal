@@ -48,6 +48,8 @@ import { publisherForDomain, publisherForName, tierForDomain, isTrusted, TIER_IN
 import { INTENSITY } from './worldEvents.js';
 import { PRODUCTS, productByHs } from '../shared/products.js';
 import { HOST, PORT } from './config.js';
+import { resolveCommandEntities } from './command.js';
+import { indexBoard, fxMatrix } from './marketBoards.js';
 import type { Entity } from '../shared/types.js';
 
 const QUOTE_RANGES = new Set(['1mo', '6mo', '1y', '5y', 'max']);
@@ -179,6 +181,9 @@ api.get('/search', (req: AuthedRequest, res) => {
   const notes = req.userId && (!types || types.includes('note')) ? searchNotes(req.userId, q, 6) : [];
   res.json({ entities: hits, notes });
 });
+
+// The command line: the words typed around a function code, as one or two entities.
+api.get('/resolve', (req, res) => res.json(resolveCommandEntities(String(req.query.q || ''), Number(req.query.max) === 1 ? 1 : 2)));
 
 api.get('/connections', (req, res) => {
   const a = String(req.query.a), b = String(req.query.b);
@@ -517,6 +522,9 @@ api.get('/yield-curve/:iso3', wrap(async (req, res) => {
 
 // ───────────── Markets, rates, forecasts ─────────────
 api.get('/markets/fx', wrap(async (_req, res) => res.json(await fxBoard())));
+// Before /markets/fx/:code, which would take "matrix" for a currency code.
+api.get('/markets/fx/matrix', wrap(async (_req, res) => res.json(await fxMatrix())));
+api.get('/markets/indices', wrap(async (_req, res) => res.json(await indexBoard())));
 api.get('/markets/fx/:code', wrap(async (req, res) => {
   const r = await fxFor(req.params.code.toUpperCase(), pickRange(req.query.range));
   if (!r) return res.json({ unavailable: true, reason: 'No quote for this currency against the US dollar.' });

@@ -105,7 +105,48 @@ Checks: `npm run check:obsidian` · `npm run check:tickers` · `npm run check:li
 explorer on fixtures, offline) · `npm run check:web` (the knowledge web: Wikidata loaders,
 corroboration and disputes, trade/sanctions/news links, weights, catalog, connections; offline) · `npm run check:quality` (the network gate against local
 HTTP servers: limits, gaps, Retry-After, circuit breaker, readable errors; and the World Bank vs IMF cross-checks; offline) · `npm run check:updates` (live updates to open pages,
-central-bank dates read from the banks' pages, meetings from Wikidata; offline).
+central-bank dates read from the banks' pages, meetings from Wikidata; offline) ·
+`npm run check:terminal` (function codes, the command line and its entity resolution, keys;
+offline) · `npm run check:monitors` (share-index board, currency cross table, table export;
+offline).
+
+## Working like a terminal
+
+The design follows how professional market terminals are operated (the study behind it is in
+[docs/TERMINAL_RESEARCH.md](docs/TERMINAL_RESEARCH.md)); the look and the names are this
+project's own.
+
+- **Function codes.** Every screen has a short code: `DES` profile, `ECON` economy, `BUDG`
+  budget, `GOV` government, `CAL` calendar, `TOP` top news, `NEWS`, `TRADE`, `SANC`, `WEB`
+  connections, `MAP`, `EQ` world share indices, `FX`, `FXM` currency cross table, `RATES`,
+  `CMD` commodities, `GP` price chart, `FUND` financials, `BOARD` workspace, `HELP`… `HELP`
+  lists them all with examples; it is generated from the same registry that runs them.
+- **The command line is also the search box.** Type an entity, then a code: `DEU BUDG`,
+  `USA CHN TRADE`, `AAPL GP`, `NATO MEM`. The entity you opened last stays loaded (shown left
+  of the command line), so a code typed alone acts on it: open Germany, then just type `TRADE`.
+  Countries answer to their two- and three-letter codes, companies to their tickers. Anything
+  that is not a command opens an entity or lists everything that matches; a mistyped code gets
+  suggestions. Up and Down recall earlier commands; `LAST` runs the previous one again.
+- **Function bar.** Under the top bar on every page: back and forward, where you are, and the
+  functions worth running next as numbered chips (press the digit), plus **Export** and **F1** help.
+- **Status line.** At the bottom: what the last command did, whether the data sources are
+  answering, and the time.
+- **Workspace** (`BOARD`). Up to four panes side by side, each running its own function with its
+  own back and forward. Panes with the same link letter follow the same entity: load France in
+  one and the others show France in their own function. Save layouts by name (with your
+  account when signed in); three starters: Macro desk, Country desk, Markets. Alt+1…4 or F6
+  move between panes.
+- **Live monitors.** A price that changes while on screen lights up for a moment with ▲ or ▼.
+  The markets page adds world share indices (the main index of each large economy, by region)
+  and a cross table of the largest economies' currencies against each other.
+- **Export.** Any table on any page can be copied (pastes into a spreadsheet) or saved as CSV
+  with the page address and time of export.
+- **Appearance.** Settings › Appearance: a compact density (more rows on screen) and the
+  colours of rises and falls: green/red, blue/orange (for red–green colour blindness) or
+  red/green (the East Asian convention). Signs and arrows always say it as well.
+- **Keyboard.** `/` or Ctrl+K (or just start typing) goes to the command line; F1 is help for the
+  screen; digits run the numbered functions; the full list (`KEYS`) is generated from the code
+  that handles the keys.
 
 ## What's in it
 
@@ -283,6 +324,8 @@ server/          Express API (one process; mounts Vite in dev)
   graph.ts       entity graph: baseline geography + curated overlay, search index
   providers.ts   World Bank, Comtrade, Treasury, SEC, quotes, news (disk-cached)
   markets.ts     FX, commodity futures, policy rates, yield curves, IMF, Fed, consensus
+  marketBoards.ts world share indices and the currency cross table (functions EQ, FXM)
+  command.ts     the command line's entity resolution (codes, names, tickers, two entities)
   worldEvents.ts Wikipedia conflict list + electoral calendar parsers
   augment.ts     live graph additions: Congress, Wikidata leaders, conflicts, elections
   newsroom.ts    trusted news feeds: ingest, de-duplicate, tag entities, signals

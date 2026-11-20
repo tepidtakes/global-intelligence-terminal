@@ -96,7 +96,7 @@ export function windowChanges(s: SparkSeries, invert = false) {
 }
 /** No trade for 10+ days: the price is shown with its date, but changes built from it would mislead. */
 export const isStale = (s: SparkSeries) => Date.now() - Date.parse(s.time) > 10 * 86400_000;
-const thin = (points: { t: string; c: number }[], n = 60) => points.length <= n ? points : points.filter((_, i) => i % Math.ceil(points.length / n) === 0 || i === points.length - 1);
+export const thin = (points: { t: string; c: number }[], n = 60) => points.length <= n ? points : points.filter((_, i) => i % Math.ceil(points.length / n) === 0 || i === points.length - 1);
 
 // ───────────────────────── Currencies ─────────────────────────
 // Region buckets for the FX board; everything else falls into "Other".

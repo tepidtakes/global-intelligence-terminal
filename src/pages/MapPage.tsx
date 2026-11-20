@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, useApi } from '../api';
 import { useApp, useAuth, useIsDark } from '../state';
 import { WorldMap, type HoverInfo, type CityPoint } from '../map/WorldMap';
-import { colorize, palette, layerDefFor, tooltipValue, type LayerData } from '../map/layers';
+import { colorize, palette, layerDefFor, defaultFill, tooltipValue, LAYERS, type LayerData, type LayerDef } from '../map/layers';
 import { LayerPanel } from '../map/LayerPanel';
 import { PreviewPane } from './PreviewPane';
 import { fmtUnit, TYPE_ICON } from '../format';
@@ -11,8 +11,28 @@ import { SourceRef } from '../components/common';
 
 let lastHandledFly = 0;
 
+/** The map layer that words name best: its label first, then its keywords and hint ("inflation", "gdp per person", "sanctions"). */
+function layerByWords(words: string): LayerDef | undefined {
+  const toks = words.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if (!toks.length) return undefined;
+  const has = (text: string | undefined, t: string) => !!text && new RegExp(`\\b${t}`).test(text.toLowerCase());
+  let best: { def: LayerDef; score: number } | undefined;
+  for (const def of LAYERS) {
+    const label = def.label.toLowerCase();
+    let score = label === toks.join(' ') ? 100 : 0;
+    for (const t of toks) {
+      const s = has(def.label, t) ? 10 : def.id.toLowerCase().split(/[^a-z0-9]+/).includes(t) ? 8 : has(def.keywords, t) ? 5 : has(def.variants?.map((v) => v.label).join(' '), t) ? 3 : has(def.hint, t) ? 1 : 0;
+      if (!s) { score = 0; break; }
+      score += s;
+    }
+    // Among equals the shorter label is the closer match ("Inflation" before "Inflation forecast").
+    if (score && (!best || score > best.score || (score === best.score && label.length < best.def.label.length))) best = { def, score };
+  }
+  return best?.def;
+}
+
 export function MapPage() {
-  const { map: cfg, setMap, selected, select, flyRequest, viewRef } = useApp();
+  const { map: cfg, setMap, selected, select, flyRequest, viewRef, toast } = useApp();
   const { user } = useAuth();
   const dark = useIsDark();
   const pal = useMemo(() => palette(dark), [dark]);
@@ -21,11 +41,16 @@ export function MapPage() {
   const [fly, setFly] = useState<{ id: string; n: number; coords?: [number, number] } | null>(null);
   // Links can open the map on a layer: /?fill=sanctions:ALL (the parameter is removed once applied).
   const [sp, setSp] = useSearchParams();
+  // Also on an entity (/?show=country:DEU selects it and flies there) and on a layer named in words
+  // (/?layer=inflation picks the layer whose label fits best): how the command line opens the map.
   useEffect(() => {
-    const f = sp.get('fill');
-    if (!f) return;
-    if (layerDefFor(f)) setMap({ fill: f });
-    sp.delete('fill'); setSp(sp, { replace: true });
+    const f = sp.get('fill'), show = sp.get('show'), words = sp.get('layer');
+    if (!f && !show && !words) return;
+    if (f && layerDefFor(f)) setMap({ fill: f });
+    if (words) { const def = layerByWords(words); if (def) setMap({ fill: defaultFill(def) }); else toast(`No map layer is called “${words}”`); }
+    // Flying to an organization colours the map by its members: not when a layer was asked for in the same breath.
+    if (show) select(show, { fly: !(words && show.startsWith('igo:')) });
+    sp.delete('fill'); sp.delete('show'); sp.delete('layer'); setSp(sp, { replace: true });
   }, [sp]);
 
   const nav = useApi<any[]>('/geo/nav', 3600_000);

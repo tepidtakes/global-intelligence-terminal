@@ -6,13 +6,15 @@ import { Card, Loading, SourceRef, Unavailable, Quality } from '../components/co
 import { Sparkline, LineChart } from '../components/Charts';
 import { Chg, CurveChart } from './profile/LiveSections';
 import { fmtDate, ago } from '../format';
+import { Tick } from '../components/Tick';
 
-type Tab = 'fx' | 'commodities' | 'rates';
+type Tab = 'commodities' | 'indices' | 'fx' | 'matrix' | 'rates';
+const TABS: [Tab, string][] = [['commodities', 'Commodities'], ['indices', 'Share indices'], ['fx', 'Currencies'], ['matrix', 'Cross table'], ['rates', 'Rates & yield curves']];
 type SortKey = 'name' | 'd1' | 'm1' | 'ytd' | 'y1';
 
 export function MarketsPage() {
   const [sp, setSp] = useSearchParams();
-  const tab = (sp.get('tab') as Tab) || 'commodities';
+  const tab: Tab = TABS.some(([k]) => k === sp.get('tab')) ? (sp.get('tab') as Tab) : 'commodities';
   return (
     <div className="page wide">
       <div className="row wrap" style={{ alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
@@ -20,12 +22,14 @@ export function MarketsPage() {
         <span className="small muted">Delayed quotes and official rate data — every number shows its source and time.</span>
       </div>
       <div className="seg" role="tablist" style={{ marginBottom: 14 }}>
-        {([['commodities', 'Commodities'], ['fx', 'Currencies'], ['rates', 'Rates & yield curves']] as [Tab, string][]).map(([k, l]) => (
+        {TABS.map(([k, l]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setSp({ tab: k })}>{l}</button>
         ))}
       </div>
       {tab === 'commodities' && <Commodities />}
+      {tab === 'indices' && <Indices />}
       {tab === 'fx' && <Currencies />}
+      {tab === 'matrix' && <CrossTable />}
       {tab === 'rates' && <Rates />}
     </div>
   );
@@ -67,10 +71,10 @@ function Commodities() {
                 <tr key={r.id} onClick={() => nav(`/entity/${encodeURIComponent(r.id)}`)} style={{ cursor: 'pointer' }}>
                   <td><Link to={`/entity/${encodeURIComponent(r.id)}`} onClick={(e) => e.stopPropagation()}><strong>{r.name}</strong></Link><div className="tiny muted">{r.contract || r.benchmark || r.symbol}</div></td>
                   {r.unavailable ? <td colSpan={8} className="muted small">Quote unavailable</td> : <>
-                    <td className="r num"><strong>{r.price.toLocaleString(undefined, { maximumFractionDigits: r.price < 10 ? 3 : 2 })}</strong></td>
+                    <td className="r num"><strong><Tick value={r.price} format={(v) => v.toLocaleString(undefined, { maximumFractionDigits: v < 10 ? 3 : 2 })} /></strong></td>
                     <td className="small muted">{r.unit}</td>
                     <td className="r"><Chg v={r.change.d1} digits={2} /></td><td className="r"><Chg v={r.change.m1} /></td><td className="r"><Chg v={r.change.ytd} /></td><td className="r"><Chg v={r.change.y1} /></td>
-                    <td><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--good)' : 'var(--bad)'} /></td>
+                    <td><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'} /></td>
                     <td className="r tiny muted">{fmtDate(r.time, true)}{r.staleQuote ? <div className="chgDown" title="No trade in the last 10 days — changes are not shown">no recent trades</div> : r.thinlyTraded && <div title="Few trades in the last year — the last price can be old">thinly traded</div>}</td>
                   </>}
                 </tr>
@@ -79,7 +83,7 @@ function Commodities() {
           </div>
         </Card>
       ))}
-      <div className="tiny muted">Green/red show the direction of the price move. For a commodity, whether a rise is good news depends on whether you produce or consume it. Commodities without an openly licensed price (lithium, cobalt, nickel, rare earths) are on their profiles with producer rankings and live trade data instead.</div>
+      <div className="tiny muted">Colours and the sign show the direction of the price move (the colours can be changed in Settings). For a commodity, whether a rise is good news depends on whether you produce or consume it. Commodities without an openly licensed price (lithium, cobalt, nickel, rare earths) are on their profiles with producer rankings and live trade data instead.</div>
     </>
   );
 }
@@ -114,9 +118,9 @@ function Currencies() {
                   <tr key={r.code}>
                     <td><strong>{r.code}</strong> <span className="small">{r.name}</span>{r.staleQuote && <span className="tiny chgDown" title={`Last quote ${r.time?.slice(0, 10)}`}> · no recent trades</span>}<div className="tiny muted"><Link to={`/entity/${encodeURIComponent(r.country.id)}#currency`}>{r.country.flag} {r.country.name}</Link>{r.countries > 1 ? ` + ${r.countries - 1} more` : ''}</div></td>
                     {r.unavailable ? <td colSpan={6} className="muted small">No quote available</td> : <>
-                      <td className="r num">{r.perUsd.toLocaleString(undefined, { maximumSignificantDigits: 6 })}</td>
+                      <td className="r num"><Tick value={r.perUsd} format={(v) => v.toLocaleString(undefined, { maximumSignificantDigits: 6 })} /></td>
                       <td className="r"><Chg v={r.change.d1} digits={2} /></td><td className="r"><Chg v={r.change.m1} /></td><td className="r"><Chg v={r.change.ytd} /></td><td className="r"><Chg v={r.change.y1} /></td>
-                      <td><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--good)' : 'var(--bad)'} /></td>
+                      <td><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'} /></td>
                     </>}
                   </tr>
                 ))}</tbody>
@@ -125,10 +129,92 @@ function Currencies() {
           </Card>
         );
       })}
-      <div className="tiny muted">Changes are the currency’s value against the US dollar: green = strengthened, red = weakened. Pegged currencies (e.g. the Saudi riyal or Hong Kong dollar) barely move by design.</div>
+      <div className="tiny muted">Changes are the currency’s value against the US dollar: + strengthened, − weakened. Pegged currencies (e.g. the Saudi riyal or Hong Kong dollar) barely move by design.</div>
     </>
   );
 }
+// ───────── World share indices (EQ) ─────────
+function Indices() {
+  const { data, loading, error } = useApi<any>('/markets/indices', 300_000);
+  const { th, sort } = useSort('name');
+  if (loading && !data) return <Loading lines={10} />;
+  if (error) return <Unavailable>Share-index quotes unavailable ({error.message}). No levels are shown rather than stale guesses.</Unavailable>;
+  const rows = (data.rows as any[]).map((r) => ({ ...r, name: r.country.name }));
+  return (
+    <>
+      <div className="row wrap small muted" style={{ gap: 10, marginBottom: 8 }}><Quality q="delayed" /> {data.note} Chosen from {data.chosenBy}. <SourceRef id={data.sourceId} /> · retrieved {ago(data.fetchedAt)}{data.stale ? ' · cached copy (provider unreachable)' : ''}</div>
+      {(data.regions as string[]).map((g) => (
+        <Card key={g} title={g}>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data hover">
+              <thead><tr>{th('name', 'Economy', '')}<th>Index</th><th className="r">Level</th>{th('d1', '1 day')}{th('m1', '1 month')}{th('ytd', 'YTD')}{th('y1', '1 year')}<th>1 year</th><th className="r">As of</th></tr></thead>
+              <tbody>{sort(rows.filter((r) => r.region === g)).map((r) => (
+                <tr key={r.iso3}>
+                  <td><Link to={`/entity/${encodeURIComponent(r.country.id)}`}><span aria-hidden>{r.country.flag}</span> <strong>{r.country.name}</strong></Link>{r.gdpRank && <div className="tiny muted" title="Rank by GDP, from the economy weights">#{r.gdpRank} by GDP</div>}</td>
+                  <td>{r.index}<div className="tiny muted">{r.symbol}</div></td>
+                  {r.unavailable ? <td colSpan={7} className="muted small">No quote for {r.symbol}</td> : <>
+                    <td className="r num"><strong><Tick value={r.last} format={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 2 })} /></strong></td>
+                    <td className="r"><Chg v={r.change.d1} digits={2} /></td><td className="r"><Chg v={r.change.m1} /></td><td className="r"><Chg v={r.change.ytd} /></td><td className="r"><Chg v={r.change.y1} /></td>
+                    <td><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'} /></td>
+                    <td className="r tiny muted">{fmtDate(r.time, true)}{r.staleQuote && <div title="No trade in the last 10 days — changes are not shown">no recent trades</div>}</td>
+                  </>}
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </Card>
+      ))}
+      {(data.missing.length > 0 || data.noIndex.length > 0) && (
+        <div className="tiny muted">
+          {data.missing.length > 0 && <div>No quote came back for: {data.missing.join(', ')}. The symbol may have changed at the provider.</div>}
+          {data.noIndex.length > 0 && <div>Large economies without an index on this board yet: {data.noIndex.join(', ')}.</div>}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ───────── Currency cross table (FXM) ─────────
+function CrossTable() {
+  const { data, loading, error } = useApi<any>('/markets/fx/matrix', 300_000);
+  if (loading && !data) return <Loading lines={10} />;
+  if (error) return <Unavailable>Currency quotes unavailable ({error.message}).</Unavailable>;
+  const cur = data.currencies as any[];
+  const digits = (v: number) => (v >= 1000 ? 0 : v >= 100 ? 1 : v >= 10 ? 2 : v >= 1 ? 3 : 4);
+  return (
+    <>
+      <div className="row wrap small muted" style={{ gap: 10, marginBottom: 8 }}><Quality q="delayed" /> {data.note} Currencies: {data.chosenBy}. <SourceRef id={data.sourceId} /> · retrieved {ago(data.fetchedAt)}{data.stale ? ' · cached copy (provider unreachable)' : ''}</div>
+      <Card title="One unit of the row’s currency buys">
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data matrix">
+            <thead><tr><th scope="col"><span className="srOnly">Currency</span></th>{cur.map((c) => <th key={c.code} scope="col" className="r" title={c.name}>{c.code}</th>)}</tr></thead>
+            <tbody>{cur.map((row, i) => (
+              <tr key={row.code}>
+                <th scope="row" title={`${row.name}${row.country ? ` · ${row.country.name}` : ''}${row.staleQuote ? ' · no recent trades' : ''}`}>
+                  {row.country ? <Link to={`/entity/${encodeURIComponent(row.country.id)}#currency`}><span aria-hidden>{row.country.flag}</span> {row.code}</Link> : row.code}
+                </th>
+                {(data.cells[i] as any[]).map((cell, j) => {
+                  if (!cell) return <td key={j} className="diag" aria-label="same currency" />;
+                  const d = cell.d1 as number | undefined;
+                  const dir = d == null || Math.abs(d) < 0.005 ? '' : d > 0 ? 'up' : 'down';
+                  return (
+                    <td key={j} className={`r mx ${dir}`} style={dir ? { ['--mx' as any]: Math.min(1, Math.abs(d!) / 2).toFixed(2) } : undefined}
+                      title={`1 ${row.code} = ${cell.v.toLocaleString(undefined, { maximumSignificantDigits: 6 })} ${cur[j].code}${d != null ? `; ${d > 0 ? '+' : ''}${d.toFixed(2)}% today (${row.code} ${d >= 0 ? 'gained' : 'lost'} against ${cur[j].code})` : ''}`}>
+                      <Tick value={cell.v} format={(v) => v.toLocaleString(undefined, { minimumFractionDigits: digits(v), maximumFractionDigits: digits(v) })} />
+                      <div className="mxd">{d == null ? '—' : `${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d).toFixed(2)}%`}</div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </Card>
+      <div className="tiny muted">Read across: the row’s currency in units of each column’s. The small figure is today’s change, signed (+ the row’s currency gained against the column’s); the tint deepens with the size of the move. Hover a cell for the full rate.</div>
+    </>
+  );
+}
+
 function FxMapButton() {
   const { setMap } = useApp();
   const nav = useNavigate();

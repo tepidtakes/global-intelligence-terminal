@@ -6,12 +6,13 @@ import { Card, EntityPicker, Loading } from '../components/common';
 import { money, pct, TYPE_ICON } from '../format';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
 import type { Quote } from '../../shared/types';
+import { Tick } from '../components/Tick';
 
 function QuoteCell({ id }: { id: string }) {
   const q = useApi<Quote>(`/quote/${encodeURIComponent(id)}?range=1mo`, 300_000);
   if (q.error) return <span className="muted small">no price feed</span>;
   if (!q.data) return <span className="muted">…</span>;
-  return <span className="num">{money(q.data.price, q.data.currency)} <span className={q.data.changePct! >= 0 ? 'good' : 'bad'}>{pct(q.data.changePct)}</span></span>;
+  return <span className="num"><Tick value={q.data.price} format={(v) => money(v, q.data!.currency)} /> <span className={q.data.changePct! >= 0 ? 'up' : 'down'}>{pct(q.data.changePct)}</span></span>;
 }
 
 export function WatchlistsPage() {
