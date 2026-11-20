@@ -9,7 +9,7 @@ import type { NoteHit, SearchHit } from '../../shared/types';
 import { FUNCTIONS, fnApplies, functionsFor, parseCommand, readParams, type FnDef } from '../../shared/functions';
 import { useApp } from '../state';
 import { KEYS, isTyping, nothingFocused } from '../keys';
-import { asLoaded, commandHistory, matchFunctions, useRunCommand } from '../command';
+import { asLoaded, commandHistory, matchFunctions, useRunCommand, type Resolved } from '../command';
 import { PositionBadge, useSearch } from './common';
 
 export interface CommandLineProps { /** Slim version for a workspace pane header. */ compact?: boolean; }
@@ -44,6 +44,9 @@ export function CommandLine({ compact }: CommandLineProps) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const histAt = useRef<number | null>(null);
+  // Entities written into the line by Tab, by the words that stand for them: Enter runs the command on
+  // those very entities, not on whatever else has the same name.
+  const tabbed = useRef<Record<string, Resolved>>({});
   const input = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -134,10 +137,11 @@ export function CommandLine({ compact }: CommandLineProps) {
   }, []);
 
   const leave = () => { setOpen(false); input.current?.blur(); };
-  const finished = () => { setQ(''); histAt.current = null; leave(); };
+  const finished = () => { setQ(''); histAt.current = null; tabbed.current = {}; leave(); };
   const submit = async (command: string) => {
     setBusy(true);
-    const r = await run(command);
+    const known = Object.fromEntries(Object.entries(tabbed.current).filter(([w]) => command.toLowerCase().includes(w)));
+    const r = await run(command, Object.keys(known).length ? known : undefined);
     setBusy(false);
     // Went somewhere: the line is free for the next command. Otherwise the words stay, to be corrected.
     if (r.url) finished(); else { setError(r.message); setOpen(true); }
@@ -160,6 +164,7 @@ export function CommandLine({ compact }: CommandLineProps) {
     if (row.kind === 'fn') setQ(`${row.run} `);
     else {
       const t = tokenFor(row.e);
+      tabbed.current[t.toLowerCase()] = { ...asLoaded({ ...row.e, iso3: row.e.type === 'country' ? row.e.id.split(':')[1] : undefined }), score: row.e.score, exact: true, sure: true };
       setQ(fn ? (parsed.head ? `${t} ${fn.code} ${parsed.tail.join(' ')}`.trimEnd() + ' ' : `${fn.code} ${t} `) : usingLead ? `${t} ${last}` : `${t} `);
     }
     return true;

@@ -80,12 +80,19 @@ export function PaneShell() {
   // `follow` marks an entity the workspace page itself sent here: it must not move the group again.
   const pending = !!urlEntity && settled !== urlEntity;
   const told = useRef<string | undefined>(undefined);
+  const startUrl = useRef(url);
+  const reported = useRef(false);
   useEffect(() => {
     if (!loaded || pending) return;
     const follow = told.current === loaded.id;
     if (!follow) told.current = undefined;
-    toParent({ t: 'loaded', pane: PANE_NO, entity: loaded, ...(follow ? { follow } : {}) });
-  }, [loaded, pending]);
+    // The first report of a pane that has not moved since it appeared (a layout change, a reload, a
+    // tab first shown on a narrow screen) is what it had before: it must not pull its link group
+    // away from what the other panes show now.
+    const initial = !reported.current && url === startUrl.current && !follow;
+    reported.current = true;
+    toParent({ t: 'loaded', pane: PANE_NO, entity: loaded, ...(follow ? { follow } : {}), ...(initial ? { initial } : {}) });
+  }, [loaded, pending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Back and forward, for this pane alone ──
   // The browser keeps one history for the whole tab, so its "back" may move a different pane. The

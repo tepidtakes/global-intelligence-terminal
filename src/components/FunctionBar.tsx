@@ -6,7 +6,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useApp } from '../state';
 import { TYPE_ICON } from '../format';
-import { fnApplies, fnAt, fnByCode, type FnDef } from '../../shared/functions';
+import { fnAppliesTo, fnAt, fnByCode, type FnDef } from '../../shared/functions';
 import { KEYS, isTyping } from '../keys';
 import { useRunCommand } from '../command';
 import { ExportMenu } from './TableTools';
@@ -50,7 +50,7 @@ export function FunctionBar() {
   const about = fn && at?.entityId ? (loaded?.id === at.entityId ? loaded : null) : null;
   const canGoBack = typeof window !== 'undefined' && (window.history.state?.idx ?? 0) > 0;
   /** Why a chip would not run right now (it still says so when pressed). */
-  const blocked = (f: FnDef) => (f.on && f.need !== 'optional' ? (!loaded ? `needs ${f.on.length > 6 ? 'an entity' : `a ${f.on.join(' or ')}`}: load one first` : !fnApplies(f, loaded.type as any) ? `does not apply to ${loaded.name}` : '') : '');
+  const blocked = (f: FnDef) => (f.on && f.need !== 'optional' ? (!loaded ? `needs ${f.on.length > 6 ? 'an entity' : `a ${f.on.join(' or ')}`}: load one first` : !fnAppliesTo(f, loaded) ? `does not apply to ${loaded.name}` : '') : '');
   return (
     <div className="fnbar" role="toolbar" aria-label="Function bar">
       <button type="button" className="fnNav" onClick={() => nav(-1)} disabled={!canGoBack} title={`Back (${KEYS.back.keys[0]})`} aria-label="Back">‹</button>
@@ -65,7 +65,7 @@ export function FunctionBar() {
           {related.map((f, i) => {
             const why = blocked(f);
             return <button type="button" key={f.code} className={`fnRel${why ? ' off' : ''}`} onClick={() => void run(f.code)}
-              title={`${f.title}: ${f.about}${why ? ` (${why})` : loaded && f.on && fnApplies(f, loaded.type as any) ? ` For ${loaded.name}.` : ''} Press ${i + 1}.`}>
+              title={`${f.title}: ${f.about}${why ? ` (${why})` : loaded && f.on && fnAppliesTo(f, loaded) ? ` For ${loaded.name}.` : ''} Press ${i + 1}.`}>
               <span className="kbd" aria-hidden>{i + 1}</span><span className="srOnly">Key {i + 1}: </span>{f.code}
             </button>;
           })}

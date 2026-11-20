@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
-import { functionsFor } from '../../shared/functions';
+import { fnAppliesTo, functionsFor } from '../../shared/functions';
 import { TYPE_ICON, fmtDate } from '../format';
 import { useApp, useAuth } from '../state';
 import { asLoaded, matchFunctions, nearCodes, useRunCommand } from '../command';
@@ -55,7 +55,7 @@ export function FindPage() {
                   <td className="ttl"><span aria-hidden>{e.flag || TYPE_ICON[e.type]}</span> <Link to={`/entity/${encodeURIComponent(e.id)}`} onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); open(e); }}>{e.name}</Link>{e.matched && <span className="tiny muted"> · matched “{e.matched}”</span>} {e.position && <PositionBadge p={e.position} />}</td>
                   <td>{ENTITY_TYPE_LABEL[e.type]}{e.parentName ? <span className="muted"> · {e.parentName}</span> : null}</td>
                   <td className="about">{e.summary}</td>
-                  <td className="fnsFor">{functionsFor(e.type).slice(0, 5).map((f) => <button key={f.code} type="button" className="cmdEx" title={`${f.title} for ${e.name}`} onClick={(ev) => { ev.stopPropagation(); void run(`${e.type === 'country' ? e.id.split(':')[1] : e.name} ${f.code}`); }}>{f.code}</button>)}</td>
+                  <td className="fnsFor">{functionsFor(e.type).filter((f) => fnAppliesTo(f, e)).slice(0, 5).map((f) => <button key={f.code} type="button" className="cmdEx" title={`${f.title} for ${e.name}`} onClick={(ev) => { ev.stopPropagation(); void run(`${e.type === 'country' ? e.id.split(':')[1] : e.id} ${f.code}`); }}>{f.code}</button>)}</td>
                 </tr>
               ))}</tbody>
             </table>

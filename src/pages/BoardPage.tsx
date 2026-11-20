@@ -139,9 +139,10 @@ function Board() {
     } else if (m.t === 'loaded' && m.entity?.id) {
       paneEntity.current[i] = m.entity;
       const g = w.panes[i].group; const cur = groupEntity.current[g];
-      // A pane that only followed its group does not move the group. If the group has moved on in
-      // the meantime (two panes changed at once), the pane is brought to where the group is now.
-      if (m.follow) { if (g && cur && cur.id !== m.entity.id) toPane(frames.current[i], { t: 'entity', entity: cur }); }
+      // A pane that only followed its group, or that reports what it had before it appeared, does not
+      // move the group. If the group is elsewhere now (two panes changed at once, or the pane comes
+      // back after a layout change), the pane is brought to where the group is.
+      if (m.follow || (m.initial && cur)) { if (g && cur && cur.id !== m.entity.id) toPane(frames.current[i], { t: 'entity', entity: cur }); }
       else if (g && cur?.id !== m.entity.id) {
         groupEntity.current[g] = m.entity;
         for (const k of members(g, i)) toPane(frames.current[k], { t: 'entity', entity: m.entity });

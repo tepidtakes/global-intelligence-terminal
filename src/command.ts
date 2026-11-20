@@ -5,7 +5,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from './api';
 import { useApp, type LoadedEntity } from './state';
-import { FUNCTIONS, commandUrl, fnApplies, fnByCode, parseCommand, readParams, type CmdEntity, type FnDef } from '../shared/functions';
+import { FUNCTIONS, commandUrl, fnAppliesTo, fnByCode, parseCommand, readParams, type CmdEntity, type FnDef } from '../shared/functions';
 
 export interface Resolved extends LoadedEntity { score: number; exact: boolean; sure: boolean; alternatives?: { id: string; type: string; name: string; flag?: string; parentName?: string }[]; }
 export interface CommandResult { ok: boolean; message: string; /** Where the command went, when it went anywhere. */ url?: string; }
@@ -64,7 +64,9 @@ export function matchFunctions(text: string, limit = 8): FnDef[] {
   }
   return scored.sort((a, b) => b.s - a.s).slice(0, limit).map((x) => x.f);
 }
-const took = (words: string, e: Resolved) => (e.exact ? '' : ` · took “${words}” to mean ${e.name}${e.alternatives?.length ? ` (also: ${e.alternatives.slice(0, 3).map((a) => a.name).join(', ')})` : ''}`);
+/** An alternative named so it can be told apart from one of the same name: "Georgia (United States)". */
+const altName = (a: { name: string; type: string; parentName?: string }, e: { name: string }) => (a.name === e.name ? `${a.name} (${a.parentName || a.type})` : a.name);
+const took = (words: string, e: Resolved) => (e.exact ? '' : ` · took “${words}” to mean ${e.name}${e.alternatives?.length ? ` (also: ${e.alternatives.slice(0, 3).map((a) => altName(a, e)).join(', ')})` : ''}`);
 const findUrl = (q: string) => `/find?q=${encodeURIComponent(q)}`;
 
 /** Run what was typed. Always ends somewhere useful: the function's screen, an entity's profile,
@@ -78,6 +80,17 @@ export async function runCommand(text: string, ctx: CommandCtx): Promise<Command
   const done = (t: string, r: CommandResult): CommandResult => finish(t, { ...r, url });
   const parsed = parseCommand(typed);
   const fn = parsed.fn;
+  // A code typed first, with words after it, may really be the start of a name ("News Corp",
+  // "Des Moines County"): a phrase that names one entity exactly opens that entity.
+  if (fn && !parsed.head && parsed.tail.length && !fn.special) {
+    let whole: Resolved[] = [];
+    try { whole = await resolve(typed, 1); } catch { /* offline: run it as a command */ }
+    const e = whole[0];
+    if (e?.exact) {
+      ctx.load(asLoaded(e)); go(`/entity/${encodeURIComponent(e.id)}`);
+      return done(typed, { ok: true, message: `${e.name} loaded` });
+    }
+  }
 
   if (fn?.special === 'last') {
     const before = commandHistory().filter((c) => parseCommand(c).fn?.special !== 'last').pop();
@@ -122,11 +135,11 @@ export async function runCommand(text: string, ctx: CommandCtx): Promise<Command
     }
     // Several things can share the words (Georgia the country and the state, "new"): take the one the function can act on.
     entities = entities.map((e) => {
-      const alt = fnApplies(fn, e.type as CmdEntity['type']) ? undefined : e.alternatives?.find((a) => fnApplies(fn, a.type as CmdEntity['type']));
+      const alt = fnAppliesTo(fn, e) ? undefined : e.alternatives?.find((a) => fnAppliesTo(fn, a));
       return alt ? { ...alt, iso3: alt.type === 'country' ? alt.id.split(':')[1] : undefined, score: e.score, exact: false, sure: false, alternatives: [e, ...(e.alternatives || []).filter((a) => a.id !== alt.id)] } : e;
     });
     note = entities.filter((e) => !e.exact).map((e) => took(words, e)).join('');
-  } else if (fn.on && ctx.loaded && (fnApplies(fn, ctx.loaded.type as CmdEntity['type']) || fn.need !== 'optional')) {
+  } else if (fn.on && ctx.loaded && (fnAppliesTo(fn, ctx.loaded) || fn.need !== 'optional')) {
     // A code typed alone acts on the loaded entity. Where the function also works without one and
     // the loaded entity is the wrong kind for it, it opens its general screen instead.
     entities = [{ ...ctx.loaded, score: 0, exact: true, sure: true }];
@@ -144,11 +157,16 @@ function finish(typed: string, r: CommandResult): CommandResult {
   return r;
 }
 
-/** runCommand wired to this window: its router, and its loaded entity. */
+/** runCommand wired to this window: its router, and its loaded entity. `known` names entities the
+ *  caller already knows for some of the words (a row picked in a list), so they are not looked up
+ *  again by name, where another entity of the same name could win. */
 export function useRunCommand() {
   const navigate = useNavigate();
   const { loaded, load } = useApp();
-  return useCallback((text: string) => runCommand(text, { navigate: (url) => navigate(url), loaded, load }).catch((err) => {
+  return useCallback((text: string, known?: Record<string, Resolved>) => runCommand(text, {
+    navigate: (url) => navigate(url), loaded, load,
+    resolve: known ? (words, max) => { const k = known[words.trim().toLowerCase()]; return k ? Promise.resolve([k]) : resolveOnServer(words, max); } : undefined,
+  }).catch((err) => {
     const r: CommandResult = { ok: false, message: `Could not run “${text}”: ${err?.message || err}` };
     setCommandStatus({ ...r, text }); return r;
   }), [navigate, loaded, load]);

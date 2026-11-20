@@ -106,12 +106,12 @@ export function MacroSection({ iso3 }: { iso3: string }) {
       {loading && !data ? <Loading lines={5} /> : error || data?.error ? <Unavailable>World Bank data unavailable right now ({error?.message || data?.error}). Nothing is shown rather than guessing.</Unavailable> : (
         <>
           <table className="data">
-            <thead><tr><th>Indicator</th><th className="r">Latest</th><th>Period</th><th>Trend since 2000</th></tr></thead>
+            <thead><tr><th>Indicator</th><th className="r">Latest</th><th>Period</th><th data-export="skip">Trend since 2000</th></tr></thead>
             <tbody>
               {data!.indicators.map((i) => (
                 <tr key={i.code} onClick={() => i.series.length > 1 && setSel(i.code)} style={{ cursor: i.series.length > 1 ? 'pointer' : 'default', background: i.code === sel ? 'var(--accent-wash)' : undefined }}>
                   <td>{i.label}</td><td className="r">{i.latest ? fmtUnit(i.latest.value, i.unit) : <span className="muted">no data</span>}</td>
-                  <td className="tab muted">{i.latest?.period || '—'}</td><td><Sparkline values={i.series.map((p) => p.value)} /></td>
+                  <td className="tab muted">{i.latest?.period || '—'}</td><td data-export="skip"><Sparkline values={i.series.map((p) => p.value)} /></td>
                 </tr>
               ))}
             </tbody>

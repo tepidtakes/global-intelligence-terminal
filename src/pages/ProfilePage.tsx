@@ -20,23 +20,33 @@ import { isTrusted } from '../../shared/newsSources';
 import { TYPE_ICON, fmtUnit, fmtDate, ago } from '../format';
 import { ENTITY_TYPE_LABEL } from '../../shared/types';
 import type { Entity, RelView, Source, Fact } from '../../shared/types';
+import { SECTION_ONLY } from '../../shared/functions';
+import { IS_PANE } from '../pane';
 
-// Organisations that run sanctions lists (their profiles list the regimes they impose).
-const SANCTIONING_IGOS = new Set(['igo:eu', 'igo:un']);
-// Commodities with country stock data (JODI oil, USDA grain).
-const STOCKED = new Set(['commodity:crude-oil', 'commodity:wheat', 'commodity:corn', 'commodity:rice']);
+// Organisations that run sanctions lists (their profiles list the regimes they impose), and
+// commodities with country stock data (JODI oil, USDA grain): kept with the function registry, so a
+// function code never points at a section a profile does not show.
+const SANCTIONING_IGOS = new Set(SECTION_ONLY.sanctions.igo);
+const STOCKED = new Set(SECTION_ONLY.stocks.commodity);
 const MAPPABLE = new Set(['country', 'state', 'county', 'city', 'region', 'igo', 'institution', 'company', 'person', 'party', 'event']);
 
+/** An address with a stray % (typed, or pasted from elsewhere) names nothing: the page says so
+ *  instead of failing. */
+const safeDecode = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
+
 export function ProfilePage() {
-  const id = decodeURIComponent(useParams().id!);
+  const id = safeDecode(useParams().id!);
   const { data, error, loading, reload } = useApi<any>(`/entity/${encodeURIComponent(id)}`, 30_000);
   const { select, load } = useApp();
   const nav = useNavigate();
   const loc = useLocation();
   const [report, setReport] = useState(false);
-  // The profile on screen is the loaded entity: a function code typed alone now acts on it.
+  // The profile on screen is the loaded entity: a function code typed alone now acts on it. In a
+  // workspace pane the pane does this itself (src/components/PaneShell.tsx), and after a reload keeps
+  // the entity it had: a profile its link group could not follow (a company's chart while the group
+  // is on a country) must not pull the whole group to it.
   const shown = data?.entity?.id === id ? data.entity : undefined;
-  useEffect(() => { if (shown) load({ id: shown.id, type: shown.type, name: shown.name, flag: shown.flag, iso3: shown.iso3 }); }, [shown?.id, load]);
+  useEffect(() => { if (shown && !IS_PANE) load({ id: shown.id, type: shown.type, name: shown.name, flag: shown.flag, iso3: shown.iso3 }); }, [shown?.id, load]);
 
   useEffect(() => { if (loc.hash) setTimeout(() => document.getElementById(loc.hash.slice(1))?.scrollIntoView({ behavior: 'smooth' }), 300); }, [loc.hash, data?.entity?.id]);
   useEffect(() => { if (data?.entity) document.title = `${data.entity.name} — Global Intelligence Terminal`; return () => { document.title = 'Global Intelligence Terminal'; }; }, [data?.entity?.name]);

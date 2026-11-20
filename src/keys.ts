@@ -26,7 +26,9 @@ export function workspaceKey(e: KeyEvt): string | null {
   if (e.key === 'F6' && !e.ctrlKey && !e.altKey) return e.shiftKey ? 'prev' : 'next';
   if (e.ctrlKey !== e.altKey && !e.shiftKey) { // one of the two; both together is AltGr on some keyboards
     const d = /^(?:Digit|Numpad)(\d)$/.exec(e.code || '');
-    if (d && +d[1] >= 1 && +d[1] <= WORKSPACE_PANES) return d[1];
+    // With Alt the key must still produce the digit: on a Mac, Option+3 types "#" or "£", and that
+    // character belongs to whatever is being typed, not to the workspace.
+    if (d && +d[1] >= 1 && +d[1] <= WORKSPACE_PANES && (e.ctrlKey || e.key === d[1])) return d[1];
   }
   return null;
 }
@@ -61,7 +63,7 @@ export const KEYS = def({
   leave: { keys: ['Esc'], about: 'Close the list and give the keyboard back to the page', area: 'In the command line',
     is: (e) => e.key === 'Escape' },
 
-  pane: { keys: ['Alt 1 – 4', 'Ctrl 1 – 4'], about: 'Go to that pane of the workspace and put the cursor in its command line (Ctrl may be kept by the browser for its own tabs)', area: 'In the workspace', whileTyping: true,
+  pane: { keys: ['Alt 1 – 4', 'Ctrl 1 – 4'], about: 'Go to that pane of the workspace and put the cursor in its command line (where the browser keeps Ctrl with a digit for its own tabs, use Alt; on a Mac, Ctrl)', area: 'In the workspace', whileTyping: true,
     is: (e) => /^\d$/.test(workspaceKey(e) || '') },
   paneNext: { keys: ['F6', 'Shift F6'], about: 'The next pane; with Shift, the one before', area: 'In the workspace', whileTyping: true,
     is: (e) => workspaceKey(e) === 'next' || workspaceKey(e) === 'prev' },

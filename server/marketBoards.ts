@@ -87,11 +87,14 @@ export async function fxMatrix() {
   const [board, ranked] = await Promise.all([fxBoard(), gdpRanking()]);
   const quoted = new Map<string, any>(board.rows.filter((r: any) => !r.unavailable && r.perUsd > 0).map((r: any) => [r.code, r]));
   const codes = ['USD'];
+  /** The economy each currency was chosen for: its flag and link on the row (the rupee is India's,
+   *  not the first user of the currency in alphabetical order). */
+  const chosenFor: Record<string, string> = { USD: 'USA' };
   const order = ranked.length ? ranked.map((r) => r.iso3) : board.rows.filter((r: any) => r.region === 'Major currencies').map((r: any) => r.country?.iso3);
   for (const iso3 of order) {
     if (codes.length >= MATRIX_CURRENCIES) break;
     const code = (getEntity(`country:${iso3}`)?.attrs?.currencies as { code: string }[] | undefined)?.[0]?.code;
-    if (code && !codes.includes(code) && quoted.has(code)) codes.push(code);
+    if (code && !codes.includes(code) && quoted.has(code)) { codes.push(code); chosenFor[code] = iso3; }
   }
   const perUsd: Record<string, number> = { USD: 1 }; const prev: Record<string, number | undefined> = { USD: 1 };
   for (const c of codes.slice(1)) {
@@ -103,7 +106,7 @@ export async function fxMatrix() {
   const currencies = codes.map((c) => {
     if (c === 'USD') return { code: c, name: 'US dollar', country: countryStub('USA') };
     const r = quoted.get(c);
-    return { code: c, name: r.name, country: r.country ? { id: r.country.id, name: r.country.name, flag: r.country.flag } : undefined, time: r.time, staleQuote: !!r.staleQuote };
+    return { code: c, name: r.name, country: countryStub(chosenFor[c]), time: r.time, staleQuote: !!r.staleQuote };
   });
   return {
     currencies, cells: crossTable(codes, perUsd, prev),

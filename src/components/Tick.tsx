@@ -10,13 +10,17 @@ export function Tick({ value, format, className = '', title }: { value: number |
   const last = useRef<{ text: string; value: number | null | undefined } | null>(null);
   const [dir, setDir] = useState<'up' | 'down' | null>(null);
   const [n, setN] = useState(0); // restarts the animation when two changes come close together
+  // The timer that ends a flash lives across renders: a later refresh that changes nothing on screen
+  // must not cancel it (the flash would then stay lit), and only a new flash replaces it.
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   useEffect(() => {
     const before = last.current;
     last.current = { text, value };
     if (!before || before.text === text || before.value == null || value == null || !Number.isFinite(value) || before.value === value) return;
     setDir(value > before.value ? 'up' : 'down'); setN((x) => x + 1);
-    const t = window.setTimeout(() => setDir(null), FLASH_MS);
-    return () => clearTimeout(t);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setDir(null), FLASH_MS);
   }, [text, value]);
   return (
     <span key={n} className={`tick num ${dir ? `flash ${dir}` : ''} ${className}`} title={title}>

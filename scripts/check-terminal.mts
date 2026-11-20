@@ -55,6 +55,8 @@ ok(same(p('TOP'), ['TOP', '', '']) && same(p('  top  '), ['TOP', '', '']), 'a co
 ok(same(p('germany'), [null, 'germany', '']) && same(p(''), [null, '', '']), 'no code: all the words are a search');
 ok(same(p('trade war china'), ['TRADE', '', 'war china']), 'a code in first place takes the rest as its words', p('trade war china'));
 ok(same(p('DEU BUDG extra'), [null, 'DEU BUDG extra', '']), 'a code followed by words it does not take is part of a name', p('DEU BUDG extra'));
+ok(same(p('Port Moresby'), [null, 'Port Moresby', '']) && same(p('port of spain'), [null, 'port of spain', '']) && same(p('TOP europe'), [null, 'TOP europe', '']), 'a name that starts with a code is a name when the function takes no words ("Port Moresby" is not PORT)', [p('Port Moresby'), p('TOP europe')]);
+ok(same(p('PORT'), ['PORT', '', '']) && same(p('NOTE NEW'), ['NOTE', '', 'NEW']), 'the same codes alone, or with words they take, are still commands');
 ok(same(F.readParams(F.fnByCode('WEB'), ['2']), { query: { depth: '2' }, rest: [] }) && same(F.readParams(F.fnByCode('WEB'), ['nato', '2']).rest, ['nato']), 'parameters are read by value; other words are left over');
 ok(same(F.readParams(F.fnByCode('MAP'), ['gdp', 'per', 'person']).query, { layer: 'gdp per person' }), 'free words fill the free parameter');
 
@@ -72,7 +74,8 @@ ok(same(ids('apple microsoft'), ['company:apple', 'company:microsoft']), 'two co
 ok(same(ids('new york'), ['city:new-york']) || same(ids('new york'), ['state:US-NY']), 'a name of two words is one entity, not two', ids('new york'));
 ok(same(ids('USA CHN', 1), []) || ids('USA CHN', 1).length <= 1, 'max=1 never returns two');
 const georgia = C.resolveCommandEntities('georgia').entities[0];
-ok(georgia?.exact && georgia.id === 'country:GEO' && georgia.alternatives?.some((a: any) => a.id === 'state:US-GA'), 'a name two entities share: the better known one, with the other offered', georgia);
+// Not marked exact: whoever runs it is told what it was taken for, and offered the other.
+ok(!georgia?.exact && georgia.sure && georgia.how === 'exact' && georgia.id === 'country:GEO' && georgia.alternatives?.some((a: any) => a.id === 'state:US-GA'), 'a name two entities share: the better known one, said to be a choice, with the other offered', georgia);
 const germ = C.resolveCommandEntities('germ').entities[0];
 ok(germ?.id === 'country:DEU' && !germ.exact && germ.sure && germ.alternatives?.length >= 1 && germ.alternatives.length <= 5, 'the start of a name: the best strong match, marked as not exact, with up to five alternatives', germ);
 const neu = C.resolveCommandEntities('new').entities[0];
@@ -104,9 +107,11 @@ for (const f of F.FUNCTIONS) for (const ex of f.examples) {
 }
 ok(!exampleProblems.length, 'every example in the registry runs: it reaches its own function', exampleProblems);
 ok(offlineUnknown.size <= 2, `examples whose entity is not in the offline web go to the search page with a plain message (${[...offlineUnknown].join(', ') || 'none'})`, [...offlineUnknown]);
-const sample: Record<string, any> = {};
-for (const e of G.entities.values()) if (!sample[e.type]) sample[e.type] = { id: e.id, type: e.type, name: e.name, iso3: e.iso3 };
-sample.country = { id: 'country:DEU', type: 'country', name: 'Germany', iso3: 'DEU' };
+// For each function and type, the first entity it applies to (BUDG is shown for the EU, not for every organization).
+const byType: Record<string, any[]> = {};
+for (const e of G.entities.values()) (byType[e.type] ||= []).push({ id: e.id, type: e.type, name: e.name, iso3: e.iso3 });
+byType.country.unshift({ id: 'country:DEU', type: 'country', name: 'Germany', iso3: 'DEU' });
+const sampleFor = (f: any, t: string) => byType[t]?.find((e) => F.fnAppliesTo(f, e));
 const roundTrip: string[] = [];
 for (const f of F.FUNCTIONS) {
   if (f.page && (!f.on || f.need === 'optional')) {
@@ -114,7 +119,7 @@ for (const f of F.FUNCTIONS) {
     if (!out.url || F.fnAt(loc(out.url))?.fn !== f) roundTrip.push(`${f.code} alone → ${out.url || out.error}`);
   }
   for (const t of f.on || []) {
-    const e = sample[t]; if (!e) continue;
+    const e = sampleFor(f, t); if (!e) continue;
     const out = F.commandUrl(f, [e]);
     const at = out.url && F.fnAt(loc(out.url));
     if (!at || at.fn !== f || at.entityId !== e.id) roundTrip.push(`${f.code} on ${e.id} → ${out.url || out.error} shows ${at ? `${at.fn.code} ${at.entityId}` : 'nothing'}`);
@@ -122,7 +127,7 @@ for (const f of F.FUNCTIONS) {
 }
 ok(!roundTrip.length, 'fnAt(commandUrl(…)) is the same function, and the same entity, for every function with a page', roundTrip);
 const url = (code: string, es: any[] = [], tail: string[] = []) => { const o = F.commandUrl(F.fnByCode(code), es, tail); return o.url || `error: ${o.error}`; };
-const DEU = sample.country, CHN = { id: 'country:CHN', type: 'country', name: 'China', iso3: 'CHN' }, AAPL = { id: 'company:apple', type: 'company', name: 'Apple Inc.' };
+const DEU = byType.country[0], CHN = { id: 'country:CHN', type: 'country', name: 'China', iso3: 'CHN' }, AAPL = { id: 'company:apple', type: 'company', name: 'Apple Inc.' };
 ok(url('BUDG', [DEU]) === '/entity/country%3ADEU#budget', 'a section of a profile', url('BUDG', [DEU]));
 ok(url('TRADE', [DEU, CHN]) === '/trade?a=DEU&b=CHN' && url('TRADE', [DEU]) === '/trade?a=DEU' && url('TRADE') === '/trade', 'two entities, one, none', [url('TRADE', [DEU, CHN]), url('TRADE', [DEU]), url('TRADE')]);
 ok(url('WEB', [AAPL], ['2']) === '/web?focus=company%3Aapple&depth=2', 'an entity and a parameter', url('WEB', [AAPL], ['2']));
@@ -195,6 +200,34 @@ ok(same(R.nearCodes('BUGD').slice(0, 1), ['BUDG']) && R.nearCodes('NEW').include
 ok(R.matchFunctions('cal')[0].code === 'CAL' && R.matchFunctions('budget')[0].code === 'BUDG' && R.matchFunctions('sanction').some((f: any) => f.code === 'SANC') && !R.matchFunctions('').length, 'functions are found by code, title and description');
 
 // ───────────────────────── Keys ─────────────────────────
+console.log('Fixes from the review');
+// "EU" must stay the European Union when the United States carries Wikidata's French label "ÉU".
+const usa = G.getEntity('country:USA');
+G.upsertEntity({ ...usa, attrs: { ...usa.attrs, altNames: [...(usa.attrs?.altNames || []), 'ÉU', 'Vereinigte Staaten'] } });
+ok(same(ids('EU', 1), ['igo:eu']), 'a name of the entity itself beats another language’s label of another entity', C.resolveCommandEntities('EU', 1).entities.map((e: any) => [e.id, e.how]));
+const vs = C.resolveCommandEntities('Vereinigte Staaten', 1).entities[0];
+ok(vs?.id === 'country:USA' && vs.how === 'other' && !vs.exact && vs.sure, 'a match only on another language’s label is used (it is the only one), but not as an exact match', vs && [vs.id, vs.how, vs.exact, vs.sure]);
+ok(same(ids('state:US-GA', 1), ['state:US-GA']), 'an entity id names exactly that entity');
+const c3 = ctx();
+r = await R.runCommand('state:US-GA GOV', c3);
+ok(r.ok && c3.went[0] === '/entity/state%3AUS-GA#government', 'so a list row can run a function on the very entity it shows', c3.went);
+const c4 = ctx(); c4.resolve = async (words: string, max: number) => (words === 'News Corp' ? [{ id: 'company:news-corp', type: 'company', name: 'News Corp', score: 100, exact: true, sure: true }] : resolve(words, max));
+r = await R.runCommand('News Corp', c4);
+ok(r.ok && c4.went[0] === '/entity/company%3Anews-corp', 'a code first whose whole phrase names an entity opens the entity ("News Corp")', [c4.went, r.message]);
+r = await R.runCommand('NEWS china', c4);
+ok(r.ok && c4.went[1] === '/news?entity=country%3ACHN', 'while a code with an entity after it still runs', c4.went);
+const OIL = { id: 'commodity:crude-oil', type: 'commodity', name: 'Crude oil' }, NATO = { id: 'igo:nato', type: 'igo', name: 'NATO' }, EUo = { id: 'igo:eu', type: 'igo', name: 'European Union' };
+ok(url('RES', [OIL]) === '/entity/commodity%3Acrude-oil#stocks' && F.fnAt(loc('/entity/commodity%3Acrude-oil#stocks'))?.fn.code === 'RES', 'a commodity’s reserves are its stocks section, and the address reads back as RES', url('RES', [OIL]));
+ok(/shown only for EU/.test(url('BUDG', [NATO])) && url('BUDG', [EUo]) === '/entity/igo%3Aeu#budget' && /EU, UN/.test(url('SANC', [NATO])), 'a section only some organizations have: the others get a plain answer, not an empty jump', [url('BUDG', [NATO]), url('SANC', [NATO])]);
+ok(!F.fnAppliesTo(F.fnByCode('RES'), { id: 'commodity:gold', type: 'commodity' }) && F.fnAppliesTo(F.fnByCode('RES'), OIL), 'and the function bar can tell beforehand');
+let threw = false; try { F.fnAt(loc('/entity/100%')); } catch { threw = true; }
+ok(!threw && F.fnAt(loc('/entity/100%'))?.fn.code === 'DES', 'a malformed address does not break the page', threw);
+ok(K.workspaceKey({ key: '#', code: 'Digit3', altKey: true, ctrlKey: false, metaKey: false, shiftKey: false }) === null && K.workspaceKey({ key: '£', code: 'Digit3', altKey: true, ctrlKey: false, metaKey: false, shiftKey: false }) === null, 'Option with a digit on a Mac types its character (#, £): not a pane key');
+ok(K.workspaceKey({ key: '3', code: 'Digit3', altKey: true, ctrlKey: false, metaKey: false, shiftKey: false }) === '3' && K.workspaceKey({ key: '3', code: 'Digit3', altKey: false, ctrlKey: true, metaKey: false, shiftKey: false }) === '3' && K.workspaceKey({ key: 'F6', code: 'F6', altKey: false, ctrlKey: false, metaKey: false, shiftKey: true }) === 'prev', 'Alt+3 on Windows and Linux, Ctrl+3 and Shift+F6 still are');
+(globalThis as any).location = new URL('http://localhost:5180/board');
+const Bd = await imp('src/board.ts');
+ok(['/.//evil.example/x', '/a/..//evil.example/x', '//evil.example', 'https://evil.example/', '/board'].every((u) => Bd.safePaneUrl(u) === null) && Bd.safePaneUrl('/entity/country%3ADEU#budget') === '/entity/country%3ADEU#budget', 'a pane never shows another site, whatever a stored workspace says', ['/.//evil.example/x', '/a/..//evil.example/x'].map((u) => Bd.safePaneUrl(u)));
+
 console.log('Keys');
 const ev = (key: string, mods: any = {}) => ({ key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...mods });
 const keys = Object.values(K.KEYS) as any[];

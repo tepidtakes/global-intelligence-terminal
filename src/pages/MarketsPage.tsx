@@ -66,7 +66,7 @@ function Commodities() {
         <Card key={g} title={g}>
           <div style={{ overflowX: 'auto' }}>
             <table className="data hover">
-              <thead><tr>{th('name', 'Market', '')}<th className="r">Price</th><th>Unit</th>{th('d1', '1 day')}{th('m1', '1 month')}{th('ytd', 'YTD')}{th('y1', '1 year')}<th>1 year</th><th className="r">As of</th></tr></thead>
+              <thead><tr>{th('name', 'Market', '')}<th className="r">Price</th><th>Unit</th>{th('d1', '1 day')}{th('m1', '1 month')}{th('ytd', 'YTD')}{th('y1', '1 year')}<th data-export="skip">1 year</th><th className="r">As of</th></tr></thead>
               <tbody>{sort(data.rows.filter((r: any) => r.group === g)).map((r: any) => (
                 <tr key={r.id} onClick={() => nav(`/entity/${encodeURIComponent(r.id)}`)} style={{ cursor: 'pointer' }}>
                   <td><Link to={`/entity/${encodeURIComponent(r.id)}`} onClick={(e) => e.stopPropagation()}><strong>{r.name}</strong></Link><div className="tiny muted">{r.contract || r.benchmark || r.symbol}</div></td>
@@ -74,7 +74,7 @@ function Commodities() {
                     <td className="r num"><strong><Tick value={r.price} format={(v) => v.toLocaleString(undefined, { maximumFractionDigits: v < 10 ? 3 : 2 })} /></strong></td>
                     <td className="small muted">{r.unit}</td>
                     <td className="r"><Chg v={r.change.d1} digits={2} /></td><td className="r"><Chg v={r.change.m1} /></td><td className="r"><Chg v={r.change.ytd} /></td><td className="r"><Chg v={r.change.y1} /></td>
-                    <td><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'} /></td>
+                    <td data-export="skip"><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'} /></td>
                     <td className="r tiny muted">{fmtDate(r.time, true)}{r.staleQuote ? <div className="chgDown" title="No trade in the last 10 days — changes are not shown">no recent trades</div> : r.thinlyTraded && <div title="Few trades in the last year — the last price can be old">thinly traded</div>}</td>
                   </>}
                 </tr>
@@ -113,14 +113,14 @@ function Currencies() {
           <Card key={g} title={g}>
             <div style={{ overflowX: 'auto' }}>
               <table className="data">
-                <thead><tr>{th('name', 'Currency', '')}<th className="r">Per US$</th>{th('d1', '1 day')}{th('m1', '1 month')}{th('ytd', 'YTD')}{th('y1', '1 year')}<th>Value vs US$, 1 year</th></tr></thead>
+                <thead><tr>{th('name', 'Currency', '')}<th className="r">Per US$</th>{th('d1', '1 day')}{th('m1', '1 month')}{th('ytd', 'YTD')}{th('y1', '1 year')}<th data-export="skip">Value vs US$, 1 year</th></tr></thead>
                 <tbody>{rows.map((r: any) => (
                   <tr key={r.code}>
                     <td><strong>{r.code}</strong> <span className="small">{r.name}</span>{r.staleQuote && <span className="tiny chgDown" title={`Last quote ${r.time?.slice(0, 10)}`}> · no recent trades</span>}<div className="tiny muted"><Link to={`/entity/${encodeURIComponent(r.country.id)}#currency`}>{r.country.flag} {r.country.name}</Link>{r.countries > 1 ? ` + ${r.countries - 1} more` : ''}</div></td>
                     {r.unavailable ? <td colSpan={6} className="muted small">No quote available</td> : <>
                       <td className="r num"><Tick value={r.perUsd} format={(v) => v.toLocaleString(undefined, { maximumSignificantDigits: 6 })} /></td>
                       <td className="r"><Chg v={r.change.d1} digits={2} /></td><td className="r"><Chg v={r.change.m1} /></td><td className="r"><Chg v={r.change.ytd} /></td><td className="r"><Chg v={r.change.y1} /></td>
-                      <td><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'} /></td>
+                      <td data-export="skip"><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'} /></td>
                     </>}
                   </tr>
                 ))}</tbody>
@@ -147,7 +147,7 @@ function Indices() {
         <Card key={g} title={g}>
           <div style={{ overflowX: 'auto' }}>
             <table className="data hover">
-              <thead><tr>{th('name', 'Economy', '')}<th>Index</th><th className="r">Level</th>{th('d1', '1 day')}{th('m1', '1 month')}{th('ytd', 'YTD')}{th('y1', '1 year')}<th>1 year</th><th className="r">As of</th></tr></thead>
+              <thead><tr>{th('name', 'Economy', '')}<th>Index</th><th className="r">Level</th>{th('d1', '1 day')}{th('m1', '1 month')}{th('ytd', 'YTD')}{th('y1', '1 year')}<th data-export="skip">1 year</th><th className="r">As of</th></tr></thead>
               <tbody>{sort(rows.filter((r) => r.region === g)).map((r) => (
                 <tr key={r.iso3}>
                   <td><Link to={`/entity/${encodeURIComponent(r.country.id)}`}><span aria-hidden>{r.country.flag}</span> <strong>{r.country.name}</strong></Link>{r.gdpRank && <div className="tiny muted" title="Rank by GDP, from the economy weights">#{r.gdpRank} by GDP</div>}</td>
@@ -155,7 +155,7 @@ function Indices() {
                   {r.unavailable ? <td colSpan={7} className="muted small">No quote for {r.symbol}</td> : <>
                     <td className="r num"><strong><Tick value={r.last} format={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 2 })} /></strong></td>
                     <td className="r"><Chg v={r.change.d1} digits={2} /></td><td className="r"><Chg v={r.change.m1} /></td><td className="r"><Chg v={r.change.ytd} /></td><td className="r"><Chg v={r.change.y1} /></td>
-                    <td><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'} /></td>
+                    <td data-export="skip"><Sparkline values={r.history.map((p: any) => p.c)} color={(r.change.y1 ?? 0) >= 0 ? 'var(--up)' : 'var(--down)'} /></td>
                     <td className="r tiny muted">{fmtDate(r.time, true)}{r.staleQuote && <div title="No trade in the last 10 days — changes are not shown">no recent trades</div>}</td>
                   </>}
                 </tr>
@@ -180,7 +180,6 @@ function CrossTable() {
   if (loading && !data) return <Loading lines={10} />;
   if (error) return <Unavailable>Currency quotes unavailable ({error.message}).</Unavailable>;
   const cur = data.currencies as any[];
-  const digits = (v: number) => (v >= 1000 ? 0 : v >= 100 ? 1 : v >= 10 ? 2 : v >= 1 ? 3 : 4);
   return (
     <>
       <div className="row wrap small muted" style={{ gap: 10, marginBottom: 8 }}><Quality q="delayed" /> {data.note} Currencies: {data.chosenBy}. <SourceRef id={data.sourceId} /> · retrieved {ago(data.fetchedAt)}{data.stale ? ' · cached copy (provider unreachable)' : ''}</div>
@@ -200,8 +199,8 @@ function CrossTable() {
                   return (
                     <td key={j} className={`r mx ${dir}`} style={dir ? { ['--mx' as any]: Math.min(1, Math.abs(d!) / 2).toFixed(2) } : undefined}
                       title={`1 ${row.code} = ${cell.v.toLocaleString(undefined, { maximumSignificantDigits: 6 })} ${cur[j].code}${d != null ? `; ${d > 0 ? '+' : ''}${d.toFixed(2)}% today (${row.code} ${d >= 0 ? 'gained' : 'lost'} against ${cur[j].code})` : ''}`}>
-                      <Tick value={cell.v} format={(v) => v.toLocaleString(undefined, { minimumFractionDigits: digits(v), maximumFractionDigits: digits(v) })} />
-                      <div className="mxd">{d == null ? '—' : `${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d).toFixed(2)}%`}</div>
+                      <Tick value={cell.v} format={(v) => v.toLocaleString(undefined, { minimumSignificantDigits: 4, maximumSignificantDigits: 5 })} />
+                      <div className="mxd" data-export="skip">{d == null ? '—' : `${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d).toFixed(2)}%`}</div>
                     </td>
                   );
                 })}

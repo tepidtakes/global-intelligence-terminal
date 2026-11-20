@@ -26,12 +26,22 @@ export interface FnDef {
   /** Where it lives with an entity: a section of the profile (`hash`), or a page that takes the
    *  entity in a query parameter (`param`; `as: 'iso3'` passes the bare country code). `second`
    *  names the parameter for a second entity. */
-  entity?: { hash?: string; page?: string; param?: string; as?: 'id' | 'iso3'; second?: string; query?: Record<string, string> };
+  entity?: { hash?: string; page?: string; param?: string; as?: 'id' | 'iso3'; second?: string; query?: Record<string, string>;
+    /** A different profile section for some types (a commodity's reserves are its "stocks"). */
+    hashByType?: Partial<Record<EntityType, string>> };
   params?: FnParam[];
   /** Handled by the command line itself rather than by a route. */
   special?: 'last' | 'find';
 }
 
+/** Profile sections that only some entities of a type have. src/pages/ProfilePage.tsx reads the same
+ *  lists, so a function never points at a section the profile does not show. */
+export const SECTION_ONLY: Record<string, Partial<Record<EntityType, string[]>>> = {
+  sanctions: { igo: ['igo:eu', 'igo:un'] },
+  budget: { igo: ['igo:eu'] },
+  reserves: { igo: ['igo:eu'] },
+  stocks: { commodity: ['commodity:crude-oil', 'commodity:wheat', 'commodity:corn', 'commodity:rice'] },
+};
 const GEO: EntityType[] = ['country', 'state', 'city', 'region', 'igo'];
 const ANY: EntityType[] = ['region', 'country', 'state', 'county', 'city', 'igo', 'institution', 'person', 'party', 'company', 'commodity', 'industry', 'event'];
 
@@ -52,7 +62,7 @@ export const FUNCTIONS: FnDef[] = [
   { code: 'ECON', title: 'Economy', group: 'Economy', about: 'GDP, growth, inflation, unemployment, debt and the current account, with sources and the World Bank / IMF cross-check.', examples: ['JPN ECON'], related: ['OUT', 'BUDG', 'STAT', 'RATES', 'CAL'], on: ['country'], entity: { hash: 'macro' } },
   { code: 'OUT', title: 'Outlook', group: 'Economy', about: 'IMF projections for the coming years, shown apart from outcomes.', examples: ['BRA OUT'], related: ['ECON', 'CAL', 'RATES', 'BUDG'], on: ['country'], entity: { hash: 'outlook' } },
   { code: 'BUDG', title: 'Government budget', group: 'Economy', about: 'Revenue, spending, the balance and debt.', examples: ['USA BUDG', 'EU BUDG'], related: ['ECON', 'RATES', 'RES', 'GOV'], on: ['country', 'igo'], entity: { hash: 'budget' } },
-  { code: 'RES', title: 'Reserves and stocks', group: 'Economy', about: 'Strategic reserves: oil, grains and what the country must hold.', examples: ['JPN RES'], related: ['BUDG', 'TRADE', 'CMD', 'ECON'], on: ['country', 'igo', 'commodity'], entity: { hash: 'reserves' } },
+  { code: 'RES', title: 'Reserves and stocks', group: 'Economy', about: 'Strategic reserves: oil, grains and what the country must hold.', examples: ['JPN RES'], related: ['BUDG', 'TRADE', 'CMD', 'ECON'], on: ['country', 'igo', 'commodity'], entity: { hash: 'reserves', hashByType: { commodity: 'stocks' } } },
   { code: 'STAT', title: 'Any indicator', group: 'Economy', about: 'Search every World Bank and IMF series for a country and chart it.', examples: ['IND STAT', 'KEN STAT'], related: ['ECON', 'CMP', 'MAP', 'OUT'], on: ['country'], entity: { hash: 'indicators' } },
   { code: 'GOV', title: 'Government', group: 'Economy', about: 'Who holds office: head of state and government, ministers, legislature, governing parties.', examples: ['FRA GOV', 'TEXAS GOV'], related: ['ELEC', 'DES', 'NEWS', 'REL'], on: ['country', 'state', 'city'], entity: { hash: 'government' } },
   { code: 'MEM', title: 'Members', group: 'Economy', about: 'An organization’s members, with join dates.', examples: ['NATO MEM', 'OPEC MEM'], related: ['DES', 'WEB', 'CAL', 'SANC'], on: ['igo'], entity: { hash: 'members' } },
@@ -122,8 +132,10 @@ export function parseCommand(text: string): ParsedCommand {
   if (!words.length) return { head: '', tail: [] };
   // A code in first position, or in last position, is unambiguous. In between, prefer the last code
   // so that "USA CHN TRADE" and "AAPL WEB 2" both work.
+  // A code in first place is a command only if the function can take the words after it (an entity,
+  // free words, or parameters it knows): otherwise "Port Moresby" would run PORT.
   const first = fnByCode(words[0]);
-  if (first) return { fn: first, head: '', tail: words.slice(1) };
+  if (first && (words.length === 1 || takesWords(first, words.slice(1)))) return { fn: first, head: '', tail: words.slice(1) };
   for (let i = words.length - 1; i >= 1; i--) {
     const fn = fnByCode(words[i]);
     if (!fn) continue;
@@ -133,6 +145,12 @@ export function parseCommand(text: string): ParsedCommand {
     return { fn, head: words.slice(0, i).join(' '), tail };
   }
   return { head: words.join(' '), tail: [] };
+}
+
+/** Whether a function can take these words after its code. */
+function takesWords(fn: FnDef, tail: string[]) {
+  if (fn.on || fn.params?.some((p) => !p.values)) return true;
+  return tail.every((w) => fn.params?.some((p) => p.values && p.values[w.toUpperCase()] !== undefined));
 }
 
 const enc = encodeURIComponent;
@@ -151,6 +169,16 @@ export function readParams(fn: FnDef, tail: string[]) {
 
 /** Whether a function can act on an entity of this type. */
 export const fnApplies = (fn: FnDef, type: EntityType) => !!fn.on?.includes(type);
+/** The profile section a function opens for an entity of this type (undefined for page functions). */
+export const sectionOf = (fn: FnDef, type: EntityType) => (fn.entity && !fn.entity.page ? fn.entity.hashByType?.[type] ?? fn.entity.hash : undefined);
+/** Whether a function can act on this particular entity: its type, and, for a profile section that
+ *  only some entities have, whether this one has it. */
+export function fnAppliesTo(fn: FnDef, e: { id: string; type: string }) {
+  if (!fnApplies(fn, e.type as EntityType)) return false;
+  const only = SECTION_ONLY[sectionOf(fn, e.type as EntityType) || '']?.[e.type as EntityType];
+  return !only || only.includes(e.id);
+}
+const shortName = (id: string) => { const k = id.split(':')[1] || id; return id.startsWith('igo:') ? k.toUpperCase() : k.replace(/-/g, ' '); };
 /** The functions that act on an entity of this type, in registry order. */
 export const functionsFor = (type: EntityType) => FUNCTIONS.filter((f) => fnApplies(f, type));
 
@@ -160,9 +188,12 @@ export function commandUrl(fn: FnDef, entities: CmdEntity[], tail: string[] = []
   const { query } = readParams(fn, tail);
   const [a, b] = entities;
   if (fn.on && a) {
-    if (!fnApplies(fn, a.type)) {
-      const can = functionsFor(a.type).slice(0, 8).map((f) => f.code).join(' ');
-      return { error: `${fn.code} (${fn.title}) does not apply to ${a.name || a.id}: it works on ${fn.on.join(', ')}. For this one try: ${can}` };
+    if (!fnAppliesTo(fn, a)) {
+      const can = functionsFor(a.type).filter((f) => fnAppliesTo(f, a)).slice(0, 8).map((f) => f.code).join(' ');
+      const only = fnApplies(fn, a.type) ? SECTION_ONLY[sectionOf(fn, a.type) || '']?.[a.type] : undefined;
+      return { error: only
+        ? `${fn.code} (${fn.title}) is shown only for ${only.map(shortName).join(', ')} among ${a.type === 'igo' ? 'organizations' : `${a.type} profiles`}, not for ${a.name || a.id}. For this one try: ${can}`
+        : `${fn.code} (${fn.title}) does not apply to ${a.name || a.id}: it works on ${fn.on.join(', ')}. For this one try: ${can}` };
     }
     const e = fn.entity!;
     const value = (x: CmdEntity) => (e.as === 'iso3' ? x.iso3 || x.id.split(':')[1] : x.id);
@@ -170,7 +201,8 @@ export function commandUrl(fn: FnDef, entities: CmdEntity[], tail: string[] = []
       if (fn.code === 'NOTE' && query.new) return { url: `/research/new${qs({ entities: a.id })}` };
       return { url: `${e.page}${qs({ ...(e.query || {}), [e.param!]: value(a), ...(b && e.second && fnApplies(fn, b.type) ? { [e.second]: value(b) } : {}), ...query })}` };
     }
-    return { url: `/entity/${enc(a.id)}${e.hash ? `#${e.hash}` : ''}` };
+    const hash = sectionOf(fn, a.type);
+    return { url: `/entity/${enc(a.id)}${hash ? `#${hash}` : ''}` };
   }
   if (fn.on && fn.need !== 'optional') return { error: `${fn.code} (${fn.title}) needs ${fn.on.length === ANY.length ? 'an entity' : `a ${fn.on.join(' or ')}`}: type its name or code first, for example ${fn.examples[0]}` };
   if (!fn.page) return { error: `${fn.code} has no screen of its own` };
@@ -183,8 +215,9 @@ export function fnAt(loc: { pathname: string; search: string; hash: string }): {
   const sp = new URLSearchParams(loc.search); const hash = loc.hash.replace(/^#/, '');
   const m = /^\/entity\/([^/]+)$/.exec(loc.pathname);
   if (m) {
-    const id = decodeURIComponent(m[1]);
-    const fn = FUNCTIONS.find((f) => f.entity && !f.entity.page && (f.entity.hash || '') === hash) || fnByCode('DES')!;
+    // A malformed address ("/entity/100%") is not an entity: decoding it must not break the page.
+    let id: string; try { id = decodeURIComponent(m[1]); } catch { return { fn: fnByCode('DES')! }; }
+    const fn = FUNCTIONS.find((f) => f.entity && !f.entity.page && ((f.entity.hash || '') === hash || Object.values(f.entity.hashByType || {}).includes(hash))) || fnByCode('DES')!;
     return { fn, entityId: id };
   }
   let best: { fn: FnDef; entityId?: string; score: number } | undefined;

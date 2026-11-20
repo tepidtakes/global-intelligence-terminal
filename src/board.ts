@@ -5,7 +5,7 @@
 // A pane is this same app in an iframe named git-pane-1 … git-pane-4 (see src/pane.ts). The page and
 // its panes talk with window.postMessage, parent to frame and frame to parent, and each side checks
 // who is speaking. Nothing is broadcast, so two workspace tabs never hear each other.
-import { commandUrl, fnApplies, fnAt, fnByCode, type CmdEntity, type FnDef } from '../shared/functions';
+import { commandUrl, fnAppliesTo, fnAt, fnByCode, type CmdEntity, type FnDef } from '../shared/functions';
 import type { EntityType } from '../shared/types';
 import { api } from './api';
 import { load, save, type LoadedEntity } from './state';
@@ -55,7 +55,8 @@ export function safePaneUrl(u: unknown): string | null {
   if (typeof u !== 'string' || !u.startsWith('/') || u.length > 2000) return null;
   try {
     const x = new URL(u, location.origin);
-    if (x.origin !== location.origin || x.pathname === BOARD_PAGE) return null;
+    // "//host/…" would be read as another site wherever the address is used again.
+    if (x.origin !== location.origin || x.pathname === BOARD_PAGE || x.pathname.startsWith('//')) return null;
     return x.pathname + x.search + x.hash;
   } catch { return null; }
 }
@@ -124,7 +125,7 @@ export function findWorkspace(words: string, saved: Workspace[], starter: Worksp
 /** Pane → workspace page. */
 export type PaneMsg =
   | { t: 'hello'; pane: number }                          // the pane is up: tell it its link group and whether it is the active one
-  | { t: 'loaded'; pane: number; entity: LoadedEntity; follow?: boolean } // the pane's loaded entity changed (`follow`: because its link group moved)
+  | { t: 'loaded'; pane: number; entity: LoadedEntity; follow?: boolean; initial?: boolean } // the pane's loaded entity changed (`follow`: because its link group moved; `initial`: what the pane had before it appeared, not something just done in it)
   | { t: 'location'; pane: number; url: string }          // the pane moved to another address
   | { t: 'focus'; pane: number }                          // the pane was clicked or took the keyboard
   | { t: 'key'; pane: number; key: string }               // a workspace key was pressed inside the pane
@@ -176,7 +177,7 @@ export function fnOfUrl(url: string): FnDef | undefined {
  *  entity, or the pane already shows it). Parameters typed earlier (WEB 2) are kept. */
 export function followUrl(loc: { pathname: string; search: string; hash: string }, entity: LoadedEntity): string | null {
   const at = fnAt(loc);
-  if (!at || at.entityId === entity.id || !fnApplies(at.fn, entity.type as EntityType)) return null;
+  if (!at || at.entityId === entity.id || !fnAppliesTo(at.fn, entity)) return null;
   const r = commandUrl(at.fn, [entity as CmdEntity]);
   if ('error' in r) return null;
   const cur = new URLSearchParams(loc.search);
